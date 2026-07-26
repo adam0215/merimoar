@@ -4,6 +4,8 @@
 @import 'tw-animate-css';
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
+@import "@radix-ui/themes/styles.css";
+@import "@workos-inc/widgets/styles.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -133,6 +135,14 @@ body {
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+[data-woswidgets-root] {
+  min-height: 0;
+}
+
+.woswidgets-dialog-overlay {
+  z-index: 50;
 }
 
 @layer base {

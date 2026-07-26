@@ -3,13 +3,13 @@ import {
 	IconChevronRight,
 	IconFolder,
 	IconFolderFilled,
-	IconLogout,
 	IconMail,
 	IconMailFilled,
 	IconSettings,
 	IconSettingsFilled,
 } from "@tabler/icons-react";
 import { Link, useRouterState } from "@tanstack/react-router";
+import { SidebarUserMenu } from "#/components/sidebar-user-menu.tsx";
 import {
 	Collapsible,
 	CollapsibleContent,
@@ -173,16 +173,7 @@ export function AppSidebar() {
 						</SidebarMenu>
 					</SidebarGroupContent>
 				</SidebarGroup>
-				<SidebarMenu>
-					<SidebarMenuItem>
-						<SidebarMenuButton asChild tooltip="Sign out">
-							<a href="/api/auth/sign-out">
-								<IconLogout />
-								<span>Sign out</span>
-							</a>
-						</SidebarMenuButton>
-					</SidebarMenuItem>
-				</SidebarMenu>
+				<SidebarUserMenu />
 			</SidebarFooter>
 			<SidebarRail />
 		</Sidebar>

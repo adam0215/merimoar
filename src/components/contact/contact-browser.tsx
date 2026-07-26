@@ -6,10 +6,9 @@ import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
 import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
+import { coverImageForId } from "#/lib/cover-image.ts";
 import { cn } from "#/lib/utils.ts";
 import type { api } from "../../../convex/_generated/api";
-
-const CONTACT_COVER_SRC = "/covers/pink_flowers.avif";
 
 type Contact = NonNullable<FunctionReturnType<typeof api.contact.reader.get>>;
 type ContactMessage = FunctionReturnType<
@@ -222,7 +221,7 @@ export function ContactView({
 						strength={1}
 					>
 						<img
-							src={CONTACT_COVER_SRC}
+							src={coverImageForId(contact._id)}
 							alt=""
 							className="size-full object-cover"
 						/>

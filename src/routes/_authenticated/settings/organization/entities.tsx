@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache";
 import { EntitySettings } from "#/components/entity/entity-settings.tsx";
 import { api } from "../../../../../convex/_generated/api";
 

@@ -15,6 +15,7 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedCasesRouteImport } from './routes/_authenticated/cases'
 import { Route as AuthenticatedContactsRouteImport } from './routes/_authenticated/contacts'
 import { Route as AuthenticatedEmailRouteImport } from './routes/_authenticated/email'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as ApiAuthSignInRouteImport } from './routes/api/auth/sign-in'
 import { Route as ApiAuthSignOutRouteImport } from './routes/api/auth/sign-out'
@@ -48,6 +49,11 @@ const AuthenticatedContactsRoute = AuthenticatedContactsRouteImport.update({
 const AuthenticatedEmailRoute = AuthenticatedEmailRouteImport.update({
   id: '/email',
   path: '/email',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
@@ -84,6 +90,7 @@ export interface FileRoutesByFullPath {
   '/cases': typeof AuthenticatedCasesRoute
   '/contacts': typeof AuthenticatedContactsRoute
   '/email': typeof AuthenticatedEmailRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
   '/api/auth/sign-out': typeof ApiAuthSignOutRoute
@@ -95,6 +102,7 @@ export interface FileRoutesByTo {
   '/cases': typeof AuthenticatedCasesRoute
   '/contacts': typeof AuthenticatedContactsRoute
   '/email': typeof AuthenticatedEmailRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/': typeof AuthenticatedIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
@@ -109,6 +117,7 @@ export interface FileRoutesById {
   '/_authenticated/cases': typeof AuthenticatedCasesRoute
   '/_authenticated/contacts': typeof AuthenticatedContactsRoute
   '/_authenticated/email': typeof AuthenticatedEmailRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
@@ -124,6 +133,7 @@ export interface FileRouteTypes {
     | '/cases'
     | '/contacts'
     | '/email'
+    | '/profile'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
     | '/api/auth/sign-out'
@@ -135,6 +145,7 @@ export interface FileRouteTypes {
     | '/cases'
     | '/contacts'
     | '/email'
+    | '/profile'
     | '/'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
@@ -148,6 +159,7 @@ export interface FileRouteTypes {
     | '/_authenticated/cases'
     | '/_authenticated/contacts'
     | '/_authenticated/email'
+    | '/_authenticated/profile'
     | '/_authenticated/'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
@@ -208,6 +220,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedEmailRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/api/auth/callback': {
       id: '/api/auth/callback'
       path: '/api/auth/callback'
@@ -250,6 +269,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedCasesRoute: typeof AuthenticatedCasesRoute
   AuthenticatedContactsRoute: typeof AuthenticatedContactsRoute
   AuthenticatedEmailRoute: typeof AuthenticatedEmailRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedSettingsOrganizationEmailRoute: typeof AuthenticatedSettingsOrganizationEmailRoute
   AuthenticatedSettingsOrganizationEntitiesRoute: typeof AuthenticatedSettingsOrganizationEntitiesRoute
@@ -259,6 +279,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCasesRoute: AuthenticatedCasesRoute,
   AuthenticatedContactsRoute: AuthenticatedContactsRoute,
   AuthenticatedEmailRoute: AuthenticatedEmailRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedSettingsOrganizationEmailRoute:
     AuthenticatedSettingsOrganizationEmailRoute,

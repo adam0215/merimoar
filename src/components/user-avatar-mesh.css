@@ -1,0 +1,41 @@
+.user-avatar-mesh {
+	position: relative;
+	isolation: isolate;
+	overflow: hidden;
+	color: oklch(0.97 0.015 145);
+	background:
+		radial-gradient(
+			ellipse 105% 78% at 12% -8%,
+			color-mix(in oklch, var(--accent) 58%, white) 0%,
+			color-mix(in oklch, var(--accent) 68%, white) 30%,
+			transparent 68%
+		),
+		radial-gradient(
+			ellipse 72% 118% at 112% 68%,
+			color-mix(in oklch, var(--accent) 34%, white) 0%,
+			color-mix(in oklch, var(--accent) 48%, white) 30%,
+			transparent 70%
+		),
+		radial-gradient(
+			ellipse 75% 70% at 50% 120%,
+			color-mix(in oklch, var(--accent) 72%, oklch(0.32 0.035 150)) 0%,
+			transparent 72%
+		),
+		linear-gradient(145deg, oklch(0.4 0.05 150), oklch(0.26 0.03 150));
+	box-shadow: inset 0 0 0 1px oklch(1 0 0 / 10%);
+}
+
+.user-avatar-mesh-canvas {
+	position: absolute;
+	inset: 0;
+	z-index: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+}
+
+.user-avatar-mesh > span {
+	position: relative;
+	z-index: 1;
+}

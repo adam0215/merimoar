@@ -1,0 +1,20 @@
+[data-woswidgets-widget-id="user-profile"] strong.rt-Strong,
+[data-woswidgets-widget-id="user-security"] .rt-r-weight-bold {
+	font-weight: 600;
+}
+
+[data-woswidgets-widget-id="user-security"]
+	.woswidgets-card-list-item
+	.rt-Flex.rt-r-fd-column
+	> span.rt-Text {
+	font-size: 0.75rem;
+	line-height: 1rem;
+}
+
+[data-woswidgets-widget-id="user-security"]
+	.woswidgets-card-list-item
+	.rt-Grid
+	> .rt-Flex.rt-r-ai-center.rt-r-jc-center {
+	border: 0 !important;
+	border-radius: 9999px !important;
+}

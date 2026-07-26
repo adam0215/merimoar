@@ -4,7 +4,7 @@ import {
 	IconBaselineDensitySmall,
 } from "@tabler/icons-react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { usePaginatedQuery, useQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex-helpers/react/cache";
 import { useState } from "react";
 import { ThreadList, ThreadView } from "#/components/email/email-reader.tsx";
 import { Button } from "#/components/ui/button.tsx";

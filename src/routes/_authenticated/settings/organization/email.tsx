@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache";
 import { AddEmailConnectionDialog } from "#/components/email/add-email-connection-dialog.tsx";
 import { ProviderMark } from "#/components/email/provider-mark.tsx";
 import { RemoveEmailConnectionDialog } from "#/components/email/remove-email-connection-dialog.tsx";

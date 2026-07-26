@@ -1,6 +1,6 @@
 import { IconArrowLeft } from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { usePaginatedQuery, useQuery } from "convex/react";
+import { usePaginatedQuery, useQuery } from "convex-helpers/react/cache";
 import { CaseList } from "#/components/case/case-list.tsx";
 import { CaseView } from "#/components/case/case-view.tsx";
 import { Button } from "#/components/ui/button.tsx";

@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { useQuery } from "convex/react";
+import { useQuery } from "convex-helpers/react/cache";
 import { AppSidebar } from "#/components/app-sidebar.tsx";
 import { MerimoarLogo } from "#/components/merimoar-logo.tsx";
 import {
@@ -23,6 +23,9 @@ function getPageTitle(pathname: string) {
 	}
 	if (pathname === "/contacts") {
 		return "Contacts";
+	}
+	if (pathname === "/profile") {
+		return "Profile";
 	}
 	return "Email";
 }
