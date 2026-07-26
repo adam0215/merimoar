@@ -27,6 +27,10 @@ import type { DataModel } from "./dataModel.js";
 type Env = {
   readonly RESEND_API_KEY: string | undefined;
   readonly RESEND_WEBHOOK_SECRET: string | undefined;
+  readonly WORKOS_API_HOSTNAME: string | undefined;
+  readonly WORKOS_API_KEY: string;
+  readonly WORKOS_CLIENT_ID: string;
+  readonly WORKOS_WEBHOOK_SECRET: string;
 };
 
 /**

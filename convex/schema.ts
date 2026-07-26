@@ -7,11 +7,9 @@ import { entityFieldTypeValidator, entityIconValidator } from "./entity/model";
 export default defineSchema({
 	organizations: defineTable({
 		name: v.string(),
-		slug: v.string(),
-		workosOrganizationId: v.optional(v.string()),
-	})
-		.index("by_slug", ["slug"])
-		.index("by_workos_organization_id", ["workosOrganizationId"]),
+		workosOrganizationId: v.string(),
+		active: v.boolean(),
+	}).index("by_workos_organization_id", ["workosOrganizationId"]),
 
 	emailConnections: defineTable({
 		organizationId: v.id("organizations"),
@@ -53,22 +51,14 @@ export default defineSchema({
 
 	organizationMembers: defineTable({
 		organizationId: v.id("organizations"),
-		name: v.string(),
-		email: v.string(),
-		tokenIdentifier: v.optional(v.string()),
-		status: v.union(v.literal("active"), v.literal("disabled")),
+		workosUserId: v.string(),
+		active: v.boolean(),
 	})
-		.index("by_organization_id_and_email", ["organizationId", "email"])
-		.index("by_organization_id_and_token_identifier", [
+		.index("by_organization_id_and_workos_user_id", [
 			"organizationId",
-			"tokenIdentifier",
+			"workosUserId",
 		])
-		.index("by_organization_id_and_status_and_name", [
-			"organizationId",
-			"status",
-			"name",
-		])
-		.index("by_organization_id_and_name", ["organizationId", "name"]),
+		.index("by_organization_id_and_active", ["organizationId", "active"]),
 
 	entityTypes: defineTable({
 		organizationId: v.id("organizations"),

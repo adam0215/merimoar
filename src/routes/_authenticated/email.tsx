@@ -10,13 +10,13 @@ import { ThreadList, ThreadView } from "#/components/email/email-reader.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
 import { cn } from "#/lib/utils.ts";
-import { api } from "../../convex/_generated/api";
+import { api } from "../../../convex/_generated/api";
 
 type EmailSearch = {
 	thread?: string;
 };
 
-export const Route = createFileRoute("/email")({
+export const Route = createFileRoute("/_authenticated/email")({
 	validateSearch: (search: Record<string, unknown>): EmailSearch => ({
 		thread: typeof search.thread === "string" ? search.thread : undefined,
 	}),

@@ -10,12 +10,12 @@ import {
 export const listTypes = query({
 	args: {},
 	handler: async (ctx) => {
-		const actor = await requireActor(ctx);
+		const workspace = await requireActor(ctx);
 		return await ctx.db
 			.query("entityTypes")
 			.withIndex("by_organization_id_and_archived_at_and_name", (index) =>
 				index
-					.eq("organizationId", actor.organization._id)
+					.eq("organizationId", workspace.organization._id)
 					.eq("archivedAt", null),
 			)
 			.take(MAX_ENTITY_TYPES_PER_ORGANIZATION);
@@ -27,7 +27,7 @@ export const getType = query({
 		entityTypeId: v.string(),
 	},
 	handler: async (ctx, args) => {
-		const actor = await requireActor(ctx);
+		const workspace = await requireActor(ctx);
 		const entityTypeId = ctx.db.normalizeId("entityTypes", args.entityTypeId);
 		if (!entityTypeId) {
 			return null;
@@ -36,7 +36,7 @@ export const getType = query({
 		const entityType = await ctx.db.get(entityTypeId);
 		if (
 			!entityType ||
-			entityType.organizationId !== actor.organization._id ||
+			entityType.organizationId !== workspace.organization._id ||
 			entityType.archivedAt !== null
 		) {
 			return null;

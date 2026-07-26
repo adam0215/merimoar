@@ -3,6 +3,7 @@ import {
 	IconChevronRight,
 	IconFolder,
 	IconFolderFilled,
+	IconLogout,
 	IconMail,
 	IconMailFilled,
 	IconSettings,
@@ -172,6 +173,16 @@ export function AppSidebar() {
 						</SidebarMenu>
 					</SidebarGroupContent>
 				</SidebarGroup>
+				<SidebarMenu>
+					<SidebarMenuItem>
+						<SidebarMenuButton asChild tooltip="Sign out">
+							<a href="/api/auth/sign-out">
+								<IconLogout />
+								<span>Sign out</span>
+							</a>
+						</SidebarMenuButton>
+					</SidebarMenuItem>
+				</SidebarMenu>
 			</SidebarFooter>
 			<SidebarRail />
 		</Sidebar>

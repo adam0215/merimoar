@@ -1,8 +1,6 @@
-import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
-import schema from "../schema";
-import { modules } from "../test.setup";
+import { createTest, syncWorkosUser } from "../test.setup";
 
 // TEST FIXTURES: The Merimoar organization, people, emails, and WorkOS-style
 // identifiers below exist only in convex-test's isolated in-memory database.
@@ -10,32 +8,40 @@ const ISSUER = "https://api.workos.com/";
 
 describe("email reader authorization", () => {
 	it("derives the workspace from the actor and rejects cross-tenant inboxes", async () => {
-		const base = convexTest(schema, modules);
+		const base = createTest();
+		await Promise.all([
+			syncWorkosUser(base, {
+				id: "user_adam",
+				name: "Adam",
+				email: "adam@merimoar.com",
+			}),
+			syncWorkosUser(base, {
+				id: "user_other",
+				name: "Other",
+				email: "other@example.com",
+			}),
+		]);
 		const { ownConnectionId, otherConnectionId, otherThreadId } =
 			await base.run(async (ctx) => {
 				const organizationId = await ctx.db.insert("organizations", {
 					name: "Merimoar",
-					slug: "merimoar",
 					workosOrganizationId: "org_merimoar",
+					active: true,
 				});
 				const otherOrganizationId = await ctx.db.insert("organizations", {
 					name: "Other",
-					slug: "other",
 					workosOrganizationId: "org_other",
+					active: true,
 				});
 				await ctx.db.insert("organizationMembers", {
 					organizationId,
-					name: "Adam",
-					email: "adam@merimoar.com",
-					tokenIdentifier: `${ISSUER}|user_adam`,
-					status: "active",
+					workosUserId: "user_adam",
+					active: true,
 				});
 				await ctx.db.insert("organizationMembers", {
 					organizationId: otherOrganizationId,
-					name: "Other",
-					email: "other@example.com",
-					tokenIdentifier: `${ISSUER}|user_other`,
-					status: "active",
+					workosUserId: "user_other",
+					active: true,
 				});
 				const ownConnectionId = await ctx.db.insert("emailConnections", {
 					organizationId,

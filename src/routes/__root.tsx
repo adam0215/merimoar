@@ -1,23 +1,11 @@
-import type { QueryClient } from "@tanstack/react-query";
-import {
-	createRootRouteWithContext,
-	HeadContent,
-	Scripts,
-} from "@tanstack/react-router";
-import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
-import { AppShell } from "../components/app-shell";
-import { TooltipProvider } from "../components/ui/tooltip";
+import { createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import ConvexProvider from "../integrations/convex/provider";
 import WorkOSProvider from "../integrations/workos/provider";
 import appCss from "../styles.css?url";
 
-interface MyRouterContext {
-	queryClient: QueryClient;
-}
-
 const THEME_INIT_SCRIPT = `(function(){try{var stored=window.localStorage.getItem('theme');var mode=(stored==='light'||stored==='dark'||stored==='auto')?stored:'light';var prefersDark=window.matchMedia('(prefers-color-scheme: dark)').matches;var resolved=mode==='auto'?(prefersDark?'dark':'light'):mode;var root=document.documentElement;root.classList.remove('light','dark');root.classList.add(resolved);if(mode==='auto'){root.removeAttribute('data-theme')}else{root.setAttribute('data-theme',mode)}root.style.colorScheme=resolved;}catch(e){}})();`;
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
+export const Route = createRootRoute({
 	head: () => ({
 		meta: [
 			{
@@ -51,37 +39,10 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			</head>
 			<body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-primary/15">
 				<WorkOSProvider>
-					<ConvexProvider>
-						<Authenticated>
-							<TooltipProvider>
-								<AppShell>{children}</AppShell>
-							</TooltipProvider>
-						</Authenticated>
-						<AuthLoading>
-							<AuthStateMessage>Loading your workspace…</AuthStateMessage>
-						</AuthLoading>
-						<Unauthenticated>
-							<AuthStateMessage>
-								<a
-									href="/api/auth/sign-in"
-									className="font-medium text-foreground underline underline-offset-4"
-								>
-									Sign in to continue
-								</a>
-							</AuthStateMessage>
-						</Unauthenticated>
-					</ConvexProvider>
+					<ConvexProvider>{children}</ConvexProvider>
 				</WorkOSProvider>
 				<Scripts />
 			</body>
 		</html>
-	);
-}
-
-function AuthStateMessage({ children }: { children: React.ReactNode }) {
-	return (
-		<div className="flex min-h-svh items-center justify-center bg-background px-6 text-sm text-muted-foreground">
-			{children}
-		</div>
 	);
 }

@@ -1,16 +1,15 @@
-import { ConvexQueryClient } from "@convex-dev/react-query";
 import {
 	useAccessToken,
 	useAuth,
 } from "@workos/authkit-tanstack-react-start/client";
-import { ConvexProviderWithAuth } from "convex/react";
+import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react";
 import { useCallback, useMemo } from "react";
 
 const CONVEX_URL = import.meta.env.VITE_CONVEX_URL;
 if (!CONVEX_URL) {
-	console.error("missing envar CONVEX_URL");
+	throw new Error("Missing VITE_CONVEX_URL");
 }
-const convexQueryClient = new ConvexQueryClient(CONVEX_URL);
+const convexClient = new ConvexReactClient(CONVEX_URL);
 
 export default function AppConvexProvider({
 	children,
@@ -18,10 +17,7 @@ export default function AppConvexProvider({
 	children: React.ReactNode;
 }) {
 	return (
-		<ConvexProviderWithAuth
-			client={convexQueryClient.convexClient}
-			useAuth={useAuthFromWorkOS}
-		>
+		<ConvexProviderWithAuth client={convexClient} useAuth={useAuthFromWorkOS}>
 			{children}
 		</ConvexProviderWithAuth>
 	);

@@ -13,7 +13,7 @@ export const create = mutation({
 	},
 	returns: v.id("emailConnections"),
 	handler: async (ctx, args) => {
-		const actor = await requireActor(ctx);
+		const workspace = await requireActor(ctx);
 		const result = validation.safeParse(emailConnectionInputSchema, args);
 		if (!result.success) {
 			throw new ConvexError({
@@ -31,7 +31,7 @@ export const create = mutation({
 		if (existingConnection) {
 			if (
 				existingConnection.status === "disabled" &&
-				existingConnection.organizationId === actor.organization._id
+				existingConnection.organizationId === workspace.organization._id
 			) {
 				await ctx.db.patch("emailConnections", existingConnection._id, {
 					provider: result.output.provider,
@@ -48,7 +48,7 @@ export const create = mutation({
 		}
 
 		return await ctx.db.insert("emailConnections", {
-			organizationId: actor.organization._id,
+			organizationId: workspace.organization._id,
 			provider: result.output.provider,
 			displayName: result.output.displayName,
 			address,
@@ -63,9 +63,12 @@ export const remove = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const actor = await requireActor(ctx);
+		const workspace = await requireActor(ctx);
 		const connection = await ctx.db.get(args.connectionId);
-		if (!connection || connection.organizationId !== actor.organization._id) {
+		if (
+			!connection ||
+			connection.organizationId !== workspace.organization._id
+		) {
 			throw new ConvexError({
 				code: "EMAIL_CONNECTION_NOT_FOUND",
 				message: "The email connection could not be found.",

@@ -16,9 +16,11 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
-import { api } from "../../../../convex/_generated/api";
+import { api } from "../../../../../convex/_generated/api";
 
-export const Route = createFileRoute("/settings/organization/email")({
+export const Route = createFileRoute(
+	"/_authenticated/settings/organization/email",
+)({
 	component: OrganizationEmailSettings,
 });
 

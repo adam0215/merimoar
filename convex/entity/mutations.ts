@@ -56,7 +56,7 @@ export const createType = mutation({
 	},
 	returns: v.id("entityTypes"),
 	handler: async (ctx, args) => {
-		const actor = await requireActor(ctx);
+		const workspace = await requireActor(ctx);
 		const input = validation.safeParse(entityTypeInputSchema, args);
 		if (!input.success) {
 			throw validationError(
@@ -68,7 +68,7 @@ export const createType = mutation({
 			.query("entityTypes")
 			.withIndex("by_organization_id_and_archived_at_and_name", (index) =>
 				index
-					.eq("organizationId", actor.organization._id)
+					.eq("organizationId", workspace.organization._id)
 					.eq("archivedAt", null),
 			)
 			.take(MAX_ENTITY_TYPES_PER_ORGANIZATION);
@@ -82,7 +82,7 @@ export const createType = mutation({
 		const existing = await ctx.db
 			.query("entityTypes")
 			.withIndex("by_organization_id_and_key", (index) =>
-				index.eq("organizationId", actor.organization._id).eq("key", key),
+				index.eq("organizationId", workspace.organization._id).eq("key", key),
 			)
 			.unique();
 		if (existing) {
@@ -93,7 +93,7 @@ export const createType = mutation({
 		}
 
 		return await ctx.db.insert("entityTypes", {
-			organizationId: actor.organization._id,
+			organizationId: workspace.organization._id,
 			key,
 			name: input.output.name,
 			pluralName: input.output.pluralName,
@@ -115,14 +115,14 @@ export const addField = mutation({
 	},
 	returns: v.id("entityFieldDefinitions"),
 	handler: async (ctx, args) => {
-		const actor = await requireActor(ctx);
+		const workspace = await requireActor(ctx);
 		const input = validation.safeParse(entityFieldInputSchema, args);
 		if (!input.success) {
 			throw validationError(
 				input.issues[0]?.message ?? "Enter valid field details.",
 			);
 		}
-		await requireEntityType(ctx, actor.organization._id, args.entityTypeId);
+		await requireEntityType(ctx, workspace.organization._id, args.entityTypeId);
 
 		const activeFields = await ctx.db
 			.query("entityFieldDefinitions")
@@ -178,14 +178,14 @@ export const createEntity = mutation({
 	},
 	returns: v.id("entities"),
 	handler: async (ctx, args) => {
-		const actor = await requireActor(ctx);
+		const workspace = await requireActor(ctx);
 		const input = validation.safeParse(entityInputSchema, args);
 		if (!input.success) {
 			throw validationError(
 				input.issues[0]?.message ?? "Enter valid entity details.",
 			);
 		}
-		await requireEntityType(ctx, actor.organization._id, args.entityTypeId);
+		await requireEntityType(ctx, workspace.organization._id, args.entityTypeId);
 
 		const activeEntities = await ctx.db
 			.query("entities")

@@ -74,6 +74,8 @@ Node.js 22.11 or newer.
 - `/api/auth/callback` completes the OAuth callback.
 - `/api/auth/sign-in` initiates sign-in and supports a `returnPathname` query parameter.
 - `<AuthKitProvider>` supplies reactive auth state to the application routes.
+- `src/routes/_authenticated.tsx` protects the application routes with a
+  server-side `getAuth()` loader. Auth callback and error routes remain public.
 
 For authorization in loaders and server functions, use `getAuth()` from
 `@workos/authkit-tanstack-react-start`. Keep `WORKOS_API_KEY` and
@@ -84,29 +86,51 @@ with their production equivalents when deploying.
 ## Setting up Convex
 
 - Set the `VITE_CONVEX_URL` and `CONVEX_DEPLOYMENT` environment variables in your `.env.local`. (Or run `bunx --bun convex init` to set them automatically.)
-- Set `WORKOS_CLIENT_ID` on the Convex deployment so `convex/auth.config.ts`
-  can validate AuthKit access tokens:
+- Set the WorkOS credentials on the Convex deployment. The AuthKit component
+  uses them to validate webhooks, reconcile events, and sync users:
 
   ```bash
   bunx convex env set WORKOS_CLIENT_ID client_...
+  bunx convex env set WORKOS_API_KEY sk_...
+  bunx convex env set WORKOS_WEBHOOK_SECRET whsec_...
   ```
 
-- Provision each WorkOS organization/member mapping with the private admin
-  mutation. The organization and user IDs come from WorkOS; the issuer is the
-  `iss` claim in the access token. The values below are placeholders, not
-  application defaults:
+- If the WorkOS environment's default application differs from this
+  application's client ID, also set the cross-origin JWT issuer shown by
+  WorkOS. The issuer contains the default application's client ID:
 
   ```bash
-  bunx convex run auth/admin:linkWorkOSIdentity \
-    '{"organizationSlug":"merimoar","workosOrganizationId":"org_...","memberEmail":"you@example.com","issuer":"https://api.workos.com/","subject":"user_..."}'
+  bunx convex env set WORKOS_JWT_ISSUER \
+    https://api.workos.com/user_management/client_default_...
   ```
 
-- Seed the idempotent case/entity demo workspace when needed. This is
-  development-only fixture data and must not be used to provision production:
+- Add a WorkOS webhook endpoint whose URL is the Convex HTTP Actions site URL
+  followed by `/workos/webhook`, for example
+  `https://your-deployment.convex.site/workos/webhook`. Subscribe it to:
 
-  ```bash
-  bunx convex run dev/seed:seedCaseWorkspace
+  ```text
+  user.created
+  user.updated
+  user.deleted
+  organization.created
+  organization.updated
+  organization.deleted
+  organization_membership.created
+  organization_membership.updated
+  organization_membership.deleted
   ```
+
+  The official
+  [`@convex-dev/workos-authkit`](https://www.convex.dev/components/workos-authkit)
+  component verifies, deduplicates, orders, and reconciles these events. Do not
+  also poll the WorkOS Events API.
+
+- WorkOS is the only source for user profiles. Merimoar stores only the local
+  organization and membership relation required by its domain model. Inactive
+  and deleted memberships retain their Convex document IDs for case history but
+  are denied backend access and excluded from new owner choices. Revoked WorkOS
+  sessions remain valid in Convex only until their current access token expires.
+
 - Run `bunx --bun convex dev` to start the Convex server.
 
 

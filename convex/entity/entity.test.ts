@@ -1,10 +1,8 @@
 /// <reference types="vite/client" />
 
-import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
-import schema from "../schema";
-import { modules } from "../test.setup";
+import { createTest, syncWorkosUser } from "../test.setup";
 import { MAX_FIELDS_PER_ENTITY_TYPE } from "./constants";
 
 // TEST FIXTURES: The Merimoar organization, people, emails, and WorkOS-style
@@ -12,31 +10,39 @@ import { MAX_FIELDS_PER_ENTITY_TYPE } from "./constants";
 const ISSUER = "https://api.workos.com/";
 
 async function createFixture() {
-	const base = convexTest(schema, modules);
+	const base = createTest();
+	await Promise.all([
+		syncWorkosUser(base, {
+			id: "user_adam",
+			name: "Adam Gustafsson",
+			email: "adam@merimoar.com",
+		}),
+		syncWorkosUser(base, {
+			id: "user_other",
+			name: "Other User",
+			email: "other@example.com",
+		}),
+	]);
 	const ids = await base.run(async (ctx) => {
 		const organizationId = await ctx.db.insert("organizations", {
 			name: "Merimoar",
-			slug: "merimoar",
 			workosOrganizationId: "org_merimoar",
+			active: true,
 		});
 		const otherOrganizationId = await ctx.db.insert("organizations", {
 			name: "Other",
-			slug: "other",
 			workosOrganizationId: "org_other",
+			active: true,
 		});
 		await ctx.db.insert("organizationMembers", {
 			organizationId,
-			name: "Adam Gustafsson",
-			email: "adam@merimoar.com",
-			tokenIdentifier: `${ISSUER}|user_adam`,
-			status: "active",
+			workosUserId: "user_adam",
+			active: true,
 		});
 		await ctx.db.insert("organizationMembers", {
 			organizationId: otherOrganizationId,
-			name: "Other User",
-			email: "other@example.com",
-			tokenIdentifier: `${ISSUER}|user_other`,
-			status: "active",
+			workosUserId: "user_other",
+			active: true,
 		});
 		return { organizationId, otherOrganizationId };
 	});

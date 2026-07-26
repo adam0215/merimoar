@@ -28,7 +28,8 @@ describe("inbound email ingestion", () => {
 		const { connectionId, firstEventId } = await t.run(async (ctx) => {
 			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
-				slug: "merimoar",
+				workosOrganizationId: "org_merimoar",
+				active: true,
 			});
 			const connectionId = await ctx.db.insert("emailConnections", {
 				organizationId,
@@ -148,7 +149,8 @@ describe("inbound email ingestion", () => {
 		const { eventId, existingMessageId } = await t.run(async (ctx) => {
 			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
-				slug: "merimoar",
+				workosOrganizationId: "org_merimoar",
+				active: true,
 			});
 			const senderContactId = await ctx.db.insert("contacts", {
 				organizationId,
@@ -217,11 +219,13 @@ describe("inbound email ingestion", () => {
 		const setup = await t.run(async (ctx) => {
 			const firstOrganizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
-				slug: "merimoar",
+				workosOrganizationId: "org_merimoar",
+				active: true,
 			});
 			const secondOrganizationId = await ctx.db.insert("organizations", {
 				name: "Other",
-				slug: "other",
+				workosOrganizationId: "org_other",
+				active: true,
 			});
 			const firstConnectionId = await ctx.db.insert("emailConnections", {
 				organizationId: firstOrganizationId,
@@ -348,7 +352,8 @@ describe("inbound email ingestion", () => {
 		const { connectionId, eventIds } = await t.run(async (ctx) => {
 			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
-				slug: "merimoar",
+				workosOrganizationId: "org_merimoar",
+				active: true,
 			});
 			const connectionId = await ctx.db.insert("emailConnections", {
 				organizationId,

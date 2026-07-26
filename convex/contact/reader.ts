@@ -8,12 +8,12 @@ export const list = query({
 		paginationOpts: paginationOptsValidator,
 	},
 	handler: async (ctx, args) => {
-		const actor = await requireActor(ctx);
+		const workspace = await requireActor(ctx);
 
 		return await ctx.db
 			.query("contacts")
 			.withIndex("by_organization_id_and_last_seen_at", (index) =>
-				index.eq("organizationId", actor.organization._id),
+				index.eq("organizationId", workspace.organization._id),
 			)
 			.order("desc")
 			.paginate(args.paginationOpts);
@@ -25,14 +25,16 @@ export const get = query({
 		contactId: v.string(),
 	},
 	handler: async (ctx, args) => {
-		const actor = await requireActor(ctx);
+		const workspace = await requireActor(ctx);
 		const contactId = ctx.db.normalizeId("contacts", args.contactId);
 		if (!contactId) {
 			return null;
 		}
 
 		const contact = await ctx.db.get(contactId);
-		return contact?.organizationId === actor.organization._id ? contact : null;
+		return contact?.organizationId === workspace.organization._id
+			? contact
+			: null;
 	},
 });
 
@@ -42,9 +44,9 @@ export const listMessages = query({
 		paginationOpts: paginationOptsValidator,
 	},
 	handler: async (ctx, args) => {
-		const actor = await requireActor(ctx);
+		const workspace = await requireActor(ctx);
 		const contact = await ctx.db.get(args.contactId);
-		if (contact?.organizationId !== actor.organization._id) {
+		if (contact?.organizationId !== workspace.organization._id) {
 			throw new Error("Contact not found");
 		}
 

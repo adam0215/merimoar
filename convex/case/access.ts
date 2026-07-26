@@ -1,8 +1,9 @@
 import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { getWorkosUser } from "../workos";
 
-type DatabaseContext = Pick<QueryCtx | MutationCtx, "db">;
+type DatabaseContext = Pick<QueryCtx | MutationCtx, "db" | "runQuery">;
 
 export async function requireCase(
 	ctx: DatabaseContext,
@@ -31,7 +32,8 @@ export async function validateCaseOwner(
 	if (
 		!owner ||
 		owner.organizationId !== organizationId ||
-		owner.status !== "active"
+		!owner.active ||
+		!(await getWorkosUser(ctx, owner.workosUserId))
 	) {
 		throw new ConvexError({
 			code: "INVALID_CASE_OWNER",

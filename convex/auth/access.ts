@@ -1,9 +1,13 @@
 import { ConvexError } from "convex/values";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { getWorkosUser } from "../workos";
 
-type AuthenticatedContext = Pick<QueryCtx | MutationCtx, "auth" | "db">;
+type AuthenticatedContext = Pick<
+	QueryCtx | MutationCtx,
+	"auth" | "db" | "runQuery"
+>;
 
-export async function requireActor(ctx: AuthenticatedContext) {
+export async function requireOrganization(ctx: AuthenticatedContext) {
 	const identity = await ctx.auth.getUserIdentity();
 	if (!identity) {
 		throw new ConvexError({
@@ -26,27 +30,35 @@ export async function requireActor(ctx: AuthenticatedContext) {
 			index.eq("workosOrganizationId", workosOrganizationId),
 		)
 		.unique();
-	if (!organization) {
+	if (!organization || !organization.active) {
 		throw new ConvexError({
 			code: "ORGANIZATION_NOT_PROVISIONED",
 			message: "This WorkOS organization is not provisioned.",
 		});
 	}
 
-	const member = await ctx.db
-		.query("organizationMembers")
-		.withIndex("by_organization_id_and_token_identifier", (index) =>
-			index
-				.eq("organizationId", organization._id)
-				.eq("tokenIdentifier", identity.tokenIdentifier),
-		)
-		.unique();
-	if (!member || member.status !== "active") {
+	return { identity, organization };
+}
+
+export async function requireActor(ctx: AuthenticatedContext) {
+	const workspace = await requireOrganization(ctx);
+	const [member, user] = await Promise.all([
+		ctx.db
+			.query("organizationMembers")
+			.withIndex("by_organization_id_and_workos_user_id", (index) =>
+				index
+					.eq("organizationId", workspace.organization._id)
+					.eq("workosUserId", workspace.identity.subject),
+			)
+			.unique(),
+		getWorkosUser(ctx, workspace.identity.subject),
+	]);
+	if (!member || !member.active || !user) {
 		throw new ConvexError({
-			code: "MEMBER_NOT_AUTHORIZED",
-			message: "You are not an active member of this organization.",
+			code: "MEMBERSHIP_REQUIRED",
+			message: "An active WorkOS organization membership is required.",
 		});
 	}
 
-	return { identity, member, organization };
+	return { ...workspace, member, user };
 }

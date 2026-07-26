@@ -1,13 +1,15 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { EntitySettings } from "#/components/entity/entity-settings.tsx";
-import { api } from "../../../../convex/_generated/api";
+import { api } from "../../../../../convex/_generated/api";
 
 type EntitySettingsSearch = {
 	type?: string;
 };
 
-export const Route = createFileRoute("/settings/organization/entities")({
+export const Route = createFileRoute(
+	"/_authenticated/settings/organization/entities",
+)({
 	validateSearch: (search: Record<string, unknown>): EntitySettingsSearch => ({
 		type: typeof search.type === "string" ? search.type : undefined,
 	}),

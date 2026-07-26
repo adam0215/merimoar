@@ -33,14 +33,14 @@ import { api } from "../../../convex/_generated/api";
 import type { Doc } from "../../../convex/_generated/dataModel";
 import { caseTitleSchema } from "../../../convex/case/input";
 import { formatShortDate } from "./format.ts";
-import type { CaseDetail } from "./types.ts";
+import type { CaseCreateOptions, CaseDetail } from "./types.ts";
 
 export function CaseHeader({
 	detail,
 	members,
 }: {
 	detail: CaseDetail;
-	members: Doc<"organizationMembers">[];
+	members: CaseCreateOptions["members"];
 }) {
 	const updateCase = useMutation(api.case.mutations.update);
 	const [editing, setEditing] = useState(false);

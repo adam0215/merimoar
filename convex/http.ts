@@ -2,8 +2,10 @@ import { httpRouter } from "convex/server";
 import { type EmailReceivedEvent, Resend } from "resend";
 import { internal } from "./_generated/api";
 import { env, httpAction } from "./_generated/server";
+import { authKit } from "./workos";
 
 const http = httpRouter();
+authKit.registerRoutes(http);
 
 http.route({
 	path: "/webhooks/resend",

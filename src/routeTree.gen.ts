@@ -9,34 +9,46 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as CasesRouteImport } from './routes/cases'
-import { Route as ContactsRouteImport } from './routes/contacts'
-import { Route as EmailRouteImport } from './routes/email'
+import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
+import { Route as AuthErrorRouteImport } from './routes/auth-error'
+import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedCasesRouteImport } from './routes/_authenticated/cases'
+import { Route as AuthenticatedContactsRouteImport } from './routes/_authenticated/contacts'
+import { Route as AuthenticatedEmailRouteImport } from './routes/_authenticated/email'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as ApiAuthSignInRouteImport } from './routes/api/auth/sign-in'
-import { Route as SettingsOrganizationEmailRouteImport } from './routes/settings/organization/email'
-import { Route as SettingsOrganizationEntitiesRouteImport } from './routes/settings/organization/entities'
+import { Route as ApiAuthSignOutRouteImport } from './routes/api/auth/sign-out'
+import { Route as AuthenticatedSettingsOrganizationEmailRouteImport } from './routes/_authenticated/settings/organization/email'
+import { Route as AuthenticatedSettingsOrganizationEntitiesRouteImport } from './routes/_authenticated/settings/organization/entities'
 
-const IndexRoute = IndexRouteImport.update({
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthErrorRoute = AuthErrorRouteImport.update({
+  id: '/auth-error',
+  path: '/auth-error',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
-const CasesRoute = CasesRouteImport.update({
+const AuthenticatedCasesRoute = AuthenticatedCasesRouteImport.update({
   id: '/cases',
   path: '/cases',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
-const ContactsRoute = ContactsRouteImport.update({
+const AuthenticatedContactsRoute = AuthenticatedContactsRouteImport.update({
   id: '/contacts',
   path: '/contacts',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
-const EmailRoute = EmailRouteImport.update({
+const AuthenticatedEmailRoute = AuthenticatedEmailRouteImport.update({
   id: '/email',
   path: '/email',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AuthenticatedRoute,
 } as any)
 const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
   id: '/api/auth/callback',
@@ -48,123 +60,153 @@ const ApiAuthSignInRoute = ApiAuthSignInRouteImport.update({
   path: '/api/auth/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsOrganizationEmailRoute =
-  SettingsOrganizationEmailRouteImport.update({
+const ApiAuthSignOutRoute = ApiAuthSignOutRouteImport.update({
+  id: '/api/auth/sign-out',
+  path: '/api/auth/sign-out',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedSettingsOrganizationEmailRoute =
+  AuthenticatedSettingsOrganizationEmailRouteImport.update({
     id: '/settings/organization/email',
     path: '/settings/organization/email',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
-const SettingsOrganizationEntitiesRoute =
-  SettingsOrganizationEntitiesRouteImport.update({
+const AuthenticatedSettingsOrganizationEntitiesRoute =
+  AuthenticatedSettingsOrganizationEntitiesRouteImport.update({
     id: '/settings/organization/entities',
     path: '/settings/organization/entities',
-    getParentRoute: () => rootRouteImport,
+    getParentRoute: () => AuthenticatedRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/cases': typeof CasesRoute
-  '/contacts': typeof ContactsRoute
-  '/email': typeof EmailRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/auth-error': typeof AuthErrorRoute
+  '/cases': typeof AuthenticatedCasesRoute
+  '/contacts': typeof AuthenticatedContactsRoute
+  '/email': typeof AuthenticatedEmailRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
-  '/settings/organization/email': typeof SettingsOrganizationEmailRoute
-  '/settings/organization/entities': typeof SettingsOrganizationEntitiesRoute
+  '/api/auth/sign-out': typeof ApiAuthSignOutRoute
+  '/settings/organization/email': typeof AuthenticatedSettingsOrganizationEmailRoute
+  '/settings/organization/entities': typeof AuthenticatedSettingsOrganizationEntitiesRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/cases': typeof CasesRoute
-  '/contacts': typeof ContactsRoute
-  '/email': typeof EmailRoute
+  '/auth-error': typeof AuthErrorRoute
+  '/cases': typeof AuthenticatedCasesRoute
+  '/contacts': typeof AuthenticatedContactsRoute
+  '/email': typeof AuthenticatedEmailRoute
+  '/': typeof AuthenticatedIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
-  '/settings/organization/email': typeof SettingsOrganizationEmailRoute
-  '/settings/organization/entities': typeof SettingsOrganizationEntitiesRoute
+  '/api/auth/sign-out': typeof ApiAuthSignOutRoute
+  '/settings/organization/email': typeof AuthenticatedSettingsOrganizationEmailRoute
+  '/settings/organization/entities': typeof AuthenticatedSettingsOrganizationEntitiesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/cases': typeof CasesRoute
-  '/contacts': typeof ContactsRoute
-  '/email': typeof EmailRoute
+  '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/auth-error': typeof AuthErrorRoute
+  '/_authenticated/cases': typeof AuthenticatedCasesRoute
+  '/_authenticated/contacts': typeof AuthenticatedContactsRoute
+  '/_authenticated/email': typeof AuthenticatedEmailRoute
+  '/_authenticated/': typeof AuthenticatedIndexRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
-  '/settings/organization/email': typeof SettingsOrganizationEmailRoute
-  '/settings/organization/entities': typeof SettingsOrganizationEntitiesRoute
+  '/api/auth/sign-out': typeof ApiAuthSignOutRoute
+  '/_authenticated/settings/organization/email': typeof AuthenticatedSettingsOrganizationEmailRoute
+  '/_authenticated/settings/organization/entities': typeof AuthenticatedSettingsOrganizationEntitiesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/auth-error'
     | '/cases'
     | '/contacts'
     | '/email'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
+    | '/api/auth/sign-out'
     | '/settings/organization/email'
     | '/settings/organization/entities'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/'
+    | '/auth-error'
     | '/cases'
     | '/contacts'
     | '/email'
+    | '/'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
+    | '/api/auth/sign-out'
     | '/settings/organization/email'
     | '/settings/organization/entities'
   id:
     | '__root__'
-    | '/'
-    | '/cases'
-    | '/contacts'
-    | '/email'
+    | '/_authenticated'
+    | '/auth-error'
+    | '/_authenticated/cases'
+    | '/_authenticated/contacts'
+    | '/_authenticated/email'
+    | '/_authenticated/'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
-    | '/settings/organization/email'
-    | '/settings/organization/entities'
+    | '/api/auth/sign-out'
+    | '/_authenticated/settings/organization/email'
+    | '/_authenticated/settings/organization/entities'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  CasesRoute: typeof CasesRoute
-  ContactsRoute: typeof ContactsRoute
-  EmailRoute: typeof EmailRoute
+  AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  AuthErrorRoute: typeof AuthErrorRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ApiAuthSignInRoute: typeof ApiAuthSignInRoute
-  SettingsOrganizationEmailRoute: typeof SettingsOrganizationEmailRoute
-  SettingsOrganizationEntitiesRoute: typeof SettingsOrganizationEntitiesRoute
+  ApiAuthSignOutRoute: typeof ApiAuthSignOutRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth-error': {
+      id: '/auth-error'
+      path: '/auth-error'
+      fullPath: '/auth-error'
+      preLoaderRoute: typeof AuthErrorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/': {
+      id: '/_authenticated/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    '/cases': {
-      id: '/cases'
+    '/_authenticated/cases': {
+      id: '/_authenticated/cases'
       path: '/cases'
       fullPath: '/cases'
-      preLoaderRoute: typeof CasesRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedCasesRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    '/contacts': {
-      id: '/contacts'
+    '/_authenticated/contacts': {
+      id: '/_authenticated/contacts'
       path: '/contacts'
       fullPath: '/contacts'
-      preLoaderRoute: typeof ContactsRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedContactsRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
-    '/email': {
-      id: '/email'
+    '/_authenticated/email': {
+      id: '/_authenticated/email'
       path: '/email'
       fullPath: '/email'
-      preLoaderRoute: typeof EmailRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedEmailRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
     '/api/auth/callback': {
       id: '/api/auth/callback'
@@ -180,32 +222,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSignInRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings/organization/email': {
-      id: '/settings/organization/email'
-      path: '/settings/organization/email'
-      fullPath: '/settings/organization/email'
-      preLoaderRoute: typeof SettingsOrganizationEmailRouteImport
+    '/api/auth/sign-out': {
+      id: '/api/auth/sign-out'
+      path: '/api/auth/sign-out'
+      fullPath: '/api/auth/sign-out'
+      preLoaderRoute: typeof ApiAuthSignOutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/settings/organization/entities': {
-      id: '/settings/organization/entities'
+    '/_authenticated/settings/organization/email': {
+      id: '/_authenticated/settings/organization/email'
+      path: '/settings/organization/email'
+      fullPath: '/settings/organization/email'
+      preLoaderRoute: typeof AuthenticatedSettingsOrganizationEmailRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/settings/organization/entities': {
+      id: '/_authenticated/settings/organization/entities'
       path: '/settings/organization/entities'
       fullPath: '/settings/organization/entities'
-      preLoaderRoute: typeof SettingsOrganizationEntitiesRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedSettingsOrganizationEntitiesRouteImport
+      parentRoute: typeof AuthenticatedRoute
     }
   }
 }
 
+interface AuthenticatedRouteChildren {
+  AuthenticatedCasesRoute: typeof AuthenticatedCasesRoute
+  AuthenticatedContactsRoute: typeof AuthenticatedContactsRoute
+  AuthenticatedEmailRoute: typeof AuthenticatedEmailRoute
+  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedSettingsOrganizationEmailRoute: typeof AuthenticatedSettingsOrganizationEmailRoute
+  AuthenticatedSettingsOrganizationEntitiesRoute: typeof AuthenticatedSettingsOrganizationEntitiesRoute
+}
+
+const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedCasesRoute: AuthenticatedCasesRoute,
+  AuthenticatedContactsRoute: AuthenticatedContactsRoute,
+  AuthenticatedEmailRoute: AuthenticatedEmailRoute,
+  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedSettingsOrganizationEmailRoute:
+    AuthenticatedSettingsOrganizationEmailRoute,
+  AuthenticatedSettingsOrganizationEntitiesRoute:
+    AuthenticatedSettingsOrganizationEntitiesRoute,
+}
+
+const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
+  AuthenticatedRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  CasesRoute: CasesRoute,
-  ContactsRoute: ContactsRoute,
-  EmailRoute: EmailRoute,
+  AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  AuthErrorRoute: AuthErrorRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ApiAuthSignInRoute: ApiAuthSignInRoute,
-  SettingsOrganizationEmailRoute: SettingsOrganizationEmailRoute,
-  SettingsOrganizationEntitiesRoute: SettingsOrganizationEntitiesRoute,
+  ApiAuthSignOutRoute: ApiAuthSignOutRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

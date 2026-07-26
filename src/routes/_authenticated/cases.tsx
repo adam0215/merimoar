@@ -5,13 +5,13 @@ import { CaseList } from "#/components/case/case-list.tsx";
 import { CaseView } from "#/components/case/case-view.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { cn } from "#/lib/utils.ts";
-import { api } from "../../convex/_generated/api";
+import { api } from "../../../convex/_generated/api";
 
 type CasesSearch = {
 	case?: string;
 };
 
-export const Route = createFileRoute("/cases")({
+export const Route = createFileRoute("/_authenticated/cases")({
 	validateSearch: (search: Record<string, unknown>): CasesSearch => ({
 		case: typeof search.case === "string" ? search.case : undefined,
 	}),

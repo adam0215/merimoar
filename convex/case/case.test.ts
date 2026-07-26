@@ -1,10 +1,8 @@
 /// <reference types="vite/client" />
 
-import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
-import schema from "../schema";
-import { modules } from "../test.setup";
+import { createTest, syncWorkosUser } from "../test.setup";
 
 // TEST FIXTURES: The Merimoar organization, people, emails, and WorkOS-style
 // identifiers below exist only in convex-test's isolated in-memory database.
@@ -13,37 +11,49 @@ const ADAM_SUBJECT = "user_adam";
 const OTHER_SUBJECT = "user_other";
 
 async function createFixture() {
-	const base = convexTest(schema, modules);
+	const base = createTest();
+	await Promise.all([
+		syncWorkosUser(base, {
+			id: ADAM_SUBJECT,
+			name: "Adam Gustafsson",
+			email: "adam@merimoar.com",
+		}),
+		syncWorkosUser(base, {
+			id: "user_sara",
+			name: "Sara Lind",
+			email: "sara@merimoar.com",
+		}),
+		syncWorkosUser(base, {
+			id: OTHER_SUBJECT,
+			name: "Other User",
+			email: "other@example.com",
+		}),
+	]);
 	const ids = await base.run(async (ctx) => {
 		const organizationId = await ctx.db.insert("organizations", {
 			name: "Merimoar",
-			slug: "merimoar",
 			workosOrganizationId: "org_merimoar",
+			active: true,
 		});
 		const otherOrganizationId = await ctx.db.insert("organizations", {
 			name: "Other",
-			slug: "other",
 			workosOrganizationId: "org_other",
+			active: true,
 		});
 		const actorMemberId = await ctx.db.insert("organizationMembers", {
 			organizationId,
-			name: "Adam Gustafsson",
-			email: "adam@merimoar.com",
-			tokenIdentifier: `${ISSUER}|${ADAM_SUBJECT}`,
-			status: "active",
+			workosUserId: ADAM_SUBJECT,
+			active: true,
 		});
 		const ownerMemberId = await ctx.db.insert("organizationMembers", {
 			organizationId,
-			name: "Sara Lind",
-			email: "sara@merimoar.com",
-			status: "active",
+			workosUserId: "user_sara",
+			active: true,
 		});
 		await ctx.db.insert("organizationMembers", {
 			organizationId: otherOrganizationId,
-			name: "Other User",
-			email: "other@example.com",
-			tokenIdentifier: `${ISSUER}|${OTHER_SUBJECT}`,
-			status: "active",
+			workosUserId: OTHER_SUBJECT,
+			active: true,
 		});
 		const contactId = await ctx.db.insert("contacts", {
 			organizationId,
