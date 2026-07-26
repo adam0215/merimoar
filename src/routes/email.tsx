@@ -1,0 +1,104 @@
+import { IconArrowLeft } from "@tabler/icons-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { usePaginatedQuery, useQuery } from "convex/react";
+import { ThreadList, ThreadView } from "#/components/email/email-reader.tsx";
+import { Button } from "#/components/ui/button.tsx";
+import { ScrollArea } from "#/components/ui/scroll-area.tsx";
+import { cn } from "#/lib/utils.ts";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+
+const ORGANIZATION_SLUG = "merimoar";
+
+type EmailSearch = {
+	thread?: string;
+};
+
+export const Route = createFileRoute("/email")({
+	validateSearch: (search: Record<string, unknown>): EmailSearch => ({
+		thread: typeof search.thread === "string" ? search.thread : undefined,
+	}),
+	component: EmailPage,
+});
+
+function EmailPage() {
+	const { thread: selectedThreadId } = Route.useSearch();
+	const workspace = useQuery(api.email.reader.getWorkspace, {
+		organizationSlug: ORGANIZATION_SLUG,
+	});
+	const activeConnection = workspace?.connections.find(
+		(connection) => connection.status === "active",
+	);
+	const {
+		results: threads,
+		status,
+		loadMore,
+	} = usePaginatedQuery(
+		api.email.reader.listThreads,
+		activeConnection ? { connectionId: activeConnection._id } : "skip",
+		{ initialNumItems: 30 },
+	);
+	const selectedThread = useQuery(
+		api.email.reader.getThread,
+		selectedThreadId
+			? {
+					threadId: selectedThreadId as Id<"emailThreads">,
+				}
+			: "skip",
+	);
+	const threadStatus = activeConnection ? status : "Exhausted";
+
+	return (
+		<div className="grid h-full min-h-0 md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]">
+			<section
+				className={cn(
+					"min-h-0 border-r bg-background",
+					selectedThreadId && "hidden md:block",
+				)}
+			>
+				<div className="flex h-16 items-center justify-between border-b px-5">
+					<div>
+						<h1 className="text-sm font-semibold">Inbound</h1>
+						<p className="text-xs text-muted-foreground">
+							{activeConnection?.address || "No active connection"}
+						</p>
+					</div>
+				</div>
+				<ScrollArea className="h-[calc(100%-4rem)]">
+					<ThreadList
+						items={threads}
+						selectedThreadId={selectedThreadId}
+						status={threadStatus}
+						loadMore={() => loadMore(30)}
+					/>
+				</ScrollArea>
+			</section>
+
+			<section
+				className={cn(
+					"min-h-0 bg-muted/20",
+					!selectedThreadId && "hidden md:block",
+				)}
+			>
+				<div className="flex h-full min-h-0 flex-col">
+					<div className="flex h-12 shrink-0 items-center border-b px-3 md:hidden">
+						<Button asChild variant="ghost" size="sm">
+							<Link to="/email" search={{}}>
+								<IconArrowLeft />
+								Back to inbox
+							</Link>
+						</Button>
+					</div>
+					<div className="min-h-0 flex-1">
+						<ThreadView
+							thread={selectedThread}
+							isLoading={Boolean(
+								selectedThreadId && selectedThread === undefined,
+							)}
+						/>
+					</div>
+				</div>
+			</section>
+		</div>
+	);
+}
