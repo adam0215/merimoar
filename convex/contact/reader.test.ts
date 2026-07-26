@@ -4,18 +4,38 @@ import { api } from "../_generated/api";
 import schema from "../schema";
 import { modules } from "../test.setup";
 
+// TEST FIXTURES: The Merimoar organization, people, emails, and WorkOS-style
+// identifiers below exist only in convex-test's isolated in-memory database.
+const ISSUER = "https://api.workos.com/";
+
 describe("contact reader", () => {
 	it("lists only the organization's contacts by latest activity", async () => {
-		const t = convexTest(schema, modules);
-		const { newestContactId, otherContactId, threadId } = await t.run(
+		const base = convexTest(schema, modules);
+		const { newestContactId, otherContactId, threadId } = await base.run(
 			async (ctx) => {
 				const organizationId = await ctx.db.insert("organizations", {
 					name: "Merimoar",
 					slug: "merimoar",
+					workosOrganizationId: "org_merimoar",
 				});
 				const otherOrganizationId = await ctx.db.insert("organizations", {
 					name: "Other",
 					slug: "other",
+					workosOrganizationId: "org_other",
+				});
+				await ctx.db.insert("organizationMembers", {
+					organizationId,
+					name: "Adam",
+					email: "adam@merimoar.com",
+					tokenIdentifier: `${ISSUER}|user_adam`,
+					status: "active",
+				});
+				await ctx.db.insert("organizationMembers", {
+					organizationId: otherOrganizationId,
+					name: "Other",
+					email: "other@example.com",
+					tokenIdentifier: `${ISSUER}|user_other`,
+					status: "active",
 				});
 				await ctx.db.insert("contacts", {
 					organizationId,
@@ -48,6 +68,7 @@ describe("contact reader", () => {
 					lastActivityAt: 3_000,
 				});
 				const messageId = await ctx.db.insert("emailMessages", {
+					connectionId,
 					threadId,
 					senderContactId: newestContactId,
 					externalMessageId: "message-1",
@@ -72,20 +93,22 @@ describe("contact reader", () => {
 				return { newestContactId, otherContactId, threadId };
 			},
 		);
+		const actor = base.withIdentity({
+			issuer: ISSUER,
+			subject: "user_adam",
+			org_id: "org_merimoar",
+		});
 
-		const result = await t.query(api.contact.reader.list, {
-			organizationSlug: "merimoar",
+		const result = await actor.query(api.contact.reader.list, {
 			paginationOpts: {
 				numItems: 10,
 				cursor: null,
 			},
 		});
-		const inaccessibleContact = await t.query(api.contact.reader.get, {
-			organizationSlug: "merimoar",
+		const inaccessibleContact = await actor.query(api.contact.reader.get, {
 			contactId: otherContactId,
 		});
-		const messages = await t.query(api.contact.reader.listMessages, {
-			organizationSlug: "merimoar",
+		const messages = await actor.query(api.contact.reader.listMessages, {
 			contactId: newestContactId,
 			paginationOpts: {
 				numItems: 10,
@@ -112,19 +135,36 @@ describe("contact reader", () => {
 	});
 
 	it("returns null for a malformed contact ID", async () => {
-		const t = convexTest(schema, modules);
-		await t.run(async (ctx) => {
-			await ctx.db.insert("organizations", {
+		const base = convexTest(schema, modules);
+		await base.run(async (ctx) => {
+			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
 				slug: "merimoar",
+				workosOrganizationId: "org_merimoar",
 			});
+			await ctx.db.insert("organizationMembers", {
+				organizationId,
+				name: "Adam",
+				email: "adam@merimoar.com",
+				tokenIdentifier: `${ISSUER}|user_adam`,
+				status: "active",
+			});
+		});
+		const actor = base.withIdentity({
+			issuer: ISSUER,
+			subject: "user_adam",
+			org_id: "org_merimoar",
 		});
 
 		expect(
-			await t.query(api.contact.reader.get, {
-				organizationSlug: "merimoar",
+			await actor.query(api.contact.reader.get, {
 				contactId: "not-a-contact-id",
 			}),
 		).toBeNull();
+		await expect(
+			base.query(api.contact.reader.list, {
+				paginationOpts: { numItems: 10, cursor: null },
+			}),
+		).rejects.toThrow("Sign in");
 	});
 });

@@ -10,8 +10,6 @@ import { ScrollArea } from "#/components/ui/scroll-area.tsx";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../convex/_generated/api";
 
-const ORGANIZATION_SLUG = "merimoar";
-
 type ContactsSearch = {
 	contact?: string;
 };
@@ -29,16 +27,11 @@ function ContactsPage() {
 		results: contacts,
 		status: contactStatus,
 		loadMore: loadMoreContacts,
-	} = usePaginatedQuery(
-		api.contact.reader.list,
-		{ organizationSlug: ORGANIZATION_SLUG },
-		{ initialNumItems: 30 },
-	);
+	} = usePaginatedQuery(api.contact.reader.list, {}, { initialNumItems: 30 });
 	const selectedContact = useQuery(
 		api.contact.reader.get,
 		selectedContactId
 			? {
-					organizationSlug: ORGANIZATION_SLUG,
 					contactId: selectedContactId,
 				}
 			: "skip",
@@ -51,7 +44,6 @@ function ContactsPage() {
 		api.contact.reader.listMessages,
 		selectedContact
 			? {
-					organizationSlug: ORGANIZATION_SLUG,
 					contactId: selectedContact._id,
 				}
 			: "skip",

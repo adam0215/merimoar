@@ -1,5 +1,5 @@
-import { Resend, type EmailReceivedEvent } from "resend";
 import { httpRouter } from "convex/server";
+import { type EmailReceivedEvent, Resend } from "resend";
 import { internal } from "./_generated/api";
 import { env, httpAction } from "./_generated/server";
 
@@ -21,7 +21,7 @@ http.route({
 		}
 
 		const rawPayload = await request.text();
-		let event;
+		let event: ReturnType<Resend["webhooks"]["verify"]>;
 		try {
 			event = new Resend().webhooks.verify({
 				payload: rawPayload,

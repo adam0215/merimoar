@@ -7,6 +7,8 @@ import schema from "../schema";
 import { modules } from "../test.setup";
 import { MAX_FIELDS_PER_ENTITY_TYPE } from "./constants";
 
+// TEST FIXTURES: The Merimoar organization, people, emails, and WorkOS-style
+// identifiers below exist only in convex-test's isolated in-memory database.
 const ISSUER = "https://api.workos.com/";
 
 async function createFixture() {

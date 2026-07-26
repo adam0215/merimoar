@@ -1,3 +1,4 @@
+import { parseDateInput } from "#/lib/date-input.ts";
 import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import type { EntityFieldValueInput } from "../../../convex/entity/values";
 
@@ -42,9 +43,7 @@ export function buildEntityFieldValues(
 		}
 
 		const numericValue =
-			field.valueType === "number"
-				? Number(value)
-				: new Date(`${value}T12:00:00`).getTime();
+			field.valueType === "number" ? Number(value) : parseDateInput(value);
 		if (!Number.isFinite(numericValue)) {
 			return {
 				success: false,

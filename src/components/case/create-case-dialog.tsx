@@ -34,29 +34,22 @@ import {
 } from "#/components/ui/select.tsx";
 import { Textarea } from "#/components/ui/textarea.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
+import { parseDateInput } from "#/lib/date-input.ts";
 import { EntityIcon } from "#/lib/entity-icons.tsx";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import {
+	caseDescriptionSchema,
+	caseTitleSchema,
+	optionalCaseEventBodySchema,
+} from "../../../convex/case/input";
 import type { CaseCreateOptions } from "./types.ts";
 
 const createCaseSchema = v.object({
-	title: v.pipe(
-		v.string(),
-		v.trim(),
-		v.minLength(2, "Use at least 2 characters."),
-		v.maxLength(160, "Use no more than 160 characters."),
-	),
-	description: v.pipe(
-		v.string(),
-		v.trim(),
-		v.maxLength(4000, "Use no more than 4,000 characters."),
-	),
-	initialEventBody: v.pipe(
-		v.string(),
-		v.trim(),
-		v.maxLength(4000, "Use no more than 4,000 characters."),
-	),
+	title: caseTitleSchema,
+	description: caseDescriptionSchema,
+	initialEventBody: optionalCaseEventBodySchema,
 });
 
 const INITIAL_FORM = {
@@ -150,9 +143,7 @@ export function CreateCaseDialog({
 				description: validation.output.description,
 				ownerMemberId:
 					ownerMemberId === "unassigned" ? null : (owner?._id ?? null),
-				dueAt: form.dueDate
-					? new Date(`${form.dueDate}T12:00:00`).getTime()
-					: null,
+				dueAt: form.dueDate ? parseDateInput(form.dueDate) : null,
 				initialEventBody: validation.output.initialEventBody,
 				contactIds: [...contactIds],
 				entityIds: [...entityIds],

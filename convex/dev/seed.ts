@@ -4,12 +4,21 @@ import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
 import { normalizeEntityIdentifier } from "../entity/constants";
 
+/**
+ * Development-only demo seed.
+ *
+ * Every organization, person, address, identifier, and timeline value in this
+ * module is fixed fixture data. Runtime code never invokes this mutation;
+ * developers run it manually with the command documented in the README.
+ */
 async function upsertOrganization(ctx: MutationCtx) {
 	const existing = await ctx.db
 		.query("organizations")
 		.withIndex("by_slug", (index) => index.eq("slug", "merimoar"))
 		.unique();
 	if (existing) {
+		// TEMPORARY DEV-DATA MIGRATION: Early seed runs stored a fake WorkOS
+		// organization ID. Remove this branch after old dev data has been reset.
 		if (existing.workosOrganizationId === "org_merimoar_demo") {
 			await ctx.db.patch("organizations", existing._id, {
 				workosOrganizationId: undefined,
@@ -36,6 +45,8 @@ async function upsertMember(
 		)
 		.unique();
 	if (existing) {
+		// TEMPORARY DEV-DATA MIGRATION: Early seed runs stored fake auth
+		// identities. Remove this branch after old dev data has been reset.
 		if (existing.tokenIdentifier?.endsWith("_demo")) {
 			await ctx.db.patch("organizationMembers", existing._id, {
 				tokenIdentifier: undefined,

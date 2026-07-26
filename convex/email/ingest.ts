@@ -1,21 +1,15 @@
 import { v } from "convex/values";
-import type { MutationCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
-import {
-	internalMutation,
-	internalQuery,
-} from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
+import type { MutationCtx } from "../_generated/server";
+import { internalMutation, internalQuery } from "../_generated/server";
 import { upsertSenderContact } from "../contact/model";
 import { normalizedInboundEmailValidator } from "./model";
 import { normalizeEmailAddress } from "./normalize";
 
 const RETRY_DELAYS_MS = [15_000, 60_000, 5 * 60_000];
 
-async function findConnection(
-	ctx: MutationCtx,
-	recipientAddresses: string[],
-) {
+async function findConnection(ctx: MutationCtx, recipientAddresses: string[]) {
 	for (const recipientAddress of recipientAddresses) {
 		const connection = await ctx.db
 			.query("emailConnections")
@@ -37,21 +31,15 @@ async function findThreadByInternetMessageId(
 	connectionId: Id<"emailConnections">,
 	internetMessageId: string,
 ) {
-	const candidates = await ctx.db
+	const message = await ctx.db
 		.query("emailMessages")
-		.withIndex("by_internet_message_id", (query) =>
-			query.eq("internetMessageId", internetMessageId),
+		.withIndex("by_connection_id_and_internet_message_id", (query) =>
+			query
+				.eq("connectionId", connectionId)
+				.eq("internetMessageId", internetMessageId),
 		)
-		.take(20);
-
-	for (const candidate of candidates) {
-		const thread = await ctx.db.get(candidate.threadId);
-		if (thread?.connectionId === connectionId) {
-			return thread;
-		}
-	}
-
-	return null;
+		.unique();
+	return message ? await ctx.db.get(message.threadId) : null;
 }
 
 async function findThreadByExternalThreadId(
@@ -74,21 +62,14 @@ async function findExistingMessage(
 	connectionId: Id<"emailConnections">,
 	externalMessageId: string,
 ) {
-	const candidates = await ctx.db
+	return await ctx.db
 		.query("emailMessages")
-		.withIndex("by_external_message_id", (query) =>
-			query.eq("externalMessageId", externalMessageId),
+		.withIndex("by_connection_id_and_external_message_id", (query) =>
+			query
+				.eq("connectionId", connectionId)
+				.eq("externalMessageId", externalMessageId),
 		)
-		.take(20);
-
-	for (const candidate of candidates) {
-		const thread = await ctx.db.get(candidate.threadId);
-		if (thread?.connectionId === connectionId) {
-			return candidate;
-		}
-	}
-
-	return null;
+		.unique();
 }
 
 export const recordResendEvent = internalMutation({
@@ -121,7 +102,9 @@ export const recordResendEvent = internalMutation({
 			status: connection ? "pending" : "failed",
 			rawPayload: args.rawPayload,
 			receivedAt: args.receivedAt,
-			error: connection ? undefined : "No active connection matched the recipient",
+			error: connection
+				? undefined
+				: "No active connection matched the recipient",
 			attempts: 0,
 		});
 
@@ -129,14 +112,10 @@ export const recordResendEvent = internalMutation({
 			return { status: "unroutable" as const, eventId };
 		}
 
-		await ctx.scheduler.runAfter(
-			0,
-			internal.email.resend.processInboundEmail,
-			{
-				eventId,
-				attempt: 0,
-			},
-		);
+		await ctx.scheduler.runAfter(0, internal.email.resend.processInboundEmail, {
+			eventId,
+			attempt: 0,
+		});
 		return { status: "accepted" as const, eventId };
 	},
 });
@@ -239,6 +218,7 @@ export const storeInboundEmail = internalMutation({
 		}
 
 		const messageId = await ctx.db.insert("emailMessages", {
+			connectionId: event.connectionId,
 			threadId: thread._id,
 			senderContactId,
 			externalMessageId: args.email.externalMessageId,

@@ -21,15 +21,6 @@ bun --bun run build
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
 
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Remove `@tailwindcss/vite` and `tailwindcss` from `package.json`
-
 ## Linting & Formatting
 
 This project uses [Biome](https://biomejs.dev/) for linting and formatting. The following scripts are available:
@@ -75,14 +66,14 @@ Node.js 22.11 or newer.
 3. On the dashboard's [Redirects page](https://dashboard.workos.com/redirects), add
    `http://localhost:3000/api/auth/callback` as a redirect URI and
    `http://localhost:3000/api/auth/sign-in` as the sign-in endpoint.
-4. Start the app and visit `/demo/workos`.
+4. Start the app and visit `/email`.
 
 ### What's wired up
 
 - `authkitMiddleware()` manages the encrypted server-side session in `src/start.ts`.
 - `/api/auth/callback` completes the OAuth callback.
 - `/api/auth/sign-in` initiates sign-in and supports a `returnPathname` query parameter.
-- `<AuthKitProvider>` supplies reactive auth state to the header and demo route.
+- `<AuthKitProvider>` supplies reactive auth state to the application routes.
 
 For authorization in loaders and server functions, use `getAuth()` from
 `@workos/authkit-tanstack-react-start`. Keep `WORKOS_API_KEY` and
@@ -102,58 +93,22 @@ with their production equivalents when deploying.
 
 - Provision each WorkOS organization/member mapping with the private admin
   mutation. The organization and user IDs come from WorkOS; the issuer is the
-  `iss` claim in the access token:
+  `iss` claim in the access token. The values below are placeholders, not
+  application defaults:
 
   ```bash
   bunx convex run auth/admin:linkWorkOSIdentity \
     '{"organizationSlug":"merimoar","workosOrganizationId":"org_...","memberEmail":"you@example.com","issuer":"https://api.workos.com/","subject":"user_..."}'
   ```
 
-- Seed the idempotent case/entity demo workspace when needed:
+- Seed the idempotent case/entity demo workspace when needed. This is
+  development-only fixture data and must not be used to provision production:
 
   ```bash
   bunx convex run dev/seed:seedCaseWorkspace
   ```
 - Run `bunx --bun convex dev` to start the Convex server.
 
-
-# TanStack Chat Application
-
-Am example chat application built with TanStack Start, TanStack Store, and Claude AI.
-
-## .env Updates
-
-```env
-ANTHROPIC_API_KEY=your_anthropic_api_key
-```
-
-## ✨ Features
-
-### AI Capabilities
-- 🤖 Powered by Claude 3.5 Sonnet 
-- 📝 Rich markdown formatting with syntax highlighting
-- 🎯 Customizable system prompts for tailored AI behavior
-- 🔄 Real-time message updates and streaming responses (coming soon)
-
-### User Experience
-- 🎨 Modern UI with Tailwind CSS and Lucide icons
-- 🔍 Conversation management and history
-- 🔐 Secure API key management
-- 📋 Markdown rendering with code highlighting
-
-### Technical Features
-- 📦 Centralized state management with TanStack Store
-- 🔌 Extensible architecture for multiple AI providers
-- 🛠️ TypeScript for type safety
-
-## Architecture
-
-### Tech Stack
-- **Frontend Framework**: TanStack Start
-- **Routing**: TanStack Router
-- **State Management**: TanStack Store
-- **Styling**: Tailwind CSS
-- **AI Integration**: Anthropic's Claude API
 
 ## Shadcn
 
@@ -306,11 +261,6 @@ function PeopleComponent() {
 ```
 
 Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
 
 
 # Learn More

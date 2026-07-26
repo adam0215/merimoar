@@ -11,9 +11,6 @@ import { Button } from "#/components/ui/button.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../convex/_generated/api";
-import type { Id } from "../../convex/_generated/dataModel";
-
-const ORGANIZATION_SLUG = "merimoar";
 
 type EmailSearch = {
 	thread?: string;
@@ -29,10 +26,8 @@ export const Route = createFileRoute("/email")({
 function EmailPage() {
 	const { thread: selectedThreadId } = Route.useSearch();
 	const [isCompact, setIsCompact] = useState(false);
-	const workspace = useQuery(api.email.reader.getWorkspace, {
-		organizationSlug: ORGANIZATION_SLUG,
-	});
-	const activeConnection = workspace?.connections.find(
+	const connections = useQuery(api.email.reader.listConnections, {});
+	const activeConnection = connections?.find(
 		(connection) => connection.status === "active",
 	);
 	const {
@@ -46,11 +41,7 @@ function EmailPage() {
 	);
 	const selectedThread = useQuery(
 		api.email.reader.getThread,
-		selectedThreadId
-			? {
-					threadId: selectedThreadId as Id<"emailThreads">,
-				}
-			: "skip",
+		selectedThreadId ? { threadId: selectedThreadId } : "skip",
 	);
 	const threadStatus = activeConnection ? status : "Exhausted";
 

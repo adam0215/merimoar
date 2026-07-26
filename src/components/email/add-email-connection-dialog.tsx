@@ -30,6 +30,11 @@ import { Input } from "#/components/ui/input.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
+import {
+	emailConnectionAddressSchema,
+	emailConnectionDetailsSchema,
+	emailConnectionDisplayNameSchema,
+} from "../../../convex/email/input";
 import { ProviderMark } from "./provider-mark.tsx";
 
 const integrations = [
@@ -40,39 +45,16 @@ const integrations = [
 	},
 ] as const;
 
-const displayNameSchema = v.pipe(
-	v.string(),
-	v.trim(),
-	v.minLength(2, "Use at least 2 characters."),
-	v.maxLength(80, "Use no more than 80 characters."),
-);
-
-const addressSchema = v.pipe(
-	v.string(),
-	v.trim(),
-	v.toLowerCase(),
-	v.nonEmpty("Enter the receiving address."),
-	v.email("Enter a valid email address."),
-);
-
-const connectionSchema = v.object({
-	displayName: displayNameSchema,
-	address: addressSchema,
-});
-
 type WizardStep = "provider" | "details" | "review" | "success";
-type FieldName = keyof v.InferInput<typeof connectionSchema>;
+type FieldName = keyof v.InferInput<typeof emailConnectionDetailsSchema>;
 
 const initialForm = {
+	// Suggested UI copy only; this does not preconfigure or seed a connection.
 	displayName: "Development inbox",
 	address: "",
 };
 
-export function AddEmailConnectionDialog({
-	organizationSlug,
-}: {
-	organizationSlug: string;
-}) {
+export function AddEmailConnectionDialog() {
 	const createConnection = useMutation(api.email.connections.create);
 	const [open, setOpen] = useState(false);
 	const [step, setStep] = useState<WizardStep>("provider");
@@ -84,9 +66,12 @@ export function AddEmailConnectionDialog({
 
 	const validation = useMemo(
 		() => ({
-			displayName: v.safeParse(displayNameSchema, form.displayName),
-			address: v.safeParse(addressSchema, form.address),
-			form: v.safeParse(connectionSchema, form),
+			displayName: v.safeParse(
+				emailConnectionDisplayNameSchema,
+				form.displayName,
+			),
+			address: v.safeParse(emailConnectionAddressSchema, form.address),
+			form: v.safeParse(emailConnectionDetailsSchema, form),
 		}),
 		[form],
 	);
@@ -151,7 +136,6 @@ export function AddEmailConnectionDialog({
 
 		try {
 			await createConnection({
-				organizationSlug,
 				provider,
 				displayName: validation.form.output.displayName,
 				address: validation.form.output.address,
@@ -262,6 +246,7 @@ export function AddEmailConnectionDialog({
 								<FieldLabel htmlFor="connection-address">
 									Receiving address
 								</FieldLabel>
+								{/* Example only; the user must supply their own Resend address. */}
 								<Input
 									id="connection-address"
 									type="email"

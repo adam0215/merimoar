@@ -1,7 +1,4 @@
-import type {
-	EmailParticipant,
-	NormalizedInboundEmail,
-} from "./model";
+import type { EmailParticipant, NormalizedInboundEmail } from "./model";
 
 type ResendReceivedEmail = {
 	id: string;
@@ -76,9 +73,7 @@ export function normalizeResendEmail(
 	const parsedSentAt = dateHeader ? Date.parse(dateHeader) : Number.NaN;
 	const fromHeader = getHeader(email.headers, "from");
 	const references = parseMessageIds(getHeader(email.headers, "references"));
-	const inReplyTo = parseMessageIds(
-		getHeader(email.headers, "in-reply-to"),
-	)[0];
+	const inReplyTo = parseMessageIds(getHeader(email.headers, "in-reply-to"))[0];
 	const textBody =
 		email.text?.trim() ||
 		(email.html ? htmlToText(email.html).trim() : "") ||

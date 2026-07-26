@@ -31,22 +31,8 @@ import {
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { api } from "../../../convex/_generated/api";
 import type { Doc, Id } from "../../../convex/_generated/dataModel";
+import { entityInputSchema } from "../../../convex/entity/input";
 import { buildEntityFieldValues } from "./entity-form-values.ts";
-
-const baseEntitySchema = v.object({
-	identifier: v.pipe(
-		v.string(),
-		v.trim(),
-		v.minLength(1, "Enter an identifier."),
-		v.maxLength(120, "Use no more than 120 characters."),
-	),
-	displayName: v.pipe(
-		v.string(),
-		v.trim(),
-		v.minLength(1, "Enter a display name."),
-		v.maxLength(160, "Use no more than 160 characters."),
-	),
-});
 
 export function CreateEntityDialog({
 	entityType,
@@ -92,7 +78,7 @@ export function CreateEntityDialog({
 
 	async function submit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		const baseResult = v.safeParse(baseEntitySchema, {
+		const baseResult = v.safeParse(entityInputSchema, {
 			identifier,
 			displayName,
 		});

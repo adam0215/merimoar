@@ -1,34 +1,18 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { query } from "../_generated/server";
+import { requireActor } from "../auth/access";
 
-export const getWorkspace = query({
-	args: {
-		organizationSlug: v.string(),
-	},
-	handler: async (ctx, args) => {
-		const organization = await ctx.db
-			.query("organizations")
-			.withIndex("by_slug", (query) =>
-				query.eq("slug", args.organizationSlug),
-			)
-			.unique();
-
-		if (!organization) {
-			return null;
-		}
-
-		const connections = await ctx.db
+export const listConnections = query({
+	args: {},
+	handler: async (ctx) => {
+		const actor = await requireActor(ctx);
+		return await ctx.db
 			.query("emailConnections")
 			.withIndex("by_organization_id", (query) =>
-				query.eq("organizationId", organization._id),
+				query.eq("organizationId", actor.organization._id),
 			)
 			.take(50);
-
-		return {
-			organization,
-			connections,
-		};
 	},
 });
 
@@ -38,8 +22,9 @@ export const listThreads = query({
 		paginationOpts: paginationOptsValidator,
 	},
 	handler: async (ctx, args) => {
+		const actor = await requireActor(ctx);
 		const connection = await ctx.db.get(args.connectionId);
-		if (!connection) {
+		if (!connection || connection.organizationId !== actor.organization._id) {
 			throw new Error("Email connection not found");
 		}
 
@@ -69,10 +54,15 @@ export const listThreads = query({
 
 export const getThread = query({
 	args: {
-		threadId: v.id("emailThreads"),
+		threadId: v.string(),
 	},
 	handler: async (ctx, args) => {
-		const thread = await ctx.db.get(args.threadId);
+		const actor = await requireActor(ctx);
+		const threadId = ctx.db.normalizeId("emailThreads", args.threadId);
+		if (!threadId) {
+			return null;
+		}
+		const thread = await ctx.db.get(threadId);
 		if (!thread) {
 			return null;
 		}
@@ -88,7 +78,7 @@ export const getThread = query({
 				.take(100),
 		]);
 
-		if (!connection) {
+		if (!connection || connection.organizationId !== actor.organization._id) {
 			return null;
 		}
 

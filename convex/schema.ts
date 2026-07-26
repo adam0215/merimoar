@@ -231,6 +231,7 @@ export default defineSchema({
 		.index("by_entity_id_and_ended_at", ["entityId", "endedAt"]),
 
 	emailMessages: defineTable({
+		connectionId: v.id("emailConnections"),
 		threadId: v.id("emailThreads"),
 		senderContactId: v.id("contacts"),
 		externalMessageId: v.string(),
@@ -253,8 +254,14 @@ export default defineSchema({
 			"senderContactId",
 			"receivedAt",
 		])
-		.index("by_external_message_id", ["externalMessageId"])
-		.index("by_internet_message_id", ["internetMessageId"]),
+		.index("by_connection_id_and_external_message_id", [
+			"connectionId",
+			"externalMessageId",
+		])
+		.index("by_connection_id_and_internet_message_id", [
+			"connectionId",
+			"internetMessageId",
+		]),
 
 	emailIngestEvents: defineTable({
 		connectionId: v.optional(v.id("emailConnections")),
@@ -267,7 +274,7 @@ export default defineSchema({
 			v.literal("failed"),
 			v.literal("ignored"),
 		),
-		rawPayload: v.any(),
+		rawPayload: v.string(),
 		receivedAt: v.number(),
 		processedAt: v.optional(v.number()),
 		error: v.optional(v.string()),

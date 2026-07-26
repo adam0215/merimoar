@@ -27,32 +27,7 @@ import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import type { EntityIconKey } from "../../../convex/entity/constants";
-
-const entityTypeSchema = v.object({
-	name: v.pipe(
-		v.string(),
-		v.trim(),
-		v.minLength(2, "Use at least 2 characters."),
-		v.maxLength(80, "Use no more than 80 characters."),
-	),
-	pluralName: v.pipe(
-		v.string(),
-		v.trim(),
-		v.minLength(2, "Use at least 2 characters."),
-		v.maxLength(80, "Use no more than 80 characters."),
-	),
-	identifierLabel: v.pipe(
-		v.string(),
-		v.trim(),
-		v.minLength(2, "Use at least 2 characters."),
-		v.maxLength(80, "Use no more than 80 characters."),
-	),
-	description: v.pipe(
-		v.string(),
-		v.trim(),
-		v.maxLength(320, "Use no more than 320 characters."),
-	),
-});
+import { entityTypeInputSchema } from "../../../convex/entity/input";
 
 const INITIAL_FORM = {
 	name: "",
@@ -74,7 +49,10 @@ export function CreateEntityTypeDialog({
 	const [showValidation, setShowValidation] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const validation = useMemo(() => v.safeParse(entityTypeSchema, form), [form]);
+	const validation = useMemo(
+		() => v.safeParse(entityTypeInputSchema, { ...form, icon }),
+		[form, icon],
+	);
 
 	function reset() {
 		setForm(INITIAL_FORM);
@@ -99,7 +77,6 @@ export function CreateEntityTypeDialog({
 		try {
 			const entityTypeId = await createType({
 				...validation.output,
-				icon,
 			});
 			setOpen(false);
 			onCreated(entityTypeId);

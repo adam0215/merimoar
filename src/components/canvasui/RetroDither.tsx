@@ -195,22 +195,21 @@ export function createRetroDither(
 	const config = { ...DEFAULTS, ...options };
 	const { source, content, output } = elements;
 
-	const gl = output.getContext("webgl2", {
+	const context = output.getContext("webgl2", {
 		alpha: true,
 		depth: false,
 		stencil: false,
 		antialias: false,
 		premultipliedAlpha: false,
 	});
-	if (!gl || gl.isContextLost()) return null;
+	if (!context || context.isContextLost()) return null;
+	const gl: WebGL2RenderingContext = context;
 
 	const sourceCtx = source.getContext("2d") as ElementImageContext | null;
 	const paintable = source as PaintableCanvas;
-	const htmlInCanvas = Boolean(
-		sourceCtx &&
-			typeof sourceCtx.drawElementImage === "function" &&
-			typeof paintable.requestPaint === "function",
-	);
+	const drawElementImage = sourceCtx?.drawElementImage?.bind(sourceCtx);
+	const requestPaint = paintable.requestPaint?.bind(paintable);
+	const htmlInCanvas = Boolean(sourceCtx && drawElementImage && requestPaint);
 	const fallbackImage = htmlInCanvas
 		? null
 		: content.querySelector<HTMLImageElement>("img");
@@ -219,11 +218,11 @@ export function createRetroDither(
 	let contentDirty = false;
 	let wake = () => {};
 
-	if (htmlInCanvas) {
+	if (sourceCtx && drawElementImage && requestPaint) {
 		paintable.onpaint = () => {
 			try {
-				sourceCtx!.reset();
-				sourceCtx!.drawElementImage!(content, 0, 0);
+				sourceCtx.reset();
+				drawElementImage(content, 0, 0);
 				contentDirty = true;
 				wake();
 			} catch {}
@@ -262,28 +261,45 @@ export function createRetroDither(
 		wake();
 	}
 
-	function compile(type: number, text: string): WebGLShader {
-		const shader = gl!.createShader(type)!;
-		gl!.shaderSource(shader, text);
-		gl!.compileShader(shader);
-		if (!gl!.getShaderParameter(shader, gl!.COMPILE_STATUS)) {
-			console.error("RetroDither shader error:", gl!.getShaderInfoLog(shader));
+	function compile(type: number, text: string) {
+		const shader = gl.createShader(type);
+		if (!shader) {
+			return null;
+		}
+		gl.shaderSource(shader, text);
+		gl.compileShader(shader);
+		if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+			console.error("RetroDither shader error:", gl.getShaderInfoLog(shader));
 		}
 		return shader;
 	}
 
 	const vertexShader = compile(gl.VERTEX_SHADER, VERT);
+	if (!vertexShader) {
+		return null;
+	}
 	const fragmentShader = compile(gl.FRAGMENT_SHADER, FRAG);
-	const program = gl.createProgram()!;
+	if (!fragmentShader) {
+		gl.deleteShader(vertexShader);
+		return null;
+	}
+	const program = gl.createProgram();
+	if (!program) {
+		gl.deleteShader(vertexShader);
+		gl.deleteShader(fragmentShader);
+		return null;
+	}
 	gl.attachShader(program, vertexShader);
 	gl.attachShader(program, fragmentShader);
 	gl.linkProgram(program);
 
-	const uniforms: Record<string, WebGLUniformLocation> = {};
+	const uniforms: Record<string, WebGLUniformLocation | null> = {};
 	const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
 	for (let i = 0; i < count; i++) {
-		const info = gl.getActiveUniform(program, i)!;
-		uniforms[info.name] = gl.getUniformLocation(program, info.name)!;
+		const info = gl.getActiveUniform(program, i);
+		if (info) {
+			uniforms[info.name] = gl.getUniformLocation(program, info.name);
+		}
 	}
 
 	const quad = gl.createBuffer();
@@ -296,7 +312,14 @@ export function createRetroDither(
 	gl.enableVertexAttribArray(0);
 	gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 
-	const contentTexture = gl.createTexture()!;
+	const contentTexture = gl.createTexture();
+	if (!contentTexture) {
+		gl.deleteBuffer(quad);
+		gl.deleteProgram(program);
+		gl.deleteShader(vertexShader);
+		gl.deleteShader(fragmentShader);
+		return null;
+	}
 	gl.bindTexture(gl.TEXTURE_2D, contentTexture);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
 	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
@@ -342,7 +365,7 @@ export function createRetroDither(
 				source.height = cssHeight;
 			}
 			if (htmlInCanvas) {
-				paintable.requestPaint!();
+				requestPaint?.();
 			} else {
 				paintFallbackImage();
 			}
@@ -357,55 +380,48 @@ export function createRetroDither(
 	function uploadContent() {
 		if (!contentDirty) return;
 		contentDirty = false;
-		gl!.bindTexture(gl!.TEXTURE_2D, contentTexture);
-		gl!.texImage2D(
-			gl!.TEXTURE_2D,
-			0,
-			gl!.RGBA,
-			gl!.RGBA,
-			gl!.UNSIGNED_BYTE,
-			source,
-		);
+		gl.bindTexture(gl.TEXTURE_2D, contentTexture);
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
 	}
 
 	function render() {
 		uploadContent();
 		// biome-ignore lint/correctness/useHookAtTopLevel: WebGL method, not a React hook.
-		gl!.useProgram(program);
-		gl!.activeTexture(gl!.TEXTURE0);
-		gl!.bindTexture(gl!.TEXTURE_2D, contentTexture);
-		gl!.uniform1i(uniforms.uContent, 0);
-		gl!.uniform2f(uniforms.uResolution, output.width, output.height);
+		gl.useProgram(program);
+		gl.activeTexture(gl.TEXTURE0);
+		gl.bindTexture(gl.TEXTURE_2D, contentTexture);
+		gl.uniform1i(uniforms.uContent, 0);
+		gl.uniform2f(uniforms.uResolution, output.width, output.height);
 		const dpr = output.width / Math.max(output.clientWidth, 1);
-		gl!.uniform1f(uniforms.uPixelSize, Math.max(config.pixelSize, 1) * dpr);
-		gl!.uniform1f(uniforms.uLevels, Math.max(config.levels, 1));
-		gl!.uniform1f(uniforms.uRadius, Math.max(config.radius, 0.01));
-		gl!.uniform1f(uniforms.uSoftness, config.softness);
-		gl!.uniform2f(uniforms.uPointer, pointer.x, pointer.y);
-		gl!.uniform1f(uniforms.uActive, pointer.active);
-		gl!.uniform3f(
+		gl.uniform1f(uniforms.uPixelSize, Math.max(config.pixelSize, 1) * dpr);
+		gl.uniform1f(uniforms.uLevels, Math.max(config.levels, 1));
+		gl.uniform1f(uniforms.uRadius, Math.max(config.radius, 0.01));
+		gl.uniform1f(uniforms.uSoftness, config.softness);
+		gl.uniform2f(uniforms.uPointer, pointer.x, pointer.y);
+		gl.uniform1f(uniforms.uActive, pointer.active);
+		gl.uniform3f(
 			uniforms.uDark,
 			config.darkColor[0],
 			config.darkColor[1],
 			config.darkColor[2],
 		);
-		gl!.uniform3f(
+		gl.uniform3f(
 			uniforms.uLight,
 			config.lightColor[0],
 			config.lightColor[1],
 			config.lightColor[2],
 		);
-		gl!.uniform1f(uniforms.uColorize, config.colorize);
-		gl!.uniform1f(uniforms.uContrast, Math.max(config.contrast, 0));
-		gl!.uniform1f(uniforms.uBrightness, config.brightness);
-		gl!.uniform1f(uniforms.uStrength, config.strength);
-		gl!.uniform1f(uniforms.uBase, config.baseStrength);
-		gl!.uniform1f(uniforms.uInvert, config.invert);
-		gl!.uniform1f(uniforms.uScanlines, config.scanlines);
-		gl!.uniform1f(uniforms.uMaxX, contentMaxX);
-		gl!.bindFramebuffer(gl!.FRAMEBUFFER, null);
-		gl!.viewport(0, 0, output.width, output.height);
-		gl!.drawArrays(gl!.TRIANGLE_STRIP, 0, 4);
+		gl.uniform1f(uniforms.uColorize, config.colorize);
+		gl.uniform1f(uniforms.uContrast, Math.max(config.contrast, 0));
+		gl.uniform1f(uniforms.uBrightness, config.brightness);
+		gl.uniform1f(uniforms.uStrength, config.strength);
+		gl.uniform1f(uniforms.uBase, config.baseStrength);
+		gl.uniform1f(uniforms.uInvert, config.invert);
+		gl.uniform1f(uniforms.uScanlines, config.scanlines);
+		gl.uniform1f(uniforms.uMaxX, contentMaxX);
+		gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+		gl.viewport(0, 0, output.width, output.height);
+		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 	}
 
 	let raf = 0;
@@ -511,11 +527,11 @@ export function createRetroDither(
 			listenTarget.removeEventListener("pointermove", onPointerMove);
 			listenTarget.removeEventListener("pointerleave", onPointerLeave);
 			fallbackImage?.removeEventListener("load", paintFallbackImage);
-			gl!.deleteTexture(contentTexture);
-			gl!.deleteProgram(program);
-			gl!.deleteShader(vertexShader);
-			gl!.deleteShader(fragmentShader);
-			gl!.deleteBuffer(quad);
+			gl.deleteTexture(contentTexture);
+			gl.deleteProgram(program);
+			gl.deleteShader(vertexShader);
+			gl.deleteShader(fragmentShader);
+			gl.deleteBuffer(quad);
 			if (htmlInCanvas) paintable.onpaint = null;
 		},
 	};

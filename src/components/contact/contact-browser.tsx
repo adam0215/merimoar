@@ -1,36 +1,20 @@
 import { IconAddressBook, IconInbox, IconLoader2 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
+import type { FunctionReturnType } from "convex/server";
 import { RetroDither } from "#/components/canvasui/RetroDither.tsx";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
 import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
 import { cn } from "#/lib/utils.ts";
-import type { Id } from "../../../convex/_generated/dataModel";
+import type { api } from "../../../convex/_generated/api";
 
 const CONTACT_COVER_SRC = "/covers/pink_flowers.avif";
 
-type Contact = {
-	_id: Id<"contacts">;
-	address: string;
-	name?: string;
-	firstSeenAt: number;
-	lastSeenAt: number;
-};
-
-type ContactMessage = {
-	message: {
-		_id: Id<"emailMessages">;
-		threadId: Id<"emailThreads">;
-		subject: string;
-		textBody: string;
-		receivedAt: number;
-	};
-	connection: {
-		displayName: string;
-		address: string;
-	};
-};
+type Contact = NonNullable<FunctionReturnType<typeof api.contact.reader.get>>;
+type ContactMessage = FunctionReturnType<
+	typeof api.contact.reader.listMessages
+>["page"][number];
 
 type PaginationStatus =
 	| "LoadingFirstPage"

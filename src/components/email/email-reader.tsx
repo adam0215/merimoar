@@ -5,6 +5,7 @@ import {
 	IconMailOpened,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
+import type { FunctionReturnType } from "convex/server";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
@@ -15,42 +16,15 @@ import {
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
 import { cn } from "#/lib/utils.ts";
-import type { Id } from "../../../convex/_generated/dataModel";
+import type { api } from "../../../convex/_generated/api";
 
-type Participant = {
-	name?: string;
-	address: string;
-};
-
-type ThreadListItem = {
-	thread: {
-		_id: Id<"emailThreads">;
-		lastActivityAt: number;
-	};
-	latestMessage: {
-		from: Participant;
-		subject: string;
-		textBody: string;
-		receivedAt: number;
-	} | null;
-};
-
-type ThreadDetails = {
-	connection: {
-		address: string;
-		displayName: string;
-	};
-	messages: Array<{
-		_id: Id<"emailMessages">;
-		senderContactId: Id<"contacts">;
-		from: Participant;
-		to: Participant[];
-		cc: Participant[];
-		subject: string;
-		textBody: string;
-		sentAt: number;
-	}>;
-};
+type ThreadListItem = FunctionReturnType<
+	typeof api.email.reader.listThreads
+>["page"][number];
+type ThreadDetails = NonNullable<
+	FunctionReturnType<typeof api.email.reader.getThread>
+>;
+type Participant = ThreadDetails["messages"][number]["from"];
 
 const SKELETON_ROWS = [
 	"skeleton-a",

@@ -1,4 +1,4 @@
-import { ConvexError, v } from "convex/values";
+import { ConvexError, type Infer, v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
@@ -25,27 +25,9 @@ export const entityFieldValueInputValidator = v.union(
 	}),
 );
 
-export type EntityFieldValueInput =
-	| {
-			kind: "text";
-			fieldDefinitionId: Id<"entityFieldDefinitions">;
-			value: string;
-	  }
-	| {
-			kind: "number";
-			fieldDefinitionId: Id<"entityFieldDefinitions">;
-			value: number;
-	  }
-	| {
-			kind: "boolean";
-			fieldDefinitionId: Id<"entityFieldDefinitions">;
-			value: boolean;
-	  }
-	| {
-			kind: "date";
-			fieldDefinitionId: Id<"entityFieldDefinitions">;
-			value: number;
-	  };
+export type EntityFieldValueInput = Infer<
+	typeof entityFieldValueInputValidator
+>;
 
 function invalidValue(message: string): never {
 	throw new ConvexError({

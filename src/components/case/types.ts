@@ -1,4 +1,5 @@
-import type { Doc } from "../../../convex/_generated/dataModel";
+import type { FunctionReturnType } from "convex/server";
+import type { api } from "../../../convex/_generated/api";
 
 export type PaginationStatus =
 	| "LoadingFirstPage"
@@ -6,34 +7,14 @@ export type PaginationStatus =
 	| "LoadingMore"
 	| "Exhausted";
 
-export type CaseListItem = {
-	case: Doc<"cases">;
-	owner: Doc<"organizationMembers"> | null;
-};
+export type CaseListItem = FunctionReturnType<
+	typeof api.case.reader.list
+>["page"][number];
 
-export type CaseDetail = {
-	case: Doc<"cases">;
-	owner: Doc<"organizationMembers"> | null;
-	events: Array<{
-		event: Doc<"caseEvents">;
-		author: Doc<"organizationMembers"> | null;
-	}>;
-	contacts: Array<{
-		relation: Doc<"caseContactRelations">;
-		contact: Doc<"contacts"> | null;
-	}>;
-	entities: Array<{
-		relation: Doc<"caseEntityRelations">;
-		entity: Doc<"entities"> | null;
-		entityType: Doc<"entityTypes"> | null;
-	}>;
-};
+export type CaseDetail = NonNullable<
+	FunctionReturnType<typeof api.case.reader.get>
+>;
 
-export type CaseCreateOptions = {
-	members: Doc<"organizationMembers">[];
-	contacts: Doc<"contacts">[];
-	entityTypes: Array<{
-		entityType: Doc<"entityTypes">;
-		entities: Doc<"entities">[];
-	}>;
-};
+export type CaseCreateOptions = FunctionReturnType<
+	typeof api.case.reader.getCreateOptions
+>;

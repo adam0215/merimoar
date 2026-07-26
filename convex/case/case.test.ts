@@ -6,6 +6,8 @@ import { api } from "../_generated/api";
 import schema from "../schema";
 import { modules } from "../test.setup";
 
+// TEST FIXTURES: The Merimoar organization, people, emails, and WorkOS-style
+// identifiers below exist only in convex-test's isolated in-memory database.
 const ISSUER = "https://api.workos.com/";
 const ADAM_SUBJECT = "user_adam";
 const OTHER_SUBJECT = "user_other";

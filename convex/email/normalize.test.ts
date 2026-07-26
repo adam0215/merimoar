@@ -17,9 +17,9 @@ describe("email normalization", () => {
 	});
 
 	it("extracts RFC message identifiers in order", () => {
-		expect(
-			parseMessageIds("<first@example.com> <second@example.com>"),
-		).toEqual(["<first@example.com>", "<second@example.com>"]);
+		expect(parseMessageIds("<first@example.com> <second@example.com>")).toEqual(
+			["<first@example.com>", "<second@example.com>"],
+		);
 	});
 
 	it("converts a Resend email into the provider-neutral app format", () => {
@@ -38,8 +38,7 @@ describe("email normalization", () => {
 				headers: {
 					Date: "Sat, 25 Jul 2026 12:00:00 +0200",
 					"In-Reply-To": "<original@example.com>",
-					References:
-						"<root@example.com> <original@example.com>",
+					References: "<root@example.com> <original@example.com>",
 				},
 				message_id: "<reply@example.com>",
 			},

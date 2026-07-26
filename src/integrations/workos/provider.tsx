@@ -1,9 +1,9 @@
-import { AuthKitProvider } from '@workos/authkit-tanstack-react-start/client'
+import { AuthKitProvider } from "@workos/authkit-tanstack-react-start/client";
 
 export default function AppWorkOSProvider({
-  children,
+	children,
 }: {
-  children: React.ReactNode
+	children: React.ReactNode;
 }) {
-  return <AuthKitProvider>{children}</AuthKitProvider>
+	return <AuthKitProvider>{children}</AuthKitProvider>;
 }

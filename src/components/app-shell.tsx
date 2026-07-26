@@ -11,8 +11,6 @@ import {
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../convex/_generated/api";
 
-const ORGANIZATION_SLUG = "merimoar";
-
 function getPageTitle(pathname: string) {
 	if (pathname === "/settings/organization/entities") {
 		return "Entity settings";
@@ -33,10 +31,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const pathname = useRouterState({
 		select: (state) => state.location.pathname,
 	});
-	const workspace = useQuery(api.email.reader.getWorkspace, {
-		organizationSlug: ORGANIZATION_SLUG,
-	});
-	const activeConnection = workspace?.connections.find(
+	const connections = useQuery(api.email.reader.listConnections, {});
+	const activeConnection = connections?.find(
 		(connection) => connection.status === "active",
 	);
 

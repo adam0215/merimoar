@@ -1,9 +1,12 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import schema from "../schema";
 import { modules } from "../test.setup";
 
+// TEST FIXTURES: These hardcoded organizations, messages, and reserved example
+// addresses exist only in convex-test's isolated in-memory database.
 const firstEmail = {
 	externalMessageId: "resend-message-1",
 	internetMessageId: "<first@example.com>",
@@ -138,6 +141,75 @@ describe("inbound email ingestion", () => {
 		).toBe(true);
 		expect(state.threads[0]?.latestMessageId).toBe(secondMessageId);
 		expect(state.duplicateEvent?.status).toBe("processed");
+	});
+
+	it("deduplicates a provider message within its connection without a cross-inbox scan limit", async () => {
+		const t = convexTest(schema, modules);
+		const { eventId, existingMessageId } = await t.run(async (ctx) => {
+			const organizationId = await ctx.db.insert("organizations", {
+				name: "Merimoar",
+				slug: "merimoar",
+			});
+			const senderContactId = await ctx.db.insert("contacts", {
+				organizationId,
+				address: firstEmail.from.address,
+				name: firstEmail.from.name,
+				firstSeenAt: firstEmail.receivedAt,
+				lastSeenAt: firstEmail.receivedAt,
+			});
+
+			let lastConnectionId: Id<"emailConnections"> | undefined;
+			let existingMessageId: Id<"emailMessages"> | undefined;
+
+			for (let index = 0; index < 21; index += 1) {
+				const connectionId = await ctx.db.insert("emailConnections", {
+					organizationId,
+					provider: "resend",
+					displayName: `Inbox ${index}`,
+					address: `inbox-${index}@merimoar.test`,
+					status: "active",
+				});
+				const threadId = await ctx.db.insert("emailThreads", {
+					connectionId,
+					lastActivityAt: firstEmail.receivedAt,
+				});
+				const messageId = await ctx.db.insert("emailMessages", {
+					connectionId,
+					threadId,
+					senderContactId,
+					...firstEmail,
+					direction: "inbound",
+				});
+				await ctx.db.patch(threadId, { latestMessageId: messageId });
+				lastConnectionId = connectionId;
+				existingMessageId = messageId;
+			}
+
+			if (!lastConnectionId || !existingMessageId) {
+				throw new Error("Expected an inbox fixture");
+			}
+			const eventId = await ctx.db.insert("emailIngestEvents", {
+				connectionId: lastConnectionId,
+				externalEventId: "duplicate-event",
+				externalMessageId: firstEmail.externalMessageId,
+				eventType: "email.received",
+				status: "pending",
+				rawPayload: "{}",
+				receivedAt: firstEmail.receivedAt,
+				attempts: 0,
+			});
+			return { eventId, existingMessageId };
+		});
+
+		expect(
+			await t.mutation(internal.email.ingest.storeInboundEmail, {
+				eventId,
+				email: firstEmail,
+			}),
+		).toBe(existingMessageId);
+		expect(
+			await t.run(async (ctx) => ctx.db.query("emailMessages").collect()),
+		).toHaveLength(21);
 	});
 
 	it("normalizes contacts per organization and preserves the newest observed name", async () => {
@@ -286,18 +358,17 @@ describe("inbound email ingestion", () => {
 				status: "active",
 			});
 			const eventIds = await Promise.all(
-				["provider-event-1", "provider-event-2"].map(
-					(externalEventId, index) =>
-						ctx.db.insert("emailIngestEvents", {
-							connectionId,
-							externalEventId,
-							externalMessageId: `provider-message-${index + 1}`,
-							eventType: "email.received",
-							status: "pending",
-							rawPayload: "{}",
-							receivedAt: 3_000 + index,
-							attempts: 0,
-						}),
+				["provider-event-1", "provider-event-2"].map((externalEventId, index) =>
+					ctx.db.insert("emailIngestEvents", {
+						connectionId,
+						externalEventId,
+						externalMessageId: `provider-message-${index + 1}`,
+						eventType: "email.received",
+						status: "pending",
+						rawPayload: "{}",
+						receivedAt: 3_000 + index,
+						attempts: 0,
+					}),
 				),
 			);
 			return { connectionId, eventIds };
@@ -320,15 +391,10 @@ describe("inbound email ingestion", () => {
 		const threads = await t.run(async (ctx) =>
 			ctx.db
 				.query("emailThreads")
-				.withIndex(
-					"by_connection_id_and_external_thread_id",
-					(query) =>
-						query
-							.eq("connectionId", connectionId)
-							.eq(
-								"externalThreadId",
-								"provider-thread-1",
-							),
+				.withIndex("by_connection_id_and_external_thread_id", (query) =>
+					query
+						.eq("connectionId", connectionId)
+						.eq("externalThreadId", "provider-thread-1"),
 				)
 				.collect(),
 		);

@@ -18,20 +18,14 @@ import {
 } from "#/components/ui/tooltip.tsx";
 import { api } from "../../../../convex/_generated/api";
 
-const ORGANIZATION_SLUG = "merimoar";
-
 export const Route = createFileRoute("/settings/organization/email")({
 	component: OrganizationEmailSettings,
 });
 
 function OrganizationEmailSettings() {
-	const workspace = useQuery(api.email.reader.getWorkspace, {
-		organizationSlug: ORGANIZATION_SLUG,
-	});
-	const connections =
-		workspace?.connections.filter(
-			(connection) => connection.status === "active",
-		) ?? [];
+	const connections = useQuery(api.email.reader.listConnections, {});
+	const activeConnections =
+		connections?.filter((connection) => connection.status === "active") ?? [];
 
 	return (
 		<ScrollContainer>
@@ -46,11 +40,11 @@ function OrganizationEmailSettings() {
 							available in the shared inbox.
 						</p>
 					</div>
-					<AddEmailConnectionDialog organizationSlug={ORGANIZATION_SLUG} />
+					<AddEmailConnectionDialog />
 				</div>
 
 				<div className="space-y-3">
-					{workspace === undefined && (
+					{connections === undefined && (
 						<Card>
 							<CardHeader>
 								<div className="flex items-center gap-4">
@@ -64,7 +58,7 @@ function OrganizationEmailSettings() {
 						</Card>
 					)}
 
-					{workspace !== undefined && connections.length === 0 && (
+					{connections !== undefined && activeConnections.length === 0 && (
 						<Card className="border-dashed bg-muted/20">
 							<CardHeader>
 								<CardTitle>No active connections</CardTitle>
@@ -76,7 +70,7 @@ function OrganizationEmailSettings() {
 						</Card>
 					)}
 
-					{connections.map((connection) => (
+					{activeConnections.map((connection) => (
 						<Card key={connection._id}>
 							<CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-center">
 								<div className="flex min-w-0 items-center gap-4">

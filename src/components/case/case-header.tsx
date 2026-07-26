@@ -27,9 +27,11 @@ import {
 } from "#/components/ui/select.tsx";
 import { Textarea } from "#/components/ui/textarea.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
+import { formatDateInput, parseDateInput } from "#/lib/date-input.ts";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
 import type { Doc } from "../../../convex/_generated/dataModel";
+import { caseTitleSchema } from "../../../convex/case/input";
 import { formatShortDate } from "./format.ts";
 import type { CaseDetail } from "./types.ts";
 
@@ -53,16 +55,7 @@ export function CaseHeader({
 	}, [detail.case, editing]);
 
 	const titleValidation = useMemo(
-		() =>
-			v.safeParse(
-				v.pipe(
-					v.string(),
-					v.trim(),
-					v.minLength(2, "Use at least 2 characters."),
-					v.maxLength(160, "Use no more than 160 characters."),
-				),
-				form.title,
-			),
+		() => v.safeParse(caseTitleSchema, form.title),
 		[form.title],
 	);
 
@@ -81,9 +74,7 @@ export function CaseHeader({
 				title: titleValidation.output,
 				description: form.description.trim(),
 				ownerMemberId: owner?._id ?? null,
-				dueAt: form.dueDate
-					? new Date(`${form.dueDate}T12:00:00`).getTime()
-					: null,
+				dueAt: form.dueDate ? parseDateInput(form.dueDate) : null,
 				status: form.status,
 			});
 			setEditing(false);
@@ -281,9 +272,7 @@ function caseToForm(caseRecord: Doc<"cases">) {
 		title: caseRecord.title,
 		description: caseRecord.description,
 		ownerMemberId: caseRecord.ownerMemberId ?? "unassigned",
-		dueDate: caseRecord.dueAt
-			? new Date(caseRecord.dueAt).toISOString().slice(0, 10)
-			: "",
+		dueDate: caseRecord.dueAt === null ? "" : formatDateInput(caseRecord.dueAt),
 		status: caseRecord.status,
 	};
 }

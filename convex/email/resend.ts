@@ -1,8 +1,8 @@
 "use node";
 
+import { v } from "convex/values";
 import { convert } from "html-to-text";
 import { Resend } from "resend";
-import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { env, internalAction } from "../_generated/server";
 import { normalizeResendEmail } from "./normalize";
@@ -39,25 +39,19 @@ export const processInboundEmail = internalAction({
 					selectors: [{ selector: "img", format: "skip" }],
 				}),
 			);
-			await ctx.runMutation(
-				internal.email.ingest.storeInboundEmail,
-				{
-					eventId: args.eventId,
-					email,
-				},
-			);
+			await ctx.runMutation(internal.email.ingest.storeInboundEmail, {
+				eventId: args.eventId,
+				email,
+			});
 			return null;
 		} catch (error) {
 			const message =
 				error instanceof Error ? error.message : "Unknown Resend error";
-			await ctx.runMutation(
-				internal.email.ingest.recordProcessingFailure,
-				{
-					eventId: args.eventId,
-					error: message,
-					attempt: args.attempt,
-				},
-			);
+			await ctx.runMutation(internal.email.ingest.recordProcessingFailure, {
+				eventId: args.eventId,
+				error: message,
+				attempt: args.attempt,
+			});
 			return null;
 		}
 	},

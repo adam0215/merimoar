@@ -7,6 +7,7 @@ import { Textarea } from "#/components/ui/textarea.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { caseEventBodySchema } from "../../../convex/case/input";
 import { formatEventDate } from "./format.ts";
 import type { CaseDetail } from "./types.ts";
 
@@ -31,15 +32,7 @@ export function CaseEvents({
 	}, [composerOpen]);
 
 	async function submit() {
-		const result = v.safeParse(
-			v.pipe(
-				v.string(),
-				v.trim(),
-				v.minLength(1, "Write an event first."),
-				v.maxLength(4000, "Use no more than 4,000 characters."),
-			),
-			body,
-		);
+		const result = v.safeParse(caseEventBodySchema, body);
 
 		if (!result.success) {
 			setError(result.issues[0]?.message ?? "Write an event first.");

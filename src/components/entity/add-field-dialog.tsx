@@ -34,6 +34,7 @@ import {
 	type EntityFieldType,
 	normalizeEntityKey,
 } from "../../../convex/entity/constants";
+import { entityFieldInputSchema } from "../../../convex/entity/input";
 import { ENTITY_FIELD_TYPE_LABELS } from "./types.ts";
 
 export function AddFieldDialog({
@@ -63,13 +64,12 @@ export function AddFieldDialog({
 
 	async function submit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		const result = v.safeParse(
-			v.object({
-				label: v.pipe(v.string(), v.trim(), v.minLength(2), v.maxLength(80)),
-				key: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(80)),
-			}),
-			{ label, key },
-		);
+		const result = v.safeParse(entityFieldInputSchema, {
+			label,
+			key,
+			valueType,
+			required,
+		});
 
 		if (!result.success) {
 			setError("Enter a field label and key.");
@@ -82,10 +82,7 @@ export function AddFieldDialog({
 		try {
 			await addField({
 				entityTypeId,
-				label: result.output.label,
-				key: result.output.key,
-				valueType,
-				required,
+				...result.output,
 			});
 			setOpen(false);
 		} catch (caughtError) {

@@ -1,12 +1,10 @@
 import { ConvexError, v } from "convex/values";
-import { z } from "zod";
+import * as validation from "valibot";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { mutation } from "../_generated/server";
 import { requireActor } from "../auth/access";
 import {
-	ENTITY_FIELD_TYPES,
-	ENTITY_ICON_KEYS,
 	MAX_ENTITIES_PER_TYPE,
 	MAX_ENTITY_TYPES_PER_ORGANIZATION,
 	MAX_FIELDS_PER_ENTITY_TYPE,
@@ -14,36 +12,16 @@ import {
 	normalizeEntityKey,
 } from "./constants";
 import {
+	entityFieldInputSchema,
+	entityInputSchema,
+	entityTypeInputSchema,
+} from "./input";
+import { entityFieldTypeValidator, entityIconValidator } from "./model";
+import {
 	entityFieldValueInputValidator,
 	insertEntityFieldValues,
 	normalizeEntityFieldValues,
 } from "./values";
-
-const nameSchema = z.string().trim().min(2).max(80);
-const keySchema = z
-	.string()
-	.trim()
-	.min(1)
-	.max(80)
-	.transform(normalizeEntityKey)
-	.pipe(z.string().min(1).max(80));
-const createTypeSchema = z.object({
-	name: nameSchema,
-	pluralName: nameSchema,
-	identifierLabel: nameSchema,
-	description: z.string().trim().max(320),
-	icon: z.enum(ENTITY_ICON_KEYS),
-});
-const createFieldSchema = z.object({
-	label: nameSchema,
-	key: keySchema,
-	valueType: z.enum(ENTITY_FIELD_TYPES),
-	required: z.boolean(),
-});
-const createEntitySchema = z.object({
-	identifier: z.string().trim().min(1).max(120),
-	displayName: z.string().trim().min(1).max(160),
-});
 
 function validationError(message: string) {
 	return new ConvexError({ code: "INVALID_ENTITY_INPUT", message });
@@ -74,15 +52,15 @@ export const createType = mutation({
 		pluralName: v.string(),
 		identifierLabel: v.string(),
 		description: v.string(),
-		icon: v.string(),
+		icon: entityIconValidator,
 	},
 	returns: v.id("entityTypes"),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
-		const input = createTypeSchema.safeParse(args);
+		const input = validation.safeParse(entityTypeInputSchema, args);
 		if (!input.success) {
 			throw validationError(
-				input.error.issues[0]?.message ?? "Enter valid entity type details.",
+				input.issues[0]?.message ?? "Enter valid entity type details.",
 			);
 		}
 
@@ -100,7 +78,7 @@ export const createType = mutation({
 			);
 		}
 
-		const key = normalizeEntityKey(input.data.name);
+		const key = normalizeEntityKey(input.output.name);
 		const existing = await ctx.db
 			.query("entityTypes")
 			.withIndex("by_organization_id_and_key", (index) =>
@@ -117,11 +95,11 @@ export const createType = mutation({
 		return await ctx.db.insert("entityTypes", {
 			organizationId: actor.organization._id,
 			key,
-			name: input.data.name,
-			pluralName: input.data.pluralName,
-			identifierLabel: input.data.identifierLabel,
-			description: input.data.description,
-			icon: input.data.icon,
+			name: input.output.name,
+			pluralName: input.output.pluralName,
+			identifierLabel: input.output.identifierLabel,
+			description: input.output.description,
+			icon: input.output.icon,
 			archivedAt: null,
 		});
 	},
@@ -132,16 +110,16 @@ export const addField = mutation({
 		entityTypeId: v.id("entityTypes"),
 		label: v.string(),
 		key: v.string(),
-		valueType: v.string(),
+		valueType: entityFieldTypeValidator,
 		required: v.boolean(),
 	},
 	returns: v.id("entityFieldDefinitions"),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
-		const input = createFieldSchema.safeParse(args);
+		const input = validation.safeParse(entityFieldInputSchema, args);
 		if (!input.success) {
 			throw validationError(
-				input.error.issues[0]?.message ?? "Enter valid field details.",
+				input.issues[0]?.message ?? "Enter valid field details.",
 			);
 		}
 		await requireEntityType(ctx, actor.organization._id, args.entityTypeId);
@@ -161,7 +139,7 @@ export const addField = mutation({
 		const existing = await ctx.db
 			.query("entityFieldDefinitions")
 			.withIndex("by_entity_type_id_and_key", (index) =>
-				index.eq("entityTypeId", args.entityTypeId).eq("key", input.data.key),
+				index.eq("entityTypeId", args.entityTypeId).eq("key", input.output.key),
 			)
 			.unique();
 		if (existing) {
@@ -181,10 +159,10 @@ export const addField = mutation({
 
 		return await ctx.db.insert("entityFieldDefinitions", {
 			entityTypeId: args.entityTypeId,
-			key: input.data.key,
-			label: input.data.label,
-			valueType: input.data.valueType,
-			required: input.data.required,
+			key: input.output.key,
+			label: input.output.label,
+			valueType: input.output.valueType,
+			required: input.output.required,
 			position: (lastField?.position ?? -1) + 1,
 			archivedAt: null,
 		});
@@ -201,10 +179,10 @@ export const createEntity = mutation({
 	returns: v.id("entities"),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
-		const input = createEntitySchema.safeParse(args);
+		const input = validation.safeParse(entityInputSchema, args);
 		if (!input.success) {
 			throw validationError(
-				input.error.issues[0]?.message ?? "Enter valid entity details.",
+				input.issues[0]?.message ?? "Enter valid entity details.",
 			);
 		}
 		await requireEntityType(ctx, actor.organization._id, args.entityTypeId);
@@ -224,7 +202,7 @@ export const createEntity = mutation({
 		}
 
 		const normalizedIdentifier = normalizeEntityIdentifier(
-			input.data.identifier,
+			input.output.identifier,
 		);
 		const existing = await ctx.db
 			.query("entities")
@@ -255,9 +233,9 @@ export const createEntity = mutation({
 		const now = Date.now();
 		const entityId = await ctx.db.insert("entities", {
 			entityTypeId: args.entityTypeId,
-			identifier: input.data.identifier,
+			identifier: input.output.identifier,
 			normalizedIdentifier,
-			displayName: input.data.displayName,
+			displayName: input.output.displayName,
 			createdAt: now,
 			updatedAt: now,
 			archivedAt: null,

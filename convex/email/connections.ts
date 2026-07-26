@@ -1,53 +1,28 @@
 import { ConvexError, v } from "convex/values";
-import { z } from "zod";
+import * as validation from "valibot";
 import { mutation } from "../_generated/server";
+import { requireActor } from "../auth/access";
+import { emailConnectionInputSchema } from "./input";
 import { normalizeEmailAddress } from "./normalize";
-
-const connectionInputSchema = z.object({
-	organizationSlug: z.string().trim().min(1).max(80),
-	provider: z.literal("resend"),
-	displayName: z.string().trim().min(2).max(80),
-	address: z
-		.string()
-		.trim()
-		.toLowerCase()
-		.pipe(z.email("Enter a valid email address.")),
-});
 
 export const create = mutation({
 	args: {
-		organizationSlug: v.string(),
 		provider: v.literal("resend"),
 		displayName: v.string(),
 		address: v.string(),
 	},
 	returns: v.id("emailConnections"),
 	handler: async (ctx, args) => {
-		const result = connectionInputSchema.safeParse(args);
+		const actor = await requireActor(ctx);
+		const result = validation.safeParse(emailConnectionInputSchema, args);
 		if (!result.success) {
 			throw new ConvexError({
 				code: "INVALID_CONNECTION",
-				message:
-					result.error.issues[0]?.message ??
-					"Enter valid connection details.",
+				message: result.issues[0]?.message ?? "Enter valid connection details.",
 			});
 		}
 
-		const organization = await ctx.db
-			.query("organizations")
-			.withIndex("by_slug", (query) =>
-				query.eq("slug", result.data.organizationSlug),
-			)
-			.unique();
-
-		if (!organization) {
-			throw new ConvexError({
-				code: "ORGANIZATION_NOT_FOUND",
-				message: "The organization could not be found.",
-			});
-		}
-
-		const address = normalizeEmailAddress(result.data.address);
+		const address = normalizeEmailAddress(result.output.address);
 		const existingConnection = await ctx.db
 			.query("emailConnections")
 			.withIndex("by_address", (query) => query.eq("address", address))
@@ -56,11 +31,11 @@ export const create = mutation({
 		if (existingConnection) {
 			if (
 				existingConnection.status === "disabled" &&
-				existingConnection.organizationId === organization._id
+				existingConnection.organizationId === actor.organization._id
 			) {
 				await ctx.db.patch("emailConnections", existingConnection._id, {
-					provider: result.data.provider,
-					displayName: result.data.displayName,
+					provider: result.output.provider,
+					displayName: result.output.displayName,
 					status: "active",
 				});
 				return existingConnection._id;
@@ -73,9 +48,9 @@ export const create = mutation({
 		}
 
 		return await ctx.db.insert("emailConnections", {
-			organizationId: organization._id,
-			provider: result.data.provider,
-			displayName: result.data.displayName,
+			organizationId: actor.organization._id,
+			provider: result.output.provider,
+			displayName: result.output.displayName,
 			address,
 			status: "active",
 		});
@@ -88,9 +63,13 @@ export const remove = mutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		const actor = await requireActor(ctx);
 		const connection = await ctx.db.get(args.connectionId);
-		if (!connection) {
-			return null;
+		if (!connection || connection.organizationId !== actor.organization._id) {
+			throw new ConvexError({
+				code: "EMAIL_CONNECTION_NOT_FOUND",
+				message: "The email connection could not be found.",
+			});
 		}
 
 		await ctx.db.patch("emailConnections", connection._id, {
