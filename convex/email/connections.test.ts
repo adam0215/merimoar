@@ -89,4 +89,38 @@ describe("email connections", () => {
 			}),
 		).rejects.toThrow("The organization could not be found.");
 	});
+
+	it("removes a connection without orphaning its email and can reactivate it", async () => {
+		const t = convexTest(schema, modules);
+		await createOrganization(t);
+
+		const connectionId = await t.mutation(api.email.connections.create, {
+			organizationSlug: "merimoar",
+			provider: "resend",
+			displayName: "Development inbox",
+			address: "development@ulkeahaedo.resend.app",
+		});
+
+		await t.mutation(api.email.connections.remove, { connectionId });
+
+		expect(await t.run(async (ctx) => ctx.db.get(connectionId))).toMatchObject({
+			status: "disabled",
+		});
+
+		const reactivatedConnectionId = await t.mutation(
+			api.email.connections.create,
+			{
+				organizationSlug: "merimoar",
+				provider: "resend",
+				displayName: "Reactivated inbox",
+				address: "development@ulkeahaedo.resend.app",
+			},
+		);
+
+		expect(reactivatedConnectionId).toBe(connectionId);
+		expect(await t.run(async (ctx) => ctx.db.get(connectionId))).toMatchObject({
+			displayName: "Reactivated inbox",
+			status: "active",
+		});
+	});
 });

@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
-import { Separator } from "#/components/ui/separator.tsx";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
 import { cn } from "#/lib/utils.ts";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -71,15 +70,17 @@ function formatListDate(timestamp: number) {
 	const today = new Date();
 	const sameYear = date.getFullYear() === today.getFullYear();
 
-	return new Intl.DateTimeFormat("en-US", {
+	return new Intl.DateTimeFormat(undefined, {
 		month: "short",
 		day: "numeric",
 		...(sameYear ? {} : { year: "numeric" }),
+		hour: "2-digit",
+		minute: "2-digit",
 	}).format(date);
 }
 
 function formatMessageDate(timestamp: number) {
-	return new Intl.DateTimeFormat("en-US", {
+	return new Intl.DateTimeFormat(undefined, {
 		dateStyle: "medium",
 		timeStyle: "short",
 	}).format(new Date(timestamp));
@@ -116,9 +117,7 @@ export function ThreadList({
 	if (items.length === 0) {
 		return (
 			<div className="flex h-full flex-col items-center justify-center px-8 text-center">
-				<span className="mb-4 flex size-11 items-center justify-center rounded-2xl bg-muted">
-					<IconInbox className="size-5 text-muted-foreground" />
-				</span>
+				<IconInbox className="mb-4 size-6 text-muted-foreground/50" />
 				<h2 className="font-medium">No inbound email yet</h2>
 				<p className="mt-1 max-w-64 text-sm text-muted-foreground">
 					New messages will appear here as soon as they reach an active
@@ -148,18 +147,20 @@ export function ThreadList({
 						)}
 					>
 						<Avatar className="mt-0.5">
-							<AvatarFallback>{initials(latestMessage.from)}</AvatarFallback>
+							<AvatarFallback className={cn(isActive && "bg-background")}>
+								{initials(latestMessage.from)}
+							</AvatarFallback>
 						</Avatar>
 						<div className="min-w-0 flex-1">
 							<div className="flex items-baseline gap-2">
-								<p className="min-w-0 flex-1 truncate text-sm font-medium">
+								<p className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
 									{participantLabel(latestMessage.from)}
 								</p>
 								<time className="shrink-0 text-xs text-muted-foreground">
 									{formatListDate(latestMessage.receivedAt)}
 								</time>
 							</div>
-							<p className="mt-0.5 truncate text-sm">
+							<p className="mt-0.5 truncate text-sm font-semibold">
 								{latestMessage.subject || "(No subject)"}
 							</p>
 							<p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
@@ -203,7 +204,7 @@ export function ThreadView({
 					<Skeleton className="h-7 w-3/5" />
 					<Skeleton className="h-4 w-2/5" />
 				</div>
-				<Skeleton className="h-64 w-full rounded-2xl" />
+				<Skeleton className="h-64 w-full" />
 			</div>
 		);
 	}
@@ -211,9 +212,7 @@ export function ThreadView({
 	if (!thread) {
 		return (
 			<div className="flex h-full flex-col items-center justify-center px-8 text-center">
-				<span className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-muted">
-					<IconMailOpened className="size-5 text-muted-foreground" />
-				</span>
+				<IconMailOpened className="mb-4 size-6 text-muted-foreground/50" />
 				<h2 className="font-medium">Select an email</h2>
 				<p className="mt-1 max-w-72 text-sm text-muted-foreground">
 					Choose a message from the list to read the complete conversation.
@@ -222,56 +221,41 @@ export function ThreadView({
 		);
 	}
 
-	const subject =
-		thread.messages[thread.messages.length - 1]?.subject || "(No subject)";
-
 	return (
-		<ScrollArea className="h-full">
-			<div className="mx-auto max-w-3xl px-5 py-7 md:px-10 md:py-9">
-				<div className="mb-7">
-					<p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-						{thread.connection.displayName}
-					</p>
-					<h1 className="text-balance text-2xl font-semibold tracking-tight">
-						{subject}
-					</h1>
-				</div>
-
-				<div className="space-y-5">
-					{thread.messages.map((message, index) => (
-						<article key={message._id} className="rounded-2xl border bg-card">
-							<header className="flex items-start gap-3 p-5">
-								<Avatar size="lg">
-									<AvatarFallback>{initials(message.from)}</AvatarFallback>
-								</Avatar>
-								<div className="min-w-0 flex-1">
-									<div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-										<div className="min-w-0">
-											<p className="truncate text-sm font-medium">
-												{participantLabel(message.from)}
-											</p>
-											<p className="truncate text-xs text-muted-foreground">
-												{message.from.address}
-											</p>
-										</div>
-										<time className="text-xs text-muted-foreground">
+		<ScrollArea className="h-full" viewportClassName="overscroll-none">
+			<div className="w-full px-5 pt-5 pb-7 md:px-8 md:pt-7 md:pb-9">
+				<div className="divide-y">
+					{thread.messages.map((message) => (
+						<article key={message._id} className="py-8 first:pt-0 last:pb-0">
+							<header className="min-w-0">
+								<div className="min-w-0">
+									<div className="flex min-w-0 items-center justify-between gap-4">
+										<p className="truncate text-sm font-medium">
+											{participantLabel(message.from)}
+										</p>
+										<time className="shrink-0 text-xs text-muted-foreground">
 											{formatMessageDate(message.sentAt)}
 										</time>
 									</div>
-									<p className="mt-2 text-xs text-muted-foreground">
-										To {message.to.map(participantLabel).join(", ")}
-										{message.cc.length > 0 &&
-											`, cc ${message.cc.map(participantLabel).join(", ")}`}
+									<p className="truncate text-xs text-muted-foreground">
+										{message.from.address}
+									</p>
+									<p className="text-xs">
+										<span className="text-foreground">To: </span>
+										<span className="break-all text-muted-foreground">
+											{message.to.map(participantLabel).join(", ")}
+											{message.cc.length > 0 &&
+												`, cc ${message.cc.map(participantLabel).join(", ")}`}
+										</span>
 									</p>
 								</div>
 							</header>
-							<Separator />
-							<div className="whitespace-pre-wrap px-5 py-6 text-sm leading-7 text-foreground/90">
+							<h1 className="mt-5 text-balance text-xl font-semibold tracking-tight">
+								{message.subject || "(No subject)"}
+							</h1>
+							<div className="mt-6 whitespace-pre-wrap text-sm leading-7 text-foreground/90">
 								{message.textBody}
 							</div>
-							{index < thread.messages.length - 1 && (
-								<p className="sr-only">Earlier message</p>
-							)}
 						</article>
 					))}
 				</div>

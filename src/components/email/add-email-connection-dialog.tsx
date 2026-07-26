@@ -207,7 +207,7 @@ export function AddEmailConnectionDialog({
 								onClick={chooseProvider}
 								className="group flex w-full items-center gap-4 rounded-2xl border bg-card p-4 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
 							>
-								<span className="flex size-12 shrink-0 items-center justify-center rounded-xl border bg-background">
+								<span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted">
 									<ProviderMark provider={integration.id} />
 								</span>
 								<span className="min-w-0 flex-1">
@@ -284,7 +284,7 @@ export function AddEmailConnectionDialog({
 				{step === "review" && provider && validation.form.success && (
 					<div className="space-y-4 py-2">
 						<div className="flex items-center gap-4 rounded-2xl border bg-muted/30 p-4">
-							<span className="flex size-12 shrink-0 items-center justify-center rounded-xl border bg-background">
+							<span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted">
 								<ProviderMark provider={provider} />
 							</span>
 							<div>
@@ -390,7 +390,7 @@ function StepIndicator({ step }: { step: Exclude<WizardStep, "success"> }) {
 					<span
 						className={cn(
 							"h-1.5 flex-1 rounded-full bg-muted",
-							index <= currentIndex && "bg-foreground",
+							index <= currentIndex && "bg-accent",
 						)}
 					/>
 					<span className="sr-only">

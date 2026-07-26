@@ -54,6 +54,18 @@ export const create = mutation({
 			.unique();
 
 		if (existingConnection) {
+			if (
+				existingConnection.status === "disabled" &&
+				existingConnection.organizationId === organization._id
+			) {
+				await ctx.db.patch("emailConnections", existingConnection._id, {
+					provider: result.data.provider,
+					displayName: result.data.displayName,
+					status: "active",
+				});
+				return existingConnection._id;
+			}
+
 			throw new ConvexError({
 				code: "ADDRESS_ALREADY_CONNECTED",
 				message: "This email address is already connected.",
@@ -67,5 +79,23 @@ export const create = mutation({
 			address,
 			status: "active",
 		});
+	},
+});
+
+export const remove = mutation({
+	args: {
+		connectionId: v.id("emailConnections"),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const connection = await ctx.db.get(args.connectionId);
+		if (!connection) {
+			return null;
+		}
+
+		await ctx.db.patch("emailConnections", connection._id, {
+			status: "disabled",
+		});
+		return null;
 	},
 });

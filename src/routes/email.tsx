@@ -49,22 +49,14 @@ function EmailPage() {
 	const threadStatus = activeConnection ? status : "Exhausted";
 
 	return (
-		<div className="grid h-full min-h-0 md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]">
+		<div className="grid h-full min-h-0 overflow-hidden md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]">
 			<section
 				className={cn(
-					"min-h-0 border-r bg-background",
+					"min-h-0 overflow-hidden border-r bg-background",
 					selectedThreadId && "hidden md:block",
 				)}
 			>
-				<div className="flex h-16 items-center justify-between border-b px-5">
-					<div>
-						<h1 className="text-sm font-semibold">Inbound</h1>
-						<p className="text-xs text-muted-foreground">
-							{activeConnection?.address || "No active connection"}
-						</p>
-					</div>
-				</div>
-				<ScrollArea className="h-[calc(100%-4rem)]">
+				<ScrollArea className="h-full" viewportClassName="overscroll-none">
 					<ThreadList
 						items={threads}
 						selectedThreadId={selectedThreadId}
@@ -76,7 +68,7 @@ function EmailPage() {
 
 			<section
 				className={cn(
-					"min-h-0 bg-muted/20",
+					"min-h-0 min-w-0 overflow-hidden bg-background",
 					!selectedThreadId && "hidden md:block",
 				)}
 			>

@@ -1,4 +1,10 @@
-import { IconBuilding, IconChevronRight, IconMail } from "@tabler/icons-react";
+import {
+	IconChevronRight,
+	IconMail,
+	IconMailFilled,
+	IconSettings,
+	IconSettingsFilled,
+} from "@tabler/icons-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
 	Collapsible,
@@ -12,7 +18,6 @@ import {
 	SidebarGroup,
 	SidebarGroupContent,
 	SidebarGroupLabel,
-	SidebarHeader,
 	SidebarMenu,
 	SidebarMenuButton,
 	SidebarMenuItem,
@@ -29,37 +34,14 @@ export function AppSidebar() {
 	const emailIsActive = pathname === "/email";
 	const settingsEmailIsActive = pathname === "/settings/organization/email";
 	const settingsIsActive = pathname.startsWith("/settings");
+	const MailIcon = emailIsActive ? IconMailFilled : IconMail;
+	const SettingsIcon = settingsIsActive ? IconSettingsFilled : IconSettings;
 
 	return (
-		<Sidebar variant="inset" collapsible="icon">
-			<SidebarHeader className="pt-3">
-				<SidebarMenu>
-					<SidebarMenuItem>
-						<SidebarMenuButton
-							asChild
-							size="lg"
-							tooltip="Merimoar"
-							className="hover:bg-transparent active:bg-transparent"
-						>
-							<Link to="/email" search={{}}>
-								<span className="flex size-9 items-center justify-center rounded-xl bg-foreground">
-									<img
-										src="/logo/merimoar_logo.svg"
-										alt=""
-										className="size-6 invert dark:invert-0"
-									/>
-								</span>
-								<span className="text-base font-semibold tracking-tight">
-									Merimoar
-								</span>
-							</Link>
-						</SidebarMenuButton>
-					</SidebarMenuItem>
-				</SidebarMenu>
-			</SidebarHeader>
-
+		<Sidebar variant="sidebar" collapsible="icon">
 			<SidebarContent>
 				<SidebarGroup>
+					<SidebarGroupLabel>Menu</SidebarGroupLabel>
 					<SidebarGroupContent>
 						<SidebarMenu>
 							<SidebarMenuItem>
@@ -67,9 +49,12 @@ export function AppSidebar() {
 									asChild
 									isActive={emailIsActive}
 									tooltip="Email"
+									className={
+										emailIsActive ? "text-foreground" : "text-muted-foreground"
+									}
 								>
 									<Link to="/email" search={{}}>
-										<IconMail />
+										<MailIcon />
 										<span>Email</span>
 									</Link>
 								</SidebarMenuButton>
@@ -94,8 +79,13 @@ export function AppSidebar() {
 										<SidebarMenuButton
 											tooltip="Organization"
 											isActive={settingsIsActive}
+											className={
+												settingsIsActive
+													? "text-foreground"
+													: "text-muted-foreground"
+											}
 										>
-											<IconBuilding />
+											<SettingsIcon />
 											<span>Organization</span>
 											<IconChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
 										</SidebarMenuButton>
@@ -106,6 +96,11 @@ export function AppSidebar() {
 												<SidebarMenuSubButton
 													asChild
 													isActive={settingsEmailIsActive}
+													className={
+														settingsEmailIsActive
+															? "text-foreground"
+															: "text-muted-foreground"
+													}
 												>
 													<Link to="/settings/organization/email">
 														<span>Email</span>

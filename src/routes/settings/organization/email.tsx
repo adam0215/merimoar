@@ -1,17 +1,21 @@
-import { IconCircleCheckFilled } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { AddEmailConnectionDialog } from "#/components/email/add-email-connection-dialog.tsx";
 import { ProviderMark } from "#/components/email/provider-mark.tsx";
+import { RemoveEmailConnectionDialog } from "#/components/email/remove-email-connection-dialog.tsx";
 import { Badge } from "#/components/ui/badge.tsx";
 import {
 	Card,
 	CardAction,
-	CardContent,
 	CardDescription,
 	CardHeader,
 	CardTitle,
 } from "#/components/ui/card.tsx";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 import { api } from "../../../../convex/_generated/api";
 
 const ORGANIZATION_SLUG = "merimoar";
@@ -74,11 +78,20 @@ function OrganizationEmailSettings() {
 
 					{connections.map((connection) => (
 						<Card key={connection._id}>
-							<CardHeader>
-								<div className="flex items-center gap-4">
-									<div className="flex size-12 shrink-0 items-center justify-center rounded-xl border bg-background">
-										<ProviderMark provider={connection.provider} />
-									</div>
+							<CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-center">
+								<div className="flex min-w-0 items-center gap-4">
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												className="flex size-12 shrink-0 cursor-default items-center justify-center rounded-full bg-muted"
+												aria-label="Provider: Resend"
+											>
+												<ProviderMark provider={connection.provider} />
+											</button>
+										</TooltipTrigger>
+										<TooltipContent side="top">Resend</TooltipContent>
+									</Tooltip>
 									<div className="min-w-0">
 										<CardTitle className="truncate">
 											{connection.displayName}
@@ -88,18 +101,20 @@ function OrganizationEmailSettings() {
 										</CardDescription>
 									</div>
 								</div>
-								<CardAction>
-									<Badge variant="secondary" className="gap-1.5">
-										<IconCircleCheckFilled className="text-emerald-600" />
+								<CardAction className="flex items-center self-center gap-1">
+									<Badge
+										variant="outline"
+										className="border-accent bg-accent/10 text-accent"
+									>
 										Active
 									</Badge>
+									<RemoveEmailConnectionDialog
+										connectionId={connection._id}
+										displayName={connection.displayName}
+										address={connection.address}
+									/>
 								</CardAction>
 							</CardHeader>
-							<CardContent className="flex items-center gap-2 text-xs text-muted-foreground">
-								<span className="capitalize">{connection.provider}</span>
-								<span aria-hidden="true">·</span>
-								<span>Inbound email</span>
-							</CardContent>
 						</Card>
 					))}
 				</div>
