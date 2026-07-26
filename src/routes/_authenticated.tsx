@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { getAuth } from "@workos/authkit-tanstack-react-start";
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 import { AppShell } from "../components/app-shell";
+import { AppSplashScreen } from "../components/app-splash-screen";
 import { TooltipProvider } from "../components/ui/tooltip";
 import WorkspaceAccessGate from "../integrations/workos/workspace-access-gate";
 
@@ -31,7 +32,7 @@ function AuthenticatedLayout() {
 				</WorkspaceAccessGate>
 			</Authenticated>
 			<AuthLoading>
-				<AuthStateMessage>Loading your workspace…</AuthStateMessage>
+				<AppSplashScreen />
 			</AuthLoading>
 			<Unauthenticated>
 				<AuthStateMessage>

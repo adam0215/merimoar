@@ -8,14 +8,15 @@ import {
 	WorkOsWidgets,
 	type WorkOsWidgetsProps,
 } from "@workos-inc/widgets";
-import { useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { AppSplashScreen } from "#/components/app-splash-screen.tsx";
 import {
 	Card,
 	CardDescription,
 	CardHeader,
 	CardTitle,
 } from "#/components/ui/card.tsx";
-import { Skeleton } from "#/components/ui/skeleton.tsx";
+import { cn } from "#/lib/utils.ts";
 import "./profile-settings-widgets.css";
 
 const WIDGET_THEME = {
@@ -72,6 +73,8 @@ export function ProfileSettingsWidgets() {
 		getAccessToken,
 		loading: tokenLoading,
 	} = useAccessToken();
+	const [widgetsReady, setWidgetsReady] = useState(false);
+	const widgetContainerRef = useRef<HTMLDivElement>(null);
 	const getWidgetToken = useCallback(async () => {
 		const token = await getAccessToken();
 		if (!token) {
@@ -79,18 +82,42 @@ export function ProfileSettingsWidgets() {
 		}
 		return token;
 	}, [getAccessToken]);
+	const widgetsCanLoad = !authLoading && !tokenLoading && Boolean(user);
+
+	useEffect(() => {
+		setWidgetsReady(false);
+		if (!widgetsCanLoad || !widgetContainerRef.current) {
+			return;
+		}
+
+		const container = widgetContainerRef.current;
+		const updateReadyState = () => {
+			const widgetRoots = Array.from(
+				container.querySelectorAll("[data-woswidgets-widget-state]"),
+			);
+			setWidgetsReady(
+				widgetRoots.length === 2 &&
+					widgetRoots.every(
+						(widgetRoot) =>
+							widgetRoot.getAttribute("data-woswidgets-widget-state") !==
+							"loading",
+					),
+			);
+		};
+		const observer = new MutationObserver(updateReadyState);
+		observer.observe(container, {
+			attributeFilter: ["data-woswidgets-widget-state"],
+			attributes: true,
+			childList: true,
+			subtree: true,
+		});
+		updateReadyState();
+
+		return () => observer.disconnect();
+	}, [widgetsCanLoad]);
 
 	if (authLoading || tokenLoading) {
-		return (
-			<WidgetSections>
-				<WidgetSection title="Personal information" section="personal">
-					<Skeleton className="h-40 rounded-2xl" />
-				</WidgetSection>
-				<WidgetSection title="Security" section="security">
-					<Skeleton className="h-32 rounded-2xl" />
-				</WidgetSection>
-			</WidgetSections>
-		);
+		return <AppSplashScreen className="fixed inset-0 z-50 min-h-0" />;
 	}
 
 	if (!user || tokenError) {
@@ -110,16 +137,29 @@ export function ProfileSettingsWidgets() {
 	}
 
 	return (
-		<WorkOsWidgets theme={WIDGET_THEME} elements={WIDGET_ELEMENTS}>
-			<WidgetSections>
-				<WidgetSection title="Personal information" section="personal">
-					<UserProfile authToken={getWidgetToken} />
-				</WidgetSection>
-				<WidgetSection title="Security" section="security">
-					<UserSecurity authToken={getWidgetToken} />
-				</WidgetSection>
-			</WidgetSections>
-		</WorkOsWidgets>
+		<>
+			<div
+				ref={widgetContainerRef}
+				className={cn(
+					!widgetsReady && "invisible",
+					widgetsReady && "app-shell-enter",
+				)}
+			>
+				<WorkOsWidgets theme={WIDGET_THEME} elements={WIDGET_ELEMENTS}>
+					<WidgetSections>
+						<WidgetSection title="Personal information" section="personal">
+							<UserProfile authToken={getWidgetToken} />
+						</WidgetSection>
+						<WidgetSection title="Security" section="security">
+							<UserSecurity authToken={getWidgetToken} />
+						</WidgetSection>
+					</WidgetSections>
+				</WorkOsWidgets>
+			</div>
+			{!widgetsReady && (
+				<AppSplashScreen className="fixed inset-0 z-50 min-h-0" />
+			)}
+		</>
 	);
 }
 

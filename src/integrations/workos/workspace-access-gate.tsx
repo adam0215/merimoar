@@ -1,6 +1,7 @@
 import { useQuery } from "convex-helpers/react/cache";
 import { useEffect } from "react";
 import { api } from "../../../convex/_generated/api";
+import { AppSplashScreen } from "../../components/app-splash-screen";
 
 export default function WorkspaceAccessGate({
 	children,
@@ -19,14 +20,10 @@ export default function WorkspaceAccessGate({
 		return children;
 	}
 	if (access === undefined) {
-		return <WorkspaceState>Checking your WorkOS access…</WorkspaceState>;
+		return <AppSplashScreen />;
 	}
 	if (access === "not_synced") {
-		return (
-			<WorkspaceState>
-				Waiting for your WorkOS membership to sync…
-			</WorkspaceState>
-		);
+		return <AppSplashScreen />;
 	}
 	if (access === "not_provisioned") {
 		return (
@@ -36,7 +33,7 @@ export default function WorkspaceAccessGate({
 		);
 	}
 	if (access === "inactive") {
-		return <WorkspaceState>Signing you out…</WorkspaceState>;
+		return <AppSplashScreen />;
 	}
 	if (access === "unauthenticated") {
 		return (
@@ -46,7 +43,7 @@ export default function WorkspaceAccessGate({
 		);
 	}
 
-	return <WorkspaceState>Checking your WorkOS access…</WorkspaceState>;
+	return <AppSplashScreen />;
 }
 
 function SignInAgainLink() {

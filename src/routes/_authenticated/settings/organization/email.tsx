@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
 import { useQuery } from "convex-helpers/react/cache";
 import { AddEmailConnectionDialog } from "#/components/email/add-email-connection-dialog.tsx";
 import { ProviderMark } from "#/components/email/provider-mark.tsx";
@@ -16,18 +17,30 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
 import { api } from "../../../../../convex/_generated/api";
+
+const preloadEmailConnections = createServerFn({ method: "GET" }).handler(
+	async () => {
+		const client = await createAuthenticatedConvexHttpClient();
+		return await client.query(api.email.reader.listConnections, {});
+	},
+);
 
 export const Route = createFileRoute(
 	"/_authenticated/settings/organization/email",
 )({
+	loader: () => preloadEmailConnections(),
 	component: OrganizationEmailSettings,
 });
 
 function OrganizationEmailSettings() {
-	const connections = useQuery(api.email.reader.listConnections, {});
-	const activeConnections =
-		connections?.filter((connection) => connection.status === "active") ?? [];
+	const prefetchedConnections = Route.useLoaderData();
+	const liveConnections = useQuery(api.email.reader.listConnections, {});
+	const connections = liveConnections ?? prefetchedConnections;
+	const activeConnections = connections.filter(
+		(connection) => connection.status === "active",
+	);
 
 	return (
 		<ScrollContainer>

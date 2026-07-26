@@ -40,7 +40,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	);
 
 	return (
-		<SidebarProvider className="pt-14">
+		<SidebarProvider className="app-shell-enter pt-14">
 			<AppSidebar />
 			<AppHeader
 				pathname={pathname}

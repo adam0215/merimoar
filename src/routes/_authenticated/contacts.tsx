@@ -1,5 +1,6 @@
 import { IconArrowLeft } from "@tabler/icons-react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
 import { usePaginatedQuery, useQuery } from "convex-helpers/react/cache";
 import {
 	ContactList,
@@ -7,6 +8,7 @@ import {
 } from "#/components/contact/contact-browser.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
+import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
 
@@ -14,21 +16,68 @@ type ContactsSearch = {
 	contact?: string;
 };
 
+const preloadInitialContactPage = createServerFn({ method: "GET" })
+	.validator((input: { selectedContactId?: string }) => input)
+	.handler(async ({ data }) => {
+		const client = await createAuthenticatedConvexHttpClient();
+		const [contacts, selectedContact] = await Promise.all([
+			client.query(api.contact.reader.list, {
+				paginationOpts: {
+					cursor: null,
+					numItems: 30,
+				},
+			}),
+			data.selectedContactId
+				? client.query(api.contact.reader.get, {
+						contactId: data.selectedContactId,
+					})
+				: null,
+		]);
+		const messages = selectedContact
+			? await client.query(api.contact.reader.listMessages, {
+					contactId: selectedContact._id,
+					paginationOpts: {
+						cursor: null,
+						numItems: 20,
+					},
+				})
+			: null;
+
+		return {
+			contacts,
+			messages,
+			selectedContact,
+			selectedContactId: data.selectedContactId,
+		};
+	});
+
 export const Route = createFileRoute("/_authenticated/contacts")({
 	validateSearch: (search: Record<string, unknown>): ContactsSearch => ({
 		contact: typeof search.contact === "string" ? search.contact : undefined,
 	}),
+	loaderDeps: ({ search }) => ({ selectedContactId: search.contact }),
+	loader: ({ deps }) => preloadInitialContactPage({ data: deps }),
 	component: ContactsPage,
 });
 
 function ContactsPage() {
+	const prefetched = Route.useLoaderData();
 	const { contact: selectedContactId } = Route.useSearch();
 	const {
-		results: contacts,
-		status: contactStatus,
+		results: liveContacts,
+		status: liveContactStatus,
 		loadMore: loadMoreContacts,
 	} = usePaginatedQuery(api.contact.reader.list, {}, { initialNumItems: 30 });
-	const selectedContact = useQuery(
+	const canUsePrefetchedContacts = liveContactStatus === "LoadingFirstPage";
+	const contacts = canUsePrefetchedContacts
+		? prefetched.contacts.page
+		: liveContacts;
+	const contactStatus = canUsePrefetchedContacts
+		? prefetched.contacts.isDone
+			? "Exhausted"
+			: "CanLoadMore"
+		: liveContactStatus;
+	const liveSelectedContact = useQuery(
 		api.contact.reader.get,
 		selectedContactId
 			? {
@@ -36,9 +85,15 @@ function ContactsPage() {
 				}
 			: "skip",
 	);
+	const canUsePrefetchedContact =
+		liveSelectedContact === undefined &&
+		selectedContactId === prefetched.selectedContactId;
+	const selectedContact = canUsePrefetchedContact
+		? prefetched.selectedContact
+		: liveSelectedContact;
 	const {
-		results: messages,
-		status: messageStatus,
+		results: liveMessages,
+		status: liveMessageStatus,
 		loadMore: loadMoreMessages,
 	} = usePaginatedQuery(
 		api.contact.reader.listMessages,
@@ -49,6 +104,18 @@ function ContactsPage() {
 			: "skip",
 		{ initialNumItems: 20 },
 	);
+	const canUsePrefetchedMessages =
+		liveMessageStatus === "LoadingFirstPage" &&
+		selectedContactId === prefetched.selectedContactId &&
+		prefetched.messages !== null;
+	const messages = canUsePrefetchedMessages
+		? prefetched.messages.page
+		: liveMessages;
+	const messageStatus = canUsePrefetchedMessages
+		? prefetched.messages.isDone
+			? "Exhausted"
+			: "CanLoadMore"
+		: liveMessageStatus;
 
 	return (
 		<div className="grid h-full min-h-0 overflow-hidden md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]">
@@ -63,7 +130,11 @@ function ContactsPage() {
 						contacts={contacts}
 						selectedContactId={selectedContactId}
 						status={contactStatus}
-						loadMore={() => loadMoreContacts(30)}
+						loadMore={() => {
+							if (liveContactStatus !== "LoadingFirstPage") {
+								loadMoreContacts(30);
+							}
+						}}
 					/>
 				</ScrollArea>
 			</section>
@@ -89,7 +160,11 @@ function ContactsPage() {
 							contactWasSelected={Boolean(selectedContactId)}
 							messages={messages}
 							messageStatus={messageStatus}
-							loadMoreMessages={() => loadMoreMessages(20)}
+							loadMoreMessages={() => {
+								if (liveMessageStatus !== "LoadingFirstPage") {
+									loadMoreMessages(20);
+								}
+							}}
 						/>
 					</div>
 				</div>
