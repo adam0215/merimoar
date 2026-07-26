@@ -1,6 +1,11 @@
-import { IconArrowLeft } from "@tabler/icons-react";
+import {
+	IconArrowLeft,
+	IconBaselineDensityLarge,
+	IconBaselineDensitySmall,
+} from "@tabler/icons-react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePaginatedQuery, useQuery } from "convex/react";
+import { useState } from "react";
 import { ThreadList, ThreadView } from "#/components/email/email-reader.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
@@ -23,6 +28,7 @@ export const Route = createFileRoute("/email")({
 
 function EmailPage() {
 	const { thread: selectedThreadId } = Route.useSearch();
+	const [isCompact, setIsCompact] = useState(false);
 	const workspace = useQuery(api.email.reader.getWorkspace, {
 		organizationSlug: ORGANIZATION_SLUG,
 	});
@@ -56,14 +62,40 @@ function EmailPage() {
 					selectedThreadId && "hidden md:block",
 				)}
 			>
-				<ScrollArea className="h-full" viewportClassName="overscroll-none">
-					<ThreadList
-						items={threads}
-						selectedThreadId={selectedThreadId}
-						status={threadStatus}
-						loadMore={() => loadMore(30)}
-					/>
-				</ScrollArea>
+				<div className="relative h-full">
+					<ScrollArea className="h-full" viewportClassName="overscroll-none">
+						<ThreadList
+							items={threads}
+							selectedThreadId={selectedThreadId}
+							status={threadStatus}
+							loadMore={() => loadMore(30)}
+							compact={isCompact}
+						/>
+					</ScrollArea>
+					<Button
+						type="button"
+						size="icon-lg"
+						className="absolute right-4 bottom-4 z-20 shadow-lg"
+						aria-label={
+							isCompact
+								? "Use comfortable email list"
+								: "Use compact email list"
+						}
+						aria-pressed={isCompact}
+						title={
+							isCompact
+								? "Use comfortable email list"
+								: "Use compact email list"
+						}
+						onClick={() => setIsCompact((compact) => !compact)}
+					>
+						{isCompact ? (
+							<IconBaselineDensityLarge />
+						) : (
+							<IconBaselineDensitySmall />
+						)}
+					</Button>
+				</div>
 			</section>
 
 			<section

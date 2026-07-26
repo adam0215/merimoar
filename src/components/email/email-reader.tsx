@@ -91,23 +91,43 @@ export function ThreadList({
 	selectedThreadId,
 	status,
 	loadMore,
+	compact,
 }: {
 	items: ThreadListItem[];
 	selectedThreadId?: string;
 	status: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";
 	loadMore: () => void;
+	compact: boolean;
 }) {
 	if (status === "LoadingFirstPage") {
 		return (
-			<div className="space-y-1 p-2">
+			<div className="space-y-1 p-2 pb-16">
 				{SKELETON_ROWS.map((row) => (
-					<div key={row} className="flex gap-3 rounded-xl px-3 py-4">
-						<Skeleton className="size-9 rounded-full" />
-						<div className="flex-1 space-y-2">
-							<Skeleton className="h-3 w-2/5" />
-							<Skeleton className="h-3 w-4/5" />
-							<Skeleton className="h-3 w-full" />
-						</div>
+					<div
+						key={row}
+						className={cn(
+							"rounded-xl px-3",
+							compact
+								? "grid grid-cols-[max-content_minmax(0,1fr)_4.5rem] items-center gap-x-2 py-2"
+								: "flex gap-3 py-4",
+						)}
+					>
+						{compact ? (
+							<>
+								<Skeleton className="h-3 w-3/4" />
+								<Skeleton className="h-3 w-full" />
+								<Skeleton className="ml-auto h-3 w-12" />
+							</>
+						) : (
+							<>
+								<Skeleton className="size-9 rounded-full" />
+								<div className="flex-1 space-y-2">
+									<Skeleton className="h-3 w-2/5" />
+									<Skeleton className="h-3 w-4/5" />
+									<Skeleton className="h-3 w-full" />
+								</div>
+							</>
+						)}
 					</div>
 				))}
 			</div>
@@ -128,13 +148,42 @@ export function ThreadList({
 	}
 
 	return (
-		<div className="p-2">
+		<div className="p-2 pb-16">
 			{items.map(({ thread, latestMessage }) => {
 				if (!latestMessage) {
 					return null;
 				}
 				const isActive = thread._id === selectedThreadId;
 				const preview = latestMessage.textBody.replace(/\s+/g, " ").trim();
+
+				if (compact) {
+					return (
+						<Link
+							key={thread._id}
+							to="/email"
+							search={{ thread: thread._id }}
+							className={cn(
+								"mb-0.5 grid grid-cols-[max-content_minmax(0,1fr)_auto] items-center gap-x-2 rounded-lg px-3 py-2 text-xs text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+								isActive && "bg-muted",
+							)}
+						>
+							<p className="truncate font-medium text-muted-foreground">
+								{participantLabel(latestMessage.from)}
+							</p>
+							<p className="min-w-0 truncate">
+								<span className="font-semibold">
+									{latestMessage.subject || "(No subject)"}
+								</span>
+								{preview && (
+									<span className="text-muted-foreground"> {preview}</span>
+								)}
+							</p>
+							<time className="shrink-0 text-muted-foreground">
+								{formatListDate(latestMessage.receivedAt)}
+							</time>
+						</Link>
+					);
+				}
 
 				return (
 					<Link
