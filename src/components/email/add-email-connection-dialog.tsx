@@ -49,8 +49,7 @@ type WizardStep = "provider" | "details" | "review" | "success";
 type FieldName = keyof v.InferInput<typeof emailConnectionDetailsSchema>;
 
 const initialForm = {
-	// Suggested UI copy only; this does not preconfigure or seed a connection.
-	displayName: "Development inbox",
+	displayName: "",
 	address: "",
 };
 
@@ -226,6 +225,7 @@ export function AddEmailConnectionDialog() {
 								<Input
 									id="connection-display-name"
 									value={form.displayName}
+									placeholder="Shared inbox"
 									onChange={(event) =>
 										updateField("displayName", event.target.value)
 									}
@@ -246,11 +246,10 @@ export function AddEmailConnectionDialog() {
 								<FieldLabel htmlFor="connection-address">
 									Receiving address
 								</FieldLabel>
-								{/* Example only; the user must supply their own Resend address. */}
 								<Input
 									id="connection-address"
 									type="email"
-									placeholder="development@example.resend.app"
+									placeholder="inbox@your-domain.com"
 									value={form.address}
 									onChange={(event) =>
 										updateField("address", event.target.value)
