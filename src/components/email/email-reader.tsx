@@ -1,9 +1,19 @@
-import { IconInbox, IconLoader2, IconMailOpened } from "@tabler/icons-react";
+import {
+	IconAddressBook,
+	IconInbox,
+	IconLoader2,
+	IconMailOpened,
+} from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 import { cn } from "#/lib/utils.ts";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -32,6 +42,7 @@ type ThreadDetails = {
 	};
 	messages: Array<{
 		_id: Id<"emailMessages">;
+		senderContactId: Id<"contacts">;
 		from: Participant;
 		to: Participant[];
 		cc: Participant[];
@@ -279,9 +290,30 @@ export function ThreadView({
 							<header className="min-w-0">
 								<div className="min-w-0">
 									<div className="flex min-w-0 items-center justify-between gap-4">
-										<p className="truncate text-sm font-medium">
-											{participantLabel(message.from)}
-										</p>
+										<div className="flex min-w-0 items-center">
+											<p className="truncate text-sm font-medium">
+												{participantLabel(message.from)}
+											</p>
+											<Tooltip>
+												<TooltipTrigger asChild>
+													<Button
+														asChild
+														variant="ghost"
+														size="icon-xs"
+														className="text-muted-foreground"
+													>
+														<Link
+															to="/contacts"
+															search={{ contact: message.senderContactId }}
+															aria-label={`Open contact ${participantLabel(message.from)}`}
+														>
+															<IconAddressBook />
+														</Link>
+													</Button>
+												</TooltipTrigger>
+												<TooltipContent side="top">Open contact</TooltipContent>
+											</Tooltip>
+										</div>
 										<time className="shrink-0 text-xs text-muted-foreground">
 											{formatMessageDate(message.sentAt)}
 										</time>

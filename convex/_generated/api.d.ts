@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as contact_model from "../contact/model.js";
+import type * as contact_reader from "../contact/reader.js";
 import type * as email_connections from "../email/connections.js";
 import type * as email_ingest from "../email/ingest.js";
 import type * as email_model from "../email/model.js";
@@ -23,6 +25,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "contact/model": typeof contact_model;
+  "contact/reader": typeof contact_reader;
   "email/connections": typeof email_connections;
   "email/ingest": typeof email_ingest;
   "email/model": typeof email_model;

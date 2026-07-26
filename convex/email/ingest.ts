@@ -6,6 +6,7 @@ import {
 	internalQuery,
 } from "../_generated/server";
 import type { Id } from "../_generated/dataModel";
+import { upsertSenderContact } from "../contact/model";
 import { normalizedInboundEmailValidator } from "./model";
 import { normalizeEmailAddress } from "./normalize";
 
@@ -171,6 +172,11 @@ export const storeInboundEmail = internalMutation({
 			return null;
 		}
 
+		const connection = await ctx.db.get(event.connectionId);
+		if (!connection) {
+			throw new Error("Email connection not found");
+		}
+
 		const existingMessage = await findExistingMessage(
 			ctx,
 			event.connectionId,
@@ -185,6 +191,13 @@ export const storeInboundEmail = internalMutation({
 			});
 			return existingMessage._id;
 		}
+
+		const senderContactId = await upsertSenderContact(
+			ctx,
+			connection.organizationId,
+			args.email.from,
+			args.email.receivedAt,
+		);
 
 		let thread = args.email.externalThreadId
 			? await findThreadByExternalThreadId(
@@ -227,6 +240,7 @@ export const storeInboundEmail = internalMutation({
 
 		const messageId = await ctx.db.insert("emailMessages", {
 			threadId: thread._id,
+			senderContactId,
 			externalMessageId: args.email.externalMessageId,
 			internetMessageId: args.email.internetMessageId,
 			inReplyTo: args.email.inReplyTo,

@@ -33,8 +33,25 @@ export default defineSchema({
 			"lastActivityAt",
 		]),
 
+	contacts: defineTable({
+		organizationId: v.id("organizations"),
+		address: v.string(),
+		name: v.optional(v.string()),
+		firstSeenAt: v.number(),
+		lastSeenAt: v.number(),
+	})
+		.index("by_organization_id_and_address", [
+			"organizationId",
+			"address",
+		])
+		.index("by_organization_id_and_last_seen_at", [
+			"organizationId",
+			"lastSeenAt",
+		]),
+
 	emailMessages: defineTable({
 		threadId: v.id("emailThreads"),
+		senderContactId: v.id("contacts"),
 		externalMessageId: v.string(),
 		internetMessageId: v.optional(v.string()),
 		inReplyTo: v.optional(v.string()),
@@ -51,6 +68,10 @@ export default defineSchema({
 		receivedAt: v.number(),
 	})
 		.index("by_thread_id_and_received_at", ["threadId", "receivedAt"])
+		.index("by_sender_contact_id_and_received_at", [
+			"senderContactId",
+			"receivedAt",
+		])
 		.index("by_external_message_id", ["externalMessageId"])
 		.index("by_internet_message_id", ["internetMessageId"]),
 

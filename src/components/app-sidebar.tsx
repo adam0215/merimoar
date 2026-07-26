@@ -1,4 +1,5 @@
 import {
+	IconAddressBook,
 	IconChevronRight,
 	IconMail,
 	IconMailFilled,
@@ -32,6 +33,7 @@ export function AppSidebar() {
 		select: (state) => state.location.pathname,
 	});
 	const emailIsActive = pathname === "/email";
+	const contactsIsActive = pathname === "/contacts";
 	const settingsEmailIsActive = pathname === "/settings/organization/email";
 	const settingsIsActive = pathname.startsWith("/settings");
 	const MailIcon = emailIsActive ? IconMailFilled : IconMail;
@@ -56,6 +58,23 @@ export function AppSidebar() {
 									<Link to="/email" search={{}}>
 										<MailIcon />
 										<span>Email</span>
+									</Link>
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									asChild
+									isActive={contactsIsActive}
+									tooltip="Contacts"
+									className={
+										contactsIsActive
+											? "text-foreground"
+											: "text-muted-foreground"
+									}
+								>
+									<Link to="/contacts" search={{}}>
+										<IconAddressBook />
+										<span>Contacts</span>
 									</Link>
 								</SidebarMenuButton>
 							</SidebarMenuItem>

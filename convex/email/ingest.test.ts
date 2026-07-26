@@ -115,6 +115,7 @@ describe("inbound email ingestion", () => {
 		const state = await t.run(async (ctx) => ({
 			threads: await ctx.db.query("emailThreads").collect(),
 			messages: await ctx.db.query("emailMessages").collect(),
+			contacts: await ctx.db.query("contacts").collect(),
 			duplicateEvent: await ctx.db.get(duplicateEventId),
 		}));
 
@@ -123,8 +124,151 @@ describe("inbound email ingestion", () => {
 		expect(duplicateMessageId).toBe(secondMessageId);
 		expect(state.threads).toHaveLength(1);
 		expect(state.messages).toHaveLength(2);
+		expect(state.contacts).toHaveLength(1);
+		expect(state.contacts[0]).toMatchObject({
+			address: "ada@example.com",
+			name: "Ada",
+			firstSeenAt: 1_100,
+			lastSeenAt: 2_100,
+		});
+		expect(
+			state.messages.every(
+				(message) => message.senderContactId === state.contacts[0]?._id,
+			),
+		).toBe(true);
 		expect(state.threads[0]?.latestMessageId).toBe(secondMessageId);
 		expect(state.duplicateEvent?.status).toBe("processed");
+	});
+
+	it("normalizes contacts per organization and preserves the newest observed name", async () => {
+		const t = convexTest(schema, modules);
+		const setup = await t.run(async (ctx) => {
+			const firstOrganizationId = await ctx.db.insert("organizations", {
+				name: "Merimoar",
+				slug: "merimoar",
+			});
+			const secondOrganizationId = await ctx.db.insert("organizations", {
+				name: "Other",
+				slug: "other",
+			});
+			const firstConnectionId = await ctx.db.insert("emailConnections", {
+				organizationId: firstOrganizationId,
+				provider: "resend",
+				displayName: "Support",
+				address: "support@merimoar.test",
+				status: "active",
+			});
+			const secondConnectionId = await ctx.db.insert("emailConnections", {
+				organizationId: firstOrganizationId,
+				provider: "resend",
+				displayName: "Sales",
+				address: "sales@merimoar.test",
+				status: "active",
+			});
+			const otherConnectionId = await ctx.db.insert("emailConnections", {
+				organizationId: secondOrganizationId,
+				provider: "resend",
+				displayName: "Other",
+				address: "inbox@other.test",
+				status: "active",
+			});
+
+			const eventIds = await Promise.all(
+				[
+					{
+						connectionId: firstConnectionId,
+						externalEventId: "contact-event-new",
+						externalMessageId: "contact-message-new",
+						receivedAt: 3_000,
+					},
+					{
+						connectionId: secondConnectionId,
+						externalEventId: "contact-event-old",
+						externalMessageId: "contact-message-old",
+						receivedAt: 1_000,
+					},
+					{
+						connectionId: otherConnectionId,
+						externalEventId: "contact-event-other",
+						externalMessageId: "contact-message-other",
+						receivedAt: 2_000,
+					},
+				].map((event) =>
+					ctx.db.insert("emailIngestEvents", {
+						...event,
+						eventType: "email.received",
+						status: "pending",
+						rawPayload: "{}",
+						attempts: 0,
+					}),
+				),
+			);
+
+			return {
+				firstOrganizationId,
+				secondOrganizationId,
+				eventIds,
+			};
+		});
+
+		const emails = [
+			{
+				...firstEmail,
+				externalMessageId: "contact-message-new",
+				internetMessageId: "<contact-new@example.com>",
+				from: { name: "Ada New", address: " ADA@EXAMPLE.COM " },
+				receivedAt: 3_000,
+			},
+			{
+				...firstEmail,
+				externalMessageId: "contact-message-old",
+				internetMessageId: "<contact-old@example.com>",
+				from: { name: "Ada Old", address: "ada@example.com" },
+				receivedAt: 1_000,
+			},
+			{
+				...firstEmail,
+				externalMessageId: "contact-message-other",
+				internetMessageId: "<contact-other@example.com>",
+				from: { name: "Ada Other", address: "ada@example.com" },
+				receivedAt: 2_000,
+			},
+		];
+
+		for (const [index, eventId] of setup.eventIds.entries()) {
+			const email = emails[index];
+			if (!email) {
+				throw new Error("Missing test email");
+			}
+			await t.mutation(internal.email.ingest.storeInboundEmail, {
+				eventId,
+				email,
+			});
+		}
+
+		const contacts = await t.run(async (ctx) =>
+			ctx.db.query("contacts").collect(),
+		);
+		const merimoarContact = contacts.find(
+			(contact) => contact.organizationId === setup.firstOrganizationId,
+		);
+		const otherContact = contacts.find(
+			(contact) => contact.organizationId === setup.secondOrganizationId,
+		);
+
+		expect(contacts).toHaveLength(2);
+		expect(merimoarContact).toMatchObject({
+			address: "ada@example.com",
+			name: "Ada New",
+			firstSeenAt: 1_000,
+			lastSeenAt: 3_000,
+		});
+		expect(otherContact).toMatchObject({
+			address: "ada@example.com",
+			name: "Ada Other",
+			firstSeenAt: 2_000,
+			lastSeenAt: 2_000,
+		});
 	});
 
 	it("uses a provider thread ID before RFC reply headers when available", async () => {

@@ -17,6 +17,9 @@ function getPageTitle(pathname: string) {
 	if (pathname === "/settings/organization/email") {
 		return "Email settings";
 	}
+	if (pathname === "/contacts") {
+		return "Contacts";
+	}
 	return "Email";
 }
 
