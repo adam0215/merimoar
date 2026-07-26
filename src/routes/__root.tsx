@@ -4,6 +4,7 @@ import {
 	HeadContent,
 	Scripts,
 } from "@tanstack/react-router";
+import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 import { AppShell } from "../components/app-shell";
 import { TooltipProvider } from "../components/ui/tooltip";
 import ConvexProvider from "../integrations/convex/provider";
@@ -51,13 +52,36 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 			<body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-primary/15">
 				<WorkOSProvider>
 					<ConvexProvider>
-						<TooltipProvider>
-							<AppShell>{children}</AppShell>
-						</TooltipProvider>
+						<Authenticated>
+							<TooltipProvider>
+								<AppShell>{children}</AppShell>
+							</TooltipProvider>
+						</Authenticated>
+						<AuthLoading>
+							<AuthStateMessage>Loading your workspace…</AuthStateMessage>
+						</AuthLoading>
+						<Unauthenticated>
+							<AuthStateMessage>
+								<a
+									href="/api/auth/sign-in"
+									className="font-medium text-foreground underline underline-offset-4"
+								>
+									Sign in to continue
+								</a>
+							</AuthStateMessage>
+						</Unauthenticated>
 					</ConvexProvider>
 				</WorkOSProvider>
 				<Scripts />
 			</body>
 		</html>
+	);
+}
+
+function AuthStateMessage({ children }: { children: React.ReactNode }) {
+	return (
+		<div className="flex min-h-svh items-center justify-center bg-background px-6 text-sm text-muted-foreground">
+			{children}
+		</div>
 	);
 }

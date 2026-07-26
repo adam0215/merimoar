@@ -10,15 +10,22 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as CasesRouteImport } from './routes/cases'
 import { Route as ContactsRouteImport } from './routes/contacts'
 import { Route as EmailRouteImport } from './routes/email'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as ApiAuthSignInRouteImport } from './routes/api/auth/sign-in'
 import { Route as SettingsOrganizationEmailRouteImport } from './routes/settings/organization/email'
+import { Route as SettingsOrganizationEntitiesRouteImport } from './routes/settings/organization/entities'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CasesRoute = CasesRouteImport.update({
+  id: '/cases',
+  path: '/cases',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactsRoute = ContactsRouteImport.update({
@@ -47,66 +54,86 @@ const SettingsOrganizationEmailRoute =
     path: '/settings/organization/email',
     getParentRoute: () => rootRouteImport,
   } as any)
+const SettingsOrganizationEntitiesRoute =
+  SettingsOrganizationEntitiesRouteImport.update({
+    id: '/settings/organization/entities',
+    path: '/settings/organization/entities',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/cases': typeof CasesRoute
   '/contacts': typeof ContactsRoute
   '/email': typeof EmailRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
   '/settings/organization/email': typeof SettingsOrganizationEmailRoute
+  '/settings/organization/entities': typeof SettingsOrganizationEntitiesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/cases': typeof CasesRoute
   '/contacts': typeof ContactsRoute
   '/email': typeof EmailRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
   '/settings/organization/email': typeof SettingsOrganizationEmailRoute
+  '/settings/organization/entities': typeof SettingsOrganizationEntitiesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/cases': typeof CasesRoute
   '/contacts': typeof ContactsRoute
   '/email': typeof EmailRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
   '/settings/organization/email': typeof SettingsOrganizationEmailRoute
+  '/settings/organization/entities': typeof SettingsOrganizationEntitiesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/cases'
     | '/contacts'
     | '/email'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
     | '/settings/organization/email'
+    | '/settings/organization/entities'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/cases'
     | '/contacts'
     | '/email'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
     | '/settings/organization/email'
+    | '/settings/organization/entities'
   id:
     | '__root__'
     | '/'
+    | '/cases'
     | '/contacts'
     | '/email'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
     | '/settings/organization/email'
+    | '/settings/organization/entities'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  CasesRoute: typeof CasesRoute
   ContactsRoute: typeof ContactsRoute
   EmailRoute: typeof EmailRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ApiAuthSignInRoute: typeof ApiAuthSignInRoute
   SettingsOrganizationEmailRoute: typeof SettingsOrganizationEmailRoute
+  SettingsOrganizationEntitiesRoute: typeof SettingsOrganizationEntitiesRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -116,6 +143,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/cases': {
+      id: '/cases'
+      path: '/cases'
+      fullPath: '/cases'
+      preLoaderRoute: typeof CasesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contacts': {
@@ -153,16 +187,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsOrganizationEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings/organization/entities': {
+      id: '/settings/organization/entities'
+      path: '/settings/organization/entities'
+      fullPath: '/settings/organization/entities'
+      preLoaderRoute: typeof SettingsOrganizationEntitiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  CasesRoute: CasesRoute,
   ContactsRoute: ContactsRoute,
   EmailRoute: EmailRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ApiAuthSignInRoute: ApiAuthSignInRoute,
   SettingsOrganizationEmailRoute: SettingsOrganizationEmailRoute,
+  SettingsOrganizationEntitiesRoute: SettingsOrganizationEntitiesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -93,6 +93,27 @@ with their production equivalents when deploying.
 ## Setting up Convex
 
 - Set the `VITE_CONVEX_URL` and `CONVEX_DEPLOYMENT` environment variables in your `.env.local`. (Or run `bunx --bun convex init` to set them automatically.)
+- Set `WORKOS_CLIENT_ID` on the Convex deployment so `convex/auth.config.ts`
+  can validate AuthKit access tokens:
+
+  ```bash
+  bunx convex env set WORKOS_CLIENT_ID client_...
+  ```
+
+- Provision each WorkOS organization/member mapping with the private admin
+  mutation. The organization and user IDs come from WorkOS; the issuer is the
+  `iss` claim in the access token:
+
+  ```bash
+  bunx convex run auth/admin:linkWorkOSIdentity \
+    '{"organizationSlug":"merimoar","workosOrganizationId":"org_...","memberEmail":"you@example.com","issuer":"https://api.workos.com/","subject":"user_..."}'
+  ```
+
+- Seed the idempotent case/entity demo workspace when needed:
+
+  ```bash
+  bunx convex run dev/seed:seedCaseWorkspace
+  ```
 - Run `bunx --bun convex dev` to start the Convex server.
 
 

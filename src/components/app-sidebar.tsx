@@ -1,6 +1,8 @@
 import {
 	IconAddressBook,
 	IconChevronRight,
+	IconFolder,
+	IconFolderFilled,
 	IconMail,
 	IconMailFilled,
 	IconSettings,
@@ -34,9 +36,13 @@ export function AppSidebar() {
 	});
 	const emailIsActive = pathname === "/email";
 	const contactsIsActive = pathname === "/contacts";
+	const casesIsActive = pathname === "/cases";
 	const settingsEmailIsActive = pathname === "/settings/organization/email";
+	const settingsEntitiesIsActive =
+		pathname === "/settings/organization/entities";
 	const settingsIsActive = pathname.startsWith("/settings");
 	const MailIcon = emailIsActive ? IconMailFilled : IconMail;
+	const CasesIcon = casesIsActive ? IconFolderFilled : IconFolder;
 	const SettingsIcon = settingsIsActive ? IconSettingsFilled : IconSettings;
 
 	return (
@@ -46,6 +52,21 @@ export function AppSidebar() {
 					<SidebarGroupLabel>Menu</SidebarGroupLabel>
 					<SidebarGroupContent>
 						<SidebarMenu>
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									asChild
+									isActive={casesIsActive}
+									tooltip="Cases"
+									className={
+										casesIsActive ? "text-foreground" : "text-muted-foreground"
+									}
+								>
+									<Link to="/cases" search={{}}>
+										<CasesIcon />
+										<span>Cases</span>
+									</Link>
+								</SidebarMenuButton>
+							</SidebarMenuItem>
 							<SidebarMenuItem>
 								<SidebarMenuButton
 									asChild
@@ -111,6 +132,24 @@ export function AppSidebar() {
 									</CollapsibleTrigger>
 									<CollapsibleContent>
 										<SidebarMenuSub>
+											<SidebarMenuSubItem>
+												<SidebarMenuSubButton
+													asChild
+													isActive={settingsEntitiesIsActive}
+													className={
+														settingsEntitiesIsActive
+															? "text-foreground"
+															: "text-muted-foreground"
+													}
+												>
+													<Link
+														to="/settings/organization/entities"
+														search={{}}
+													>
+														<span>Entities</span>
+													</Link>
+												</SidebarMenuSubButton>
+											</SidebarMenuSubItem>
 											<SidebarMenuSubItem>
 												<SidebarMenuSubButton
 													asChild

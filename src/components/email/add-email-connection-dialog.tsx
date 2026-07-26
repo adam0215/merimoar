@@ -6,7 +6,6 @@ import {
 	IconPlus,
 } from "@tabler/icons-react";
 import { useMutation } from "convex/react";
-import { ConvexError } from "convex/values";
 import { useMemo, useState } from "react";
 import * as v from "valibot";
 import { Button } from "#/components/ui/button.tsx";
@@ -28,6 +27,7 @@ import {
 	FieldLabel,
 } from "#/components/ui/field.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
 import { ProviderMark } from "./provider-mark.tsx";
@@ -158,7 +158,12 @@ export function AddEmailConnectionDialog({
 			});
 			setStep("success");
 		} catch (error) {
-			setSubmissionError(getErrorMessage(error));
+			setSubmissionError(
+				getConvexErrorMessage(
+					error,
+					"The connection could not be created. Try again.",
+				),
+			);
 		} finally {
 			setIsSubmitting(false);
 		}
@@ -411,22 +416,4 @@ function ReviewRow({ label, value }: { label: string; value: string }) {
 			</dd>
 		</div>
 	);
-}
-
-function getErrorMessage(error: unknown) {
-	if (
-		error instanceof ConvexError &&
-		typeof error.data === "object" &&
-		error.data !== null &&
-		"message" in error.data &&
-		typeof error.data.message === "string"
-	) {
-		return error.data.message;
-	}
-
-	if (error instanceof Error) {
-		return error.message;
-	}
-
-	return "The connection could not be created. Try again.";
 }

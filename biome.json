@@ -9,9 +9,12 @@
 		"ignoreUnknown": false,
 		"includes": [
 			"**/src/**/*",
+			"**/convex/**/*",
+			"**/convex.json",
 			"**/.vscode/**/*",
 			"**/index.html",
 			"**/vite.config.ts",
+			"!**/convex/_generated/**/*",
 			"!**/src/routeTree.gen.ts",
 			"!**/src/styles.css"
 		]

@@ -14,8 +14,14 @@ import { api } from "../../convex/_generated/api";
 const ORGANIZATION_SLUG = "merimoar";
 
 function getPageTitle(pathname: string) {
+	if (pathname === "/settings/organization/entities") {
+		return "Entity settings";
+	}
 	if (pathname === "/settings/organization/email") {
 		return "Email settings";
+	}
+	if (pathname === "/cases") {
+		return "Cases";
 	}
 	if (pathname === "/contacts") {
 		return "Contacts";
