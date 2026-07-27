@@ -9,6 +9,7 @@ This also means you don't have to write regression tests. Instead focus on writi
 ## Code principles
 
 - Function names should always signal the intent of the function.
+- When writing Tailwind, only use the bracket syntax "[]" for custom values in cases where built-in classes won't do the job. Otherwise it's considered a code smell.
 
 ## Use and trust Typescript and the compiler
 
