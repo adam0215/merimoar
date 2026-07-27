@@ -4,6 +4,7 @@ import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { mutation } from "../_generated/server";
 import { requireActor } from "../auth/access";
+import { syncGlobalSearchEntry } from "../globalSearch/model";
 import { requireCase, validateCaseOwner } from "./access";
 import { appendCaseEvent } from "./events";
 import {
@@ -106,6 +107,14 @@ export const create = mutation({
 			createdAt: now,
 			updatedAt: now,
 		});
+		const globalSearchEntryId = await syncGlobalSearchEntry(ctx, undefined, {
+			organizationId: actor.organization._id,
+			target: { kind: "case", caseId },
+			identifier: reference,
+			label: details.output.title,
+			descriptor: "Case",
+		});
+		await ctx.db.patch("cases", caseId, { globalSearchEntryId });
 
 		await insertInitialRelations(
 			ctx,
@@ -166,6 +175,20 @@ export const update = mutation({
 			updatedAt: now,
 			lastActivityAt: statusChanged ? now : caseRecord.lastActivityAt,
 		});
+		const globalSearchEntryId = await syncGlobalSearchEntry(
+			ctx,
+			caseRecord.globalSearchEntryId,
+			{
+				organizationId: actor.organization._id,
+				target: { kind: "case", caseId: caseRecord._id },
+				identifier: caseRecord.reference,
+				label: details.output.title,
+				descriptor: "Case",
+			},
+		);
+		if (globalSearchEntryId !== caseRecord.globalSearchEntryId) {
+			await ctx.db.patch("cases", caseRecord._id, { globalSearchEntryId });
+		}
 		if (statusChanged) {
 			await appendCaseEvent(
 				ctx,

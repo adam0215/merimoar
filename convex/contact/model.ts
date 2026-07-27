@@ -1,6 +1,7 @@
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { normalizeEmailAddress } from "../email/normalize";
+import { syncGlobalSearchEntry } from "../globalSearch/model";
 
 export async function upsertSenderContact(
 	ctx: MutationCtx,
@@ -20,13 +21,22 @@ export async function upsertSenderContact(
 		.unique();
 
 	if (!existingContact) {
-		return await ctx.db.insert("contacts", {
+		const contactId = await ctx.db.insert("contacts", {
 			organizationId,
 			address,
 			name: from.name,
 			firstSeenAt: receivedAt,
 			lastSeenAt: receivedAt,
 		});
+		const globalSearchEntryId = await syncGlobalSearchEntry(ctx, undefined, {
+			organizationId,
+			target: { kind: "contact", contactId },
+			identifier: address,
+			label: from.name ?? address,
+			descriptor: "Contact",
+		});
+		await ctx.db.patch("contacts", contactId, { globalSearchEntryId });
+		return contactId;
 	}
 
 	const name =
@@ -46,6 +56,23 @@ export async function upsertSenderContact(
 			name,
 			firstSeenAt,
 			lastSeenAt,
+		});
+	}
+
+	const globalSearchEntryId = await syncGlobalSearchEntry(
+		ctx,
+		existingContact.globalSearchEntryId,
+		{
+			organizationId,
+			target: { kind: "contact", contactId: existingContact._id },
+			identifier: address,
+			label: name ?? address,
+			descriptor: "Contact",
+		},
+	);
+	if (globalSearchEntryId !== existingContact.globalSearchEntryId) {
+		await ctx.db.patch("contacts", existingContact._id, {
+			globalSearchEntryId,
 		});
 	}
 

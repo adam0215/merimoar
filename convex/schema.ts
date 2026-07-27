@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { caseStatusValidator } from "./case/model";
 import { emailParticipantValidator } from "./email/model";
 import { entityFieldTypeValidator, entityIconValidator } from "./entity/model";
+import { globalSearchTargetValidator } from "./globalSearch/model";
 
 export default defineSchema({
 	organizations: defineTable({
@@ -42,6 +43,7 @@ export default defineSchema({
 		name: v.optional(v.string()),
 		firstSeenAt: v.number(),
 		lastSeenAt: v.number(),
+		globalSearchEntryId: v.optional(v.id("globalSearchEntries")),
 	})
 		.index("by_organization_id_and_address", ["organizationId", "address"])
 		.index("by_organization_id_and_last_seen_at", [
@@ -101,6 +103,7 @@ export default defineSchema({
 		createdAt: v.number(),
 		updatedAt: v.number(),
 		archivedAt: v.union(v.number(), v.null()),
+		globalSearchEntryId: v.optional(v.id("globalSearchEntries")),
 	})
 		.index("by_entity_type_id_and_normalized_identifier", [
 			"entityTypeId",
@@ -171,12 +174,25 @@ export default defineSchema({
 		lastActivityAt: v.number(),
 		createdAt: v.number(),
 		updatedAt: v.number(),
+		globalSearchEntryId: v.optional(v.id("globalSearchEntries")),
 	})
 		.index("by_organization_id_and_reference", ["organizationId", "reference"])
 		.index("by_organization_id_and_last_activity_at", [
 			"organizationId",
 			"lastActivityAt",
 		]),
+
+	globalSearchEntries: defineTable({
+		organizationId: v.id("organizations"),
+		target: globalSearchTargetValidator,
+		identifier: v.string(),
+		label: v.string(),
+		descriptor: v.string(),
+		searchText: v.string(),
+	}).searchIndex("search_search_text_and_organization_id", {
+		searchField: "searchText",
+		filterFields: ["organizationId"],
+	}),
 
 	caseEvents: defineTable({
 		caseId: v.id("cases"),

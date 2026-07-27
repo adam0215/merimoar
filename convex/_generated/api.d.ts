@@ -32,6 +32,8 @@ import type * as entity_model from "../entity/model.js";
 import type * as entity_mutations from "../entity/mutations.js";
 import type * as entity_reader from "../entity/reader.js";
 import type * as entity_values from "../entity/values.js";
+import type * as globalSearch_model from "../globalSearch/model.js";
+import type * as globalSearch_reader from "../globalSearch/reader.js";
 import type * as http from "../http.js";
 import type * as workos from "../workos.js";
 
@@ -66,6 +68,8 @@ declare const fullApi: ApiFromModules<{
   "entity/mutations": typeof entity_mutations;
   "entity/reader": typeof entity_reader;
   "entity/values": typeof entity_values;
+  "globalSearch/model": typeof globalSearch_model;
+  "globalSearch/reader": typeof globalSearch_reader;
   http: typeof http;
   workos: typeof workos;
 }>;

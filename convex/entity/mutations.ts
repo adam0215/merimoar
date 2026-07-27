@@ -4,6 +4,7 @@ import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { mutation } from "../_generated/server";
 import { requireActor } from "../auth/access";
+import { syncGlobalSearchEntry } from "../globalSearch/model";
 import {
 	MAX_ENTITIES_PER_TYPE,
 	MAX_ENTITY_TYPES_PER_ORGANIZATION,
@@ -170,7 +171,11 @@ export const createEntity = mutation({
 				input.issues[0]?.message ?? "Enter valid entity details.",
 			);
 		}
-		await requireEntityType(ctx, workspace.organization._id, args.entityTypeId);
+		const entityType = await requireEntityType(
+			ctx,
+			workspace.organization._id,
+			args.entityTypeId,
+		);
 
 		const activeEntities = await ctx.db
 			.query("entities")
@@ -226,6 +231,18 @@ export const createEntity = mutation({
 			archivedAt: null,
 		});
 		await insertEntityFieldValues(ctx, entityId, values);
+		const globalSearchEntryId = await syncGlobalSearchEntry(ctx, undefined, {
+			organizationId: workspace.organization._id,
+			target: {
+				kind: "entity",
+				entityId,
+				entityTypeId: entityType._id,
+			},
+			identifier: input.output.identifier,
+			label: input.output.displayName,
+			descriptor: entityType.name,
+		});
+		await ctx.db.patch("entities", entityId, { globalSearchEntryId });
 		return entityId;
 	},
 });
