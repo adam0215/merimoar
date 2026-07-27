@@ -1,11 +1,47 @@
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { appendCaseEvent } from "./events";
 
 export const MAX_CASE_CONTACT_RELATIONS = 50;
 export const MAX_CASE_ENTITY_RELATIONS = 100;
 export const MAX_CASE_CASE_RELATIONS = 100;
+
+type DatabaseContext = Pick<MutationCtx | QueryCtx, "db">;
+
+function canonicalCasePair(
+	firstCaseId: Id<"cases">,
+	secondCaseId: Id<"cases">,
+) {
+	return firstCaseId < secondCaseId
+		? { caseId: firstCaseId, relatedCaseId: secondCaseId }
+		: { caseId: secondCaseId, relatedCaseId: firstCaseId };
+}
+
+export async function listActiveCaseRelations(
+	ctx: DatabaseContext,
+	caseId: Id<"cases">,
+) {
+	const [relationsByCaseId, relationsByRelatedCaseId] = await Promise.all([
+		ctx.db
+			.query("caseCaseRelations")
+			.withIndex("by_case_id_and_ended_at", (index) =>
+				index.eq("caseId", caseId).eq("endedAt", null),
+			)
+			.take(MAX_CASE_CASE_RELATIONS),
+		ctx.db
+			.query("caseCaseRelations")
+			.withIndex("by_related_case_id_and_ended_at", (index) =>
+				index.eq("relatedCaseId", caseId).eq("endedAt", null),
+			)
+			.take(MAX_CASE_CASE_RELATIONS),
+	]);
+
+	return [...relationsByCaseId, ...relationsByRelatedCaseId].slice(
+		0,
+		MAX_CASE_CASE_RELATIONS,
+	);
+}
 
 async function requireContact(
 	ctx: MutationCtx,
@@ -143,9 +179,9 @@ export async function insertInitialRelations(
 		});
 	}
 	for (const relatedCaseId of relatedCaseIds) {
+		const casePair = canonicalCasePair(caseId, relatedCaseId);
 		await ctx.db.insert("caseCaseRelations", {
-			caseId,
-			relatedCaseId,
+			...casePair,
 			startedAt,
 			endedAt: null,
 			addedByMemberId: actorMemberId,
@@ -343,12 +379,13 @@ export async function addRelatedCaseRelation(
 		organizationId,
 		relatedCaseId,
 	);
+	const casePair = canonicalCasePair(caseRecord._id, relatedCase._id);
 	const existing = await ctx.db
 		.query("caseCaseRelations")
 		.withIndex("by_case_id_and_related_case_id_and_ended_at", (index) =>
 			index
-				.eq("caseId", caseRecord._id)
-				.eq("relatedCaseId", relatedCase._id)
+				.eq("caseId", casePair.caseId)
+				.eq("relatedCaseId", casePair.relatedCaseId)
 				.eq("endedAt", null),
 		)
 		.unique();
@@ -356,12 +393,7 @@ export async function addRelatedCaseRelation(
 		return existing._id;
 	}
 
-	const activeRelations = await ctx.db
-		.query("caseCaseRelations")
-		.withIndex("by_case_id_and_ended_at", (index) =>
-			index.eq("caseId", caseRecord._id).eq("endedAt", null),
-		)
-		.take(MAX_CASE_CASE_RELATIONS);
+	const activeRelations = await listActiveCaseRelations(ctx, caseRecord._id);
 	if (activeRelations.length >= MAX_CASE_CASE_RELATIONS) {
 		throw new ConvexError({
 			code: "TOO_MANY_RELATIONS",
@@ -371,8 +403,7 @@ export async function addRelatedCaseRelation(
 
 	const now = Date.now();
 	const relationId = await ctx.db.insert("caseCaseRelations", {
-		caseId: caseRecord._id,
-		relatedCaseId: relatedCase._id,
+		...casePair,
 		startedAt: now,
 		endedAt: null,
 		addedByMemberId: actorMemberId,
@@ -382,6 +413,13 @@ export async function addRelatedCaseRelation(
 		ctx,
 		caseRecord,
 		`Added ${relatedCase.reference}: ${relatedCase.title} as a related case.`,
+		actorMemberId,
+		now,
+	);
+	await appendCaseEvent(
+		ctx,
+		relatedCase,
+		`Added ${caseRecord.reference}: ${caseRecord.title} as a related case.`,
 		actorMemberId,
 		now,
 	);
@@ -398,15 +436,22 @@ export async function removeRelatedCaseRelation(
 	if (!relation || relation.endedAt !== null) {
 		return;
 	}
-	const caseRecord = await ctx.db.get(relation.caseId);
-	if (!caseRecord || caseRecord.organizationId !== organizationId) {
+	const [firstCase, secondCase] = await Promise.all([
+		ctx.db.get(relation.caseId),
+		ctx.db.get(relation.relatedCaseId),
+	]);
+	if (
+		!firstCase ||
+		firstCase.organizationId !== organizationId ||
+		!secondCase ||
+		secondCase.organizationId !== organizationId
+	) {
 		throw new ConvexError({
 			code: "CASE_NOT_FOUND",
 			message: "The case could not be found.",
 		});
 	}
 
-	const relatedCase = await ctx.db.get(relation.relatedCaseId);
 	const now = Date.now();
 	await ctx.db.patch("caseCaseRelations", relation._id, {
 		endedAt: now,
@@ -414,12 +459,15 @@ export async function removeRelatedCaseRelation(
 	});
 	await appendCaseEvent(
 		ctx,
-		caseRecord,
-		`Removed ${
-			relatedCase
-				? `${relatedCase.reference}: ${relatedCase.title}`
-				: "a related case"
-		} from the case.`,
+		firstCase,
+		`Removed ${secondCase.reference}: ${secondCase.title} from the case.`,
+		actorMemberId,
+		now,
+	);
+	await appendCaseEvent(
+		ctx,
+		secondCase,
+		`Removed ${firstCase.reference}: ${firstCase.title} from the case.`,
 		actorMemberId,
 		now,
 	);

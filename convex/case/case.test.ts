@@ -161,7 +161,10 @@ describe("cases", () => {
 			relatedCaseIds: [relatedCaseId],
 		});
 
-		const detail = await actor.query(api.case.reader.get, { caseId });
+		const [detail, relatedDetail] = await Promise.all([
+			actor.query(api.case.reader.get, { caseId }),
+			actor.query(api.case.reader.get, { caseId: relatedCaseId }),
+		]);
 		expect(detail?.case).toMatchObject({
 			title: "Missing keys before possession",
 			ownerMemberId,
@@ -176,9 +179,13 @@ describe("cases", () => {
 			relation: { addedByMemberId: actorMemberId },
 			relatedCase: { _id: relatedCaseId },
 		});
+		expect(relatedDetail?.relatedCases[0]).toMatchObject({
+			relation: { addedByMemberId: actorMemberId },
+			relatedCase: { _id: caseId },
+		});
 	});
 
-	it("adds and removes a case relation without duplicates", async () => {
+	it("treats case relations as symmetric without creating reverse duplicates", async () => {
 		const { actor, actorMemberId, ownerMemberId, relatedCaseId } =
 			await createFixture();
 		const caseId = await actor.mutation(api.case.mutations.create, {
@@ -206,7 +213,30 @@ describe("cases", () => {
 				relatedCaseId,
 			},
 		);
+		const reverseDuplicateRelationId = await actor.mutation(
+			api.case.mutations.addCaseRelation,
+			{
+				caseId: relatedCaseId,
+				relatedCaseId: caseId,
+			},
+		);
 		expect(duplicateRelationId).toBe(relationId);
+		expect(reverseDuplicateRelationId).toBe(relationId);
+		const [caseDetailBeforeRemoval, relatedCaseDetailBeforeRemoval] =
+			await Promise.all([
+				actor.query(api.case.reader.get, { caseId }),
+				actor.query(api.case.reader.get, { caseId: relatedCaseId }),
+			]);
+		expect(
+			caseDetailBeforeRemoval?.relatedCases.map(
+				({ relatedCase }) => relatedCase?._id,
+			),
+		).toEqual([relatedCaseId]);
+		expect(
+			relatedCaseDetailBeforeRemoval?.relatedCases.map(
+				({ relatedCase }) => relatedCase?._id,
+			),
+		).toEqual([caseId]);
 		await expect(
 			actor.mutation(api.case.mutations.addCaseRelation, {
 				caseId,
@@ -218,12 +248,16 @@ describe("cases", () => {
 			relationId,
 		});
 
-		const [caseDetail, historicalRelation] = await Promise.all([
-			actor.query(api.case.reader.get, { caseId }),
-			actor.run(async (ctx) => ctx.db.get(relationId)),
-		]);
+		const [caseDetail, relatedCaseDetail, historicalRelation] =
+			await Promise.all([
+				actor.query(api.case.reader.get, { caseId }),
+				actor.query(api.case.reader.get, { caseId: relatedCaseId }),
+				actor.run(async (ctx) => ctx.db.get(relationId)),
+			]);
 		expect(caseDetail?.relatedCases).toHaveLength(0);
+		expect(relatedCaseDetail?.relatedCases).toHaveLength(0);
 		expect(caseDetail?.events[0]?.event.body).toContain("Removed CASE-RELATED");
+		expect(relatedCaseDetail?.events[0]?.event.body).toContain("Removed CASE-");
 		expect(historicalRelation).toMatchObject({
 			endedAt: expect.any(Number),
 			removedByMemberId: actorMemberId,

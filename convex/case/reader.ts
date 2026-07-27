@@ -10,7 +10,7 @@ import {
 } from "../entity/constants";
 import { getWorkosUser } from "../workos";
 import {
-	MAX_CASE_CASE_RELATIONS,
+	listActiveCaseRelations,
 	MAX_CASE_CONTACT_RELATIONS,
 	MAX_CASE_ENTITY_RELATIONS,
 } from "./relations";
@@ -108,12 +108,7 @@ export const get = query({
 			return null;
 		}
 
-		const caseRelationsPromise = ctx.db
-			.query("caseCaseRelations")
-			.withIndex("by_case_id_and_ended_at", (index) =>
-				index.eq("caseId", caseRecord._id).eq("endedAt", null),
-			)
-			.take(MAX_CASE_CASE_RELATIONS);
+		const caseRelationsPromise = listActiveCaseRelations(ctx, caseRecord._id);
 
 		const [owner, events, contactRelations, entityRelations] =
 			await Promise.all([
@@ -144,7 +139,11 @@ export const get = query({
 		const relatedCasesPromise = Promise.all(
 			caseRelations.map(async (relation) => ({
 				relation,
-				relatedCase: await ctx.db.get(relation.relatedCaseId),
+				relatedCase: await ctx.db.get(
+					relation.caseId === caseRecord._id
+						? relation.relatedCaseId
+						: relation.caseId,
+				),
 			})),
 		);
 
