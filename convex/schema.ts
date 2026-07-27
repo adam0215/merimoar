@@ -1,7 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { caseStatusValidator } from "./case/model";
-import { emailParticipantValidator } from "./email/model";
+import {
+	emailIngestFailureKindValidator,
+	emailIngestStatusValidator,
+	emailParticipantValidator,
+} from "./email/model";
 import { entityFieldTypeValidator, entityIconValidator } from "./entity/model";
 import { globalSearchTargetValidator } from "./globalSearch/model";
 
@@ -288,21 +292,33 @@ export default defineSchema({
 		externalEventId: v.string(),
 		externalMessageId: v.string(),
 		eventType: v.string(),
-		status: v.union(
-			v.literal("pending"),
-			v.literal("processed"),
-			v.literal("failed"),
-			v.literal("ignored"),
-		),
+		status: emailIngestStatusValidator,
 		rawPayload: v.string(),
 		receivedAt: v.number(),
 		processedAt: v.optional(v.number()),
 		error: v.optional(v.string()),
+		failureKind: v.optional(emailIngestFailureKindValidator),
 		attempts: v.number(),
+		replayCount: v.optional(v.number()),
+		processingGeneration: v.optional(v.number()),
+		workId: v.optional(v.string()),
 	})
 		.index("by_external_event_id", ["externalEventId"])
 		.index("by_connection_id_and_external_message_id", [
 			"connectionId",
 			"externalMessageId",
+		]),
+
+	emailIngestRecipients: defineTable({
+		eventId: v.id("emailIngestEvents"),
+		address: v.string(),
+		status: emailIngestStatusValidator,
+		receivedAt: v.number(),
+	})
+		.index("by_event_id_and_address", ["eventId", "address"])
+		.index("by_address_and_status_and_received_at", [
+			"address",
+			"status",
+			"receivedAt",
 		]),
 });

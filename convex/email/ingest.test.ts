@@ -43,10 +43,12 @@ describe("inbound email ingestion", () => {
 				externalEventId: "event-1",
 				externalMessageId: firstEmail.externalMessageId,
 				eventType: "email.received",
-				status: "pending",
+				status: "queued",
 				rawPayload: "{}",
 				receivedAt: 1_100,
 				attempts: 0,
+				replayCount: 0,
+				processingGeneration: 0,
 			});
 			return { connectionId, firstEventId };
 		});
@@ -55,6 +57,7 @@ describe("inbound email ingestion", () => {
 			internal.email.ingest.storeInboundEmail,
 			{
 				eventId: firstEventId,
+				processingGeneration: 0,
 				email: firstEmail,
 			},
 		);
@@ -65,16 +68,19 @@ describe("inbound email ingestion", () => {
 				externalEventId: "event-2",
 				externalMessageId: "resend-message-2",
 				eventType: "email.received",
-				status: "pending",
+				status: "queued",
 				rawPayload: "{}",
 				receivedAt: 2_100,
 				attempts: 0,
+				replayCount: 0,
+				processingGeneration: 0,
 			}),
 		);
 		const secondMessageId = await t.mutation(
 			internal.email.ingest.storeInboundEmail,
 			{
 				eventId: secondEventId,
+				processingGeneration: 0,
 				email: {
 					...firstEmail,
 					externalMessageId: "resend-message-2",
@@ -95,16 +101,19 @@ describe("inbound email ingestion", () => {
 				externalEventId: "event-3",
 				externalMessageId: "resend-message-2",
 				eventType: "email.received",
-				status: "pending",
+				status: "queued",
 				rawPayload: "{}",
 				receivedAt: 2_200,
 				attempts: 0,
+				replayCount: 0,
+				processingGeneration: 0,
 			}),
 		);
 		const duplicateMessageId = await t.mutation(
 			internal.email.ingest.storeInboundEmail,
 			{
 				eventId: duplicateEventId,
+				processingGeneration: 0,
 				email: {
 					...firstEmail,
 					externalMessageId: "resend-message-2",
@@ -195,10 +204,12 @@ describe("inbound email ingestion", () => {
 				externalEventId: "duplicate-event",
 				externalMessageId: firstEmail.externalMessageId,
 				eventType: "email.received",
-				status: "pending",
+				status: "queued",
 				rawPayload: "{}",
 				receivedAt: firstEmail.receivedAt,
 				attempts: 0,
+				replayCount: 0,
+				processingGeneration: 0,
 			});
 			return { eventId, existingMessageId };
 		});
@@ -206,6 +217,7 @@ describe("inbound email ingestion", () => {
 		expect(
 			await t.mutation(internal.email.ingest.storeInboundEmail, {
 				eventId,
+				processingGeneration: 0,
 				email: firstEmail,
 			}),
 		).toBe(existingMessageId);
@@ -273,9 +285,11 @@ describe("inbound email ingestion", () => {
 					ctx.db.insert("emailIngestEvents", {
 						...event,
 						eventType: "email.received",
-						status: "pending",
+						status: "queued",
 						rawPayload: "{}",
 						attempts: 0,
+						replayCount: 0,
+						processingGeneration: 0,
 					}),
 				),
 			);
@@ -318,6 +332,7 @@ describe("inbound email ingestion", () => {
 			}
 			await t.mutation(internal.email.ingest.storeInboundEmail, {
 				eventId,
+				processingGeneration: 0,
 				email,
 			});
 		}
@@ -369,10 +384,12 @@ describe("inbound email ingestion", () => {
 						externalEventId,
 						externalMessageId: `provider-message-${index + 1}`,
 						eventType: "email.received",
-						status: "pending",
+						status: "queued",
 						rawPayload: "{}",
 						receivedAt: 3_000 + index,
 						attempts: 0,
+						replayCount: 0,
+						processingGeneration: 0,
 					}),
 				),
 			);
@@ -382,6 +399,7 @@ describe("inbound email ingestion", () => {
 		for (const [index, eventId] of eventIds.entries()) {
 			await t.mutation(internal.email.ingest.storeInboundEmail, {
 				eventId,
+				processingGeneration: 0,
 				email: {
 					...firstEmail,
 					externalMessageId: `provider-message-${index + 1}`,

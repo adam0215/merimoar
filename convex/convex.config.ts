@@ -1,4 +1,6 @@
+import migrations from "@convex-dev/migrations/convex.config";
 import workOSAuthKit from "@convex-dev/workos-authkit/convex.config";
+import workpool from "@convex-dev/workpool/convex.config";
 import { defineApp } from "convex/server";
 import { v } from "convex/values";
 
@@ -14,5 +16,7 @@ const app = defineApp({
 });
 
 app.use(workOSAuthKit);
+app.use(migrations);
+app.use(workpool, { name: "emailIngestWorkpool" });
 
 export default app;

@@ -23,6 +23,23 @@ export const normalizedInboundEmailValidator = v.object({
 	receivedAt: v.number(),
 });
 
+export const emailIngestStatusValidator = v.union(
+	v.literal("pending"),
+	v.literal("ignored"),
+	v.literal("unroutable"),
+	v.literal("queued"),
+	v.literal("processed"),
+	v.literal("failed"),
+);
+
+export const emailIngestFailureKindValidator = v.union(
+	v.literal("unroutable"),
+	v.literal("provider"),
+	v.literal("configuration"),
+	v.literal("connection"),
+	v.literal("unknown"),
+);
+
 export type EmailParticipant = Infer<typeof emailParticipantValidator>;
 export type NormalizedInboundEmail = Infer<
 	typeof normalizedInboundEmailValidator
