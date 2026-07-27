@@ -6,6 +6,18 @@ This is a new project that has no users and no requirements for backwards compat
 
 This also means you don't have to write regression tests. Instead focus on writing good correct tests that test both real world positive and negative/adversarial scenarios.
 
+## Code principles
+
+- Function names should always signal the intent of the function.
+
+## Use and trust Typescript and the compiler
+
+Trust Typescript and the compiler. Don't write a bunch of extra code to double check the compiler or data types. Only double check data in situations where the compiler cannot possibly infer the correct data type. Make use of the type system instead of fighting against it or designing in parallel to it.
+
+## UI/UX, styling and design
+
+Always refer to instructions in the DESIGN.md when implementing UI. Then use existing UI and styles as a reference above that.
+
 ## Task Completion Requirements
 
 - Run verifications using the `bun run check / check:write` and `bun run test` commands. Keep local verification focused on the files and packages changed. Run the smallest relevant test set; do not run the full workspace test suite as a routine completion step.
