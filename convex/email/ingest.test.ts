@@ -172,6 +172,7 @@ describe("inbound email ingestion", () => {
 					status: "active",
 				});
 				const threadId = await ctx.db.insert("emailThreads", {
+					organizationId,
 					connectionId,
 					lastActivityAt: firstEmail.receivedAt,
 				});

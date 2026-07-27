@@ -7,7 +7,7 @@ import { createTest, syncWorkosUser } from "../test.setup";
 const ISSUER = "https://api.workos.com/";
 
 describe("email reader authorization", () => {
-	it("derives the workspace from the actor and rejects cross-tenant inboxes", async () => {
+	it("lists every workspace thread across connections and excludes other organizations", async () => {
 		const base = createTest();
 		await Promise.all([
 			syncWorkosUser(base, {
@@ -21,52 +21,77 @@ describe("email reader authorization", () => {
 				email: "other@example.com",
 			}),
 		]);
-		const { ownConnectionId, otherConnectionId, otherThreadId } =
-			await base.run(async (ctx) => {
-				const organizationId = await ctx.db.insert("organizations", {
-					name: "Merimoar",
-					workosOrganizationId: "org_merimoar",
-					active: true,
-				});
-				const otherOrganizationId = await ctx.db.insert("organizations", {
-					name: "Other",
-					workosOrganizationId: "org_other",
-					active: true,
-				});
-				await ctx.db.insert("organizationMembers", {
-					organizationId,
-					workosUserId: "user_adam",
-					active: true,
-				});
-				await ctx.db.insert("organizationMembers", {
-					organizationId: otherOrganizationId,
-					workosUserId: "user_other",
-					active: true,
-				});
-				const ownConnectionId = await ctx.db.insert("emailConnections", {
-					organizationId,
-					provider: "resend",
-					displayName: "Support",
-					address: "support@merimoar.test",
-					status: "active",
-				});
-				const otherConnectionId = await ctx.db.insert("emailConnections", {
-					organizationId: otherOrganizationId,
-					provider: "resend",
-					displayName: "Other",
-					address: "inbox@other.test",
-					status: "active",
-				});
-				await ctx.db.insert("emailThreads", {
-					connectionId: ownConnectionId,
-					lastActivityAt: 1_000,
-				});
-				const otherThreadId = await ctx.db.insert("emailThreads", {
-					connectionId: otherConnectionId,
-					lastActivityAt: 2_000,
-				});
-				return { ownConnectionId, otherConnectionId, otherThreadId };
+		const {
+			firstConnectionId,
+			secondConnectionId,
+			firstThreadId,
+			secondThreadId,
+			otherThreadId,
+		} = await base.run(async (ctx) => {
+			const organizationId = await ctx.db.insert("organizations", {
+				name: "Merimoar",
+				workosOrganizationId: "org_merimoar",
+				active: true,
 			});
+			const otherOrganizationId = await ctx.db.insert("organizations", {
+				name: "Other",
+				workosOrganizationId: "org_other",
+				active: true,
+			});
+			await ctx.db.insert("organizationMembers", {
+				organizationId,
+				workosUserId: "user_adam",
+				active: true,
+			});
+			await ctx.db.insert("organizationMembers", {
+				organizationId: otherOrganizationId,
+				workosUserId: "user_other",
+				active: true,
+			});
+			const firstConnectionId = await ctx.db.insert("emailConnections", {
+				organizationId,
+				provider: "resend",
+				displayName: "Support",
+				address: "support@merimoar.test",
+				status: "active",
+			});
+			const secondConnectionId = await ctx.db.insert("emailConnections", {
+				organizationId,
+				provider: "resend",
+				displayName: "Operations",
+				address: "operations@merimoar.test",
+				status: "active",
+			});
+			const otherConnectionId = await ctx.db.insert("emailConnections", {
+				organizationId: otherOrganizationId,
+				provider: "resend",
+				displayName: "Other",
+				address: "inbox@other.test",
+				status: "active",
+			});
+			const firstThreadId = await ctx.db.insert("emailThreads", {
+				organizationId,
+				connectionId: firstConnectionId,
+				lastActivityAt: 1_000,
+			});
+			const secondThreadId = await ctx.db.insert("emailThreads", {
+				organizationId,
+				connectionId: secondConnectionId,
+				lastActivityAt: 3_000,
+			});
+			const otherThreadId = await ctx.db.insert("emailThreads", {
+				organizationId: otherOrganizationId,
+				connectionId: otherConnectionId,
+				lastActivityAt: 2_000,
+			});
+			return {
+				firstConnectionId,
+				secondConnectionId,
+				firstThreadId,
+				secondThreadId,
+				otherThreadId,
+			};
+		});
 		const actor = base.withIdentity({
 			issuer: ISSUER,
 			subject: "user_adam",
@@ -75,22 +100,16 @@ describe("email reader authorization", () => {
 
 		const connections = await actor.query(api.email.reader.listConnections, {});
 		expect(connections.map((connection) => connection._id)).toEqual([
-			ownConnectionId,
+			firstConnectionId,
+			secondConnectionId,
 		]);
-		expect(
-			await actor.query(api.email.reader.listThreads, {
-				connectionId: ownConnectionId,
-				paginationOpts: { numItems: 10, cursor: null },
-			}),
-		).toMatchObject({
-			page: [expect.objectContaining({ thread: expect.anything() })],
+		const threads = await actor.query(api.email.reader.listThreads, {
+			paginationOpts: { numItems: 10, cursor: null },
 		});
-		await expect(
-			actor.query(api.email.reader.listThreads, {
-				connectionId: otherConnectionId,
-				paginationOpts: { numItems: 10, cursor: null },
-			}),
-		).rejects.toThrow("not found");
+		expect(threads.page.map(({ thread }) => thread._id)).toEqual([
+			secondThreadId,
+			firstThreadId,
+		]);
 		expect(
 			await actor.query(api.email.reader.getThread, {
 				threadId: otherThreadId,
@@ -103,6 +122,11 @@ describe("email reader authorization", () => {
 		).toBeNull();
 		await expect(
 			base.query(api.email.reader.listConnections, {}),
+		).rejects.toThrow("Sign in");
+		await expect(
+			base.query(api.email.reader.listThreads, {
+				paginationOpts: { numItems: 10, cursor: null },
+			}),
 		).rejects.toThrow("Sign in");
 	});
 });

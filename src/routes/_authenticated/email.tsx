@@ -22,23 +22,13 @@ const preloadInitialEmailPage = createServerFn({ method: "GET" })
 	.validator((input: { selectedThreadId?: string }) => input)
 	.handler(async ({ data }) => {
 		const client = await createAuthenticatedConvexHttpClient();
-		const connections = await client.query(
-			api.email.reader.listConnections,
-			{},
-		);
-		const activeConnection = connections.find(
-			(connection) => connection.status === "active",
-		);
 		const [threads, selectedThread] = await Promise.all([
-			activeConnection
-				? client.query(api.email.reader.listThreads, {
-						connectionId: activeConnection._id,
-						paginationOpts: {
-							cursor: null,
-							numItems: 30,
-						},
-					})
-				: null,
+			client.query(api.email.reader.listThreads, {
+				paginationOpts: {
+					cursor: null,
+					numItems: 30,
+				},
+			}),
 			data.selectedThreadId
 				? client.query(api.email.reader.getThread, {
 						threadId: data.selectedThreadId,
@@ -47,8 +37,6 @@ const preloadInitialEmailPage = createServerFn({ method: "GET" })
 		]);
 
 		return {
-			activeConnectionId: activeConnection?._id,
-			connections,
 			selectedThread,
 			selectedThreadId: data.selectedThreadId,
 			threads,
@@ -68,18 +56,13 @@ function EmailPage() {
 	const prefetched = Route.useLoaderData();
 	const { thread: selectedThreadId } = Route.useSearch();
 	const [isCompact, setIsCompact] = useState(false);
-	const liveConnections = useQuery(api.email.reader.listConnections, {});
-	const connections = liveConnections ?? prefetched.connections;
-	const activeConnection = connections?.find(
-		(connection) => connection.status === "active",
-	);
 	const {
 		results: liveThreads,
 		status: liveThreadStatus,
 		loadMore,
 	} = usePaginatedQuery(
 		api.email.reader.listThreads,
-		activeConnection ? { connectionId: activeConnection._id } : "skip",
+		{},
 		{ initialNumItems: 30 },
 	);
 	const liveSelectedThread = useQuery(
@@ -93,18 +76,13 @@ function EmailPage() {
 		? prefetched.selectedThread
 		: liveSelectedThread;
 	const prefetchedThreads =
-		liveThreadStatus === "LoadingFirstPage" &&
-		activeConnection?._id === prefetched.activeConnectionId
-			? prefetched.threads
-			: null;
+		liveThreadStatus === "LoadingFirstPage" ? prefetched.threads : null;
 	const threads = prefetchedThreads ? prefetchedThreads.page : liveThreads;
-	const threadStatus = activeConnection
-		? prefetchedThreads
-			? prefetchedThreads.isDone
-				? "Exhausted"
-				: "CanLoadMore"
-			: liveThreadStatus
-		: "Exhausted";
+	const threadStatus = prefetchedThreads
+		? prefetchedThreads.isDone
+			? "Exhausted"
+			: "CanLoadMore"
+		: liveThreadStatus;
 
 	return (
 		<div className="grid h-full min-h-0 overflow-hidden md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]">

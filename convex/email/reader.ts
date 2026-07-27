@@ -18,23 +18,14 @@ export const listConnections = query({
 
 export const listThreads = query({
 	args: {
-		connectionId: v.id("emailConnections"),
 		paginationOpts: paginationOptsValidator,
 	},
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
-		const connection = await ctx.db.get(args.connectionId);
-		if (
-			!connection ||
-			connection.organizationId !== workspace.organization._id
-		) {
-			throw new Error("Email connection not found");
-		}
-
 		const result = await ctx.db
 			.query("emailThreads")
-			.withIndex("by_connection_id_and_last_activity_at", (query) =>
-				query.eq("connectionId", args.connectionId),
+			.withIndex("by_organization_id_and_last_activity_at", (query) =>
+				query.eq("organizationId", workspace.organization._id),
 			)
 			.order("desc")
 			.paginate(args.paginationOpts);
@@ -66,7 +57,7 @@ export const getThread = query({
 			return null;
 		}
 		const thread = await ctx.db.get(threadId);
-		if (!thread) {
+		if (!thread || thread.organizationId !== workspace.organization._id) {
 			return null;
 		}
 
@@ -81,10 +72,7 @@ export const getThread = query({
 				.take(100),
 		]);
 
-		if (
-			!connection ||
-			connection.organizationId !== workspace.organization._id
-		) {
+		if (!connection) {
 			return null;
 		}
 

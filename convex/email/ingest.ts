@@ -206,6 +206,7 @@ export const storeInboundEmail = internalMutation({
 
 		if (!thread) {
 			const threadId = await ctx.db.insert("emailThreads", {
+				organizationId: connection.organizationId,
 				connectionId: event.connectionId,
 				externalThreadId: args.email.externalThreadId,
 				lastActivityAt: args.email.receivedAt,

@@ -9,6 +9,11 @@ import {
 	SidebarTrigger,
 	useSidebar,
 } from "#/components/ui/sidebar.tsx";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../convex/_generated/api";
 
@@ -36,9 +41,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 		select: (state) => state.location.pathname,
 	});
 	const connections = useQuery(api.email.reader.listConnections, {});
-	const activeConnection = connections?.find(
-		(connection) => connection.status === "active",
-	);
+	const connectionAddresses =
+		connections
+			?.filter((connection) => connection.status === "active")
+			.map((connection) => connection.address) ?? [];
 
 	return (
 		<SidebarProvider className="app-shell-enter pt-14">
@@ -46,7 +52,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 			<AppSidebar />
 			<AppHeader
 				pathname={pathname}
-				connectionAddress={activeConnection?.address}
+				connectionAddresses={connectionAddresses}
 			/>
 			<SidebarInset className="h-[calc(100svh-3.5rem)] min-h-0 overflow-hidden">
 				{children}
@@ -57,10 +63,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function AppHeader({
 	pathname,
-	connectionAddress,
+	connectionAddresses,
 }: {
 	pathname: string;
-	connectionAddress?: string;
+	connectionAddresses: string[];
 }) {
 	const { state } = useSidebar();
 
@@ -90,13 +96,51 @@ function AppHeader({
 			>
 				<div className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
 					<p className="text-sm font-medium">{getPageTitle(pathname)}</p>
-					{pathname === "/email" && connectionAddress && (
-						<p className="truncate text-xs text-muted-foreground">
-							{connectionAddress}
-						</p>
+					{pathname === "/email" && (
+						<ConnectionAddressSummary addresses={connectionAddresses} />
 					)}
 				</div>
 			</div>
 		</header>
+	);
+}
+
+function ConnectionAddressSummary({ addresses }: { addresses: string[] }) {
+	const firstAddress = addresses[0];
+	if (!firstAddress) {
+		return null;
+	}
+
+	if (addresses.length === 1) {
+		return (
+			<p className="truncate text-xs text-muted-foreground">{firstAddress}</p>
+		);
+	}
+
+	const summary = `${firstAddress} and ${addresses.length - 1} more`;
+
+	return (
+		<Tooltip>
+			<TooltipTrigger
+				render={
+					<button
+						type="button"
+						className="max-w-full truncate text-left text-xs text-muted-foreground"
+						aria-label={`Active email connections: ${addresses.join(", ")}`}
+					/>
+				}
+			>
+				{summary}
+			</TooltipTrigger>
+			<TooltipContent
+				side="bottom"
+				align="start"
+				className="flex-col items-start"
+			>
+				{addresses.map((address) => (
+					<span key={address}>{address}</span>
+				))}
+			</TooltipContent>
+		</Tooltip>
 	);
 }

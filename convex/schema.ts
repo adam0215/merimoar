@@ -23,18 +23,19 @@ export default defineSchema({
 		.index("by_address", ["address"]),
 
 	emailThreads: defineTable({
+		organizationId: v.id("organizations"),
 		connectionId: v.id("emailConnections"),
 		externalThreadId: v.optional(v.string()),
 		latestMessageId: v.optional(v.id("emailMessages")),
 		lastActivityAt: v.number(),
 	})
+		.index("by_organization_id_and_last_activity_at", [
+			"organizationId",
+			"lastActivityAt",
+		])
 		.index("by_connection_id_and_external_thread_id", [
 			"connectionId",
 			"externalThreadId",
-		])
-		.index("by_connection_id_and_last_activity_at", [
-			"connectionId",
-			"lastActivityAt",
 		]),
 
 	contacts: defineTable({

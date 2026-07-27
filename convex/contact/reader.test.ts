@@ -70,6 +70,7 @@ describe("contact reader", () => {
 					status: "active",
 				});
 				const threadId = await ctx.db.insert("emailThreads", {
+					organizationId,
 					connectionId,
 					lastActivityAt: 3_000,
 				});
