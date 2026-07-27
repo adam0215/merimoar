@@ -66,15 +66,17 @@ export function RemoveEmailConnectionDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger asChild>
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					className="text-muted-foreground hover:text-destructive"
-					aria-label={`Remove ${displayName}`}
-				>
-					<IconTrash />
-				</Button>
+			<DialogTrigger
+				render={
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						className="text-muted-foreground hover:text-destructive"
+						aria-label={`Remove ${displayName}`}
+					/>
+				}
+			>
+				<IconTrash />
 			</DialogTrigger>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
@@ -110,10 +112,10 @@ export function RemoveEmailConnectionDialog({
 				</form>
 
 				<DialogFooter>
-					<DialogClose asChild>
-						<Button variant="ghost" disabled={isSubmitting}>
-							Cancel
-						</Button>
+					<DialogClose
+						render={<Button variant="ghost" disabled={isSubmitting} />}
+					>
+						Cancel
 					</DialogClose>
 					<Button
 						type="submit"

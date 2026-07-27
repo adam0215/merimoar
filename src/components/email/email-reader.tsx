@@ -256,7 +256,10 @@ export function ThreadView({
 	}
 
 	return (
-		<ScrollArea className="h-full" viewportClassName="overscroll-none">
+		<ScrollArea
+			className="h-full"
+			viewportProps={{ className: "overscroll-none" }}
+		>
 			<div className="w-full px-5 pt-5 pb-7 md:px-8 md:pt-7 md:pb-9">
 				<div className="divide-y">
 					{thread.messages.map((message) => (
@@ -269,21 +272,26 @@ export function ThreadView({
 												{participantLabel(message.from)}
 											</p>
 											<Tooltip>
-												<TooltipTrigger asChild>
-													<Button
-														asChild
-														variant="ghost"
-														size="icon-xs"
-														className="text-muted-foreground"
-													>
-														<Link
-															to="/contacts"
-															search={{ contact: message.senderContactId }}
-															aria-label={`Open contact ${participantLabel(message.from)}`}
-														>
-															<IconAddressBook />
-														</Link>
-													</Button>
+												<TooltipTrigger
+													render={
+														<Button
+															nativeButton={false}
+															variant="ghost"
+															size="icon-xs"
+															className="text-muted-foreground"
+															render={
+																<Link
+																	to="/contacts"
+																	search={{
+																		contact: message.senderContactId,
+																	}}
+																	aria-label={`Open contact ${participantLabel(message.from)}`}
+																/>
+															}
+														/>
+													}
+												>
+													<IconAddressBook />
 												</TooltipTrigger>
 												<TooltipContent side="top">Open contact</TooltipContent>
 											</Tooltip>

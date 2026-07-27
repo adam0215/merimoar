@@ -136,11 +136,9 @@ export function CreateEntityDialog({
 				setOpen(nextOpen);
 			}}
 		>
-			<DialogTrigger asChild>
-				<Button size="sm">
-					<IconPlus />
-					New
-				</Button>
+			<DialogTrigger render={<Button size="sm" />}>
+				<IconPlus />
+				New
 			</DialogTrigger>
 			<DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-xl">
 				<DialogHeader>
@@ -205,13 +203,7 @@ export function CreateEntityDialog({
 									</FieldLabel>
 									<Input
 										id={`entity-field-${field._id}`}
-										type={
-											field.valueType === "number"
-												? "number"
-												: field.valueType === "date"
-													? "date"
-													: "text"
-										}
+										type={field.valueType === "number" ? "number" : "text"}
 										value={textValues[field._id] ?? ""}
 										onChange={(event) =>
 											setTextValues((current) => ({
@@ -271,24 +263,26 @@ function EntityDateFieldInput({
 				{field.required && <span className="text-destructive">*</span>}
 			</FieldLabel>
 			<Popover open={open} onOpenChange={setOpen}>
-				<PopoverTrigger asChild>
-					<Button
-						type="button"
-						variant="outline"
-						className={cn(
-							"w-full justify-start text-left font-normal",
-							!selectedDate && "text-muted-foreground",
-						)}
-					>
-						<IconCalendar />
-						{selectedDate
-							? selectedDate.toLocaleDateString(undefined, {
-									year: "numeric",
-									month: "long",
-									day: "numeric",
-								})
-							: "Select date"}
-					</Button>
+				<PopoverTrigger
+					render={
+						<Button
+							type="button"
+							variant="outline"
+							className={cn(
+								"w-full justify-start text-left font-normal",
+								!selectedDate && "text-muted-foreground",
+							)}
+						/>
+					}
+				>
+					<IconCalendar />
+					{selectedDate
+						? selectedDate.toLocaleDateString(undefined, {
+								year: "numeric",
+								month: "long",
+								day: "numeric",
+							})
+						: "Select date"}
 				</PopoverTrigger>
 				<PopoverContent align="start" className="w-auto gap-0 p-0">
 					<Calendar
@@ -360,6 +354,11 @@ function BooleanFieldInput({
 		<Field>
 			<FieldLabel>{field.label}</FieldLabel>
 			<Select
+				items={[
+					{ value: "unset", label: "Not set" },
+					{ value: "yes", label: "Yes" },
+					{ value: "no", label: "No" },
+				]}
 				value={value === undefined ? "unset" : value ? "yes" : "no"}
 				onValueChange={(nextValue) =>
 					onChange(

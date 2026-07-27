@@ -167,15 +167,17 @@ export function CreateCaseDialog({
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger asChild>
-				<button
-					type="button"
-					className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50"
-					aria-label="Create case"
-					title="Create case"
-				>
-					<IconPlus className="size-5" />
-				</button>
+			<DialogTrigger
+				render={
+					<button
+						type="button"
+						className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50"
+						aria-label="Create case"
+						title="Create case"
+					/>
+				}
+			>
+				<IconPlus className="size-5" />
 			</DialogTrigger>
 			<DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-2xl">
 				<DialogHeader>
@@ -208,7 +210,21 @@ export function CreateCaseDialog({
 						<div className="grid gap-5 sm:grid-cols-2">
 							<Field>
 								<FieldLabel>Owner</FieldLabel>
-								<Select value={ownerMemberId} onValueChange={setOwnerMemberId}>
+								<Select
+									items={[
+										{ value: "unassigned", label: "Unassigned" },
+										...(options?.members ?? []).map((member) => ({
+											value: member._id,
+											label: member.name,
+										})),
+									]}
+									value={ownerMemberId}
+									onValueChange={(value) => {
+										if (value !== null) {
+											setOwnerMemberId(value);
+										}
+									}}
+								>
 									<SelectTrigger className="w-full">
 										<SelectValue />
 									</SelectTrigger>

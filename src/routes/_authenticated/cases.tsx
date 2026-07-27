@@ -107,11 +107,14 @@ function CasesPage() {
 			>
 				<div className="flex h-full min-h-0 flex-col">
 					<div className="flex h-12 shrink-0 items-center border-b px-3 md:hidden">
-						<Button asChild variant="ghost" size="sm">
-							<Link to="/cases" search={{}}>
-								<IconArrowLeft />
-								Back to cases
-							</Link>
+						<Button
+							nativeButton={false}
+							variant="ghost"
+							size="sm"
+							render={<Link to="/cases" search={{}} />}
+						>
+							<IconArrowLeft />
+							Back to cases
 						</Button>
 					</div>
 					<div className="min-h-0 flex-1">

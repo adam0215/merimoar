@@ -1,5 +1,3 @@
-"use client";
-
 import { cva, type VariantProps } from "class-variance-authority";
 import { useMemo } from "react";
 import { Label } from "#/components/ui/label.tsx";
@@ -72,9 +70,9 @@ function Field({
 	className,
 	orientation = "vertical",
 	...props
-}: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
+}: React.ComponentProps<"fieldset"> & VariantProps<typeof fieldVariants>) {
 	return (
-		<div
+		<fieldset
 			data-slot="field"
 			data-orientation={orientation}
 			className={cn(fieldVariants({ orientation }), className)}

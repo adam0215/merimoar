@@ -104,15 +104,14 @@ function ContactsPage() {
 			: "skip",
 		{ initialNumItems: 20 },
 	);
-	const canUsePrefetchedMessages =
+	const prefetchedMessages =
 		liveMessageStatus === "LoadingFirstPage" &&
-		selectedContactId === prefetched.selectedContactId &&
-		prefetched.messages !== null;
-	const messages = canUsePrefetchedMessages
-		? prefetched.messages.page
-		: liveMessages;
-	const messageStatus = canUsePrefetchedMessages
-		? prefetched.messages.isDone
+		selectedContactId === prefetched.selectedContactId
+			? prefetched.messages
+			: null;
+	const messages = prefetchedMessages ? prefetchedMessages.page : liveMessages;
+	const messageStatus = prefetchedMessages
+		? prefetchedMessages.isDone
 			? "Exhausted"
 			: "CanLoadMore"
 		: liveMessageStatus;
@@ -125,7 +124,10 @@ function ContactsPage() {
 					selectedContactId && "hidden md:block",
 				)}
 			>
-				<ScrollArea className="h-full" viewportClassName="overscroll-none">
+				<ScrollArea
+					className="h-full"
+					viewportProps={{ className: "overscroll-none" }}
+				>
 					<ContactList
 						contacts={contacts}
 						selectedContactId={selectedContactId}
@@ -147,11 +149,14 @@ function ContactsPage() {
 			>
 				<div className="flex h-full min-h-0 flex-col">
 					<div className="flex h-12 shrink-0 items-center border-b px-3 md:hidden">
-						<Button asChild variant="ghost" size="sm">
-							<Link to="/contacts" search={{}}>
-								<IconArrowLeft />
-								Back to contacts
-							</Link>
+						<Button
+							nativeButton={false}
+							variant="ghost"
+							size="sm"
+							render={<Link to="/contacts" search={{}} />}
+						>
+							<IconArrowLeft />
+							Back to contacts
 						</Button>
 					</div>
 					<div className="min-h-0 flex-1">

@@ -55,37 +55,32 @@ export function AppSidebar() {
 						<SidebarMenu>
 							<SidebarMenuItem>
 								<SidebarMenuButton
-									asChild
 									isActive={casesIsActive}
 									tooltip="Cases"
 									className={
 										casesIsActive ? "text-foreground" : "text-muted-foreground"
 									}
+									render={<Link to="/cases" search={{}} />}
 								>
-									<Link to="/cases" search={{}}>
-										<CasesIcon />
-										<span>Cases</span>
-									</Link>
+									<CasesIcon />
+									<span>Cases</span>
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 							<SidebarMenuItem>
 								<SidebarMenuButton
-									asChild
 									isActive={emailIsActive}
 									tooltip="Email"
 									className={
 										emailIsActive ? "text-foreground" : "text-muted-foreground"
 									}
+									render={<Link to="/email" search={{}} />}
 								>
-									<Link to="/email" search={{}}>
-										<MailIcon />
-										<span>Email</span>
-									</Link>
+									<MailIcon />
+									<span>Email</span>
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 							<SidebarMenuItem>
 								<SidebarMenuButton
-									asChild
 									isActive={contactsIsActive}
 									tooltip="Contacts"
 									className={
@@ -93,11 +88,10 @@ export function AppSidebar() {
 											? "text-foreground"
 											: "text-muted-foreground"
 									}
+									render={<Link to="/contacts" search={{}} />}
 								>
-									<Link to="/contacts" search={{}}>
-										<IconAddressBook />
-										<span>Contacts</span>
-									</Link>
+									<IconAddressBook />
+									<span>Contacts</span>
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 						</SidebarMenu>
@@ -111,64 +105,61 @@ export function AppSidebar() {
 					<SidebarGroupContent>
 						<SidebarMenu>
 							<Collapsible
-								asChild
 								defaultOpen={settingsIsActive}
-								className="group/collapsible"
+								render={<SidebarMenuItem />}
 							>
-								<SidebarMenuItem>
-									<CollapsibleTrigger asChild>
+								<CollapsibleTrigger
+									render={
 										<SidebarMenuButton
 											tooltip="Organization"
 											isActive={settingsIsActive}
 											className={
 												settingsIsActive
-													? "text-foreground"
-													: "text-muted-foreground"
+													? "group/collapsible text-foreground"
+													: "group/collapsible text-muted-foreground"
 											}
-										>
-											<SettingsIcon />
-											<span>Organization</span>
-											<IconChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
-										</SidebarMenuButton>
-									</CollapsibleTrigger>
-									<CollapsibleContent>
-										<SidebarMenuSub>
-											<SidebarMenuSubItem>
-												<SidebarMenuSubButton
-													asChild
-													isActive={settingsEntitiesIsActive}
-													className={
-														settingsEntitiesIsActive
-															? "text-foreground"
-															: "text-muted-foreground"
-													}
-												>
+										/>
+									}
+								>
+									<SettingsIcon />
+									<span>Organization</span>
+									<IconChevronRight className="ml-auto transition-transform duration-200 group-data-panel-open/collapsible:rotate-90" />
+								</CollapsibleTrigger>
+								<CollapsibleContent>
+									<SidebarMenuSub>
+										<SidebarMenuSubItem>
+											<SidebarMenuSubButton
+												isActive={settingsEntitiesIsActive}
+												className={
+													settingsEntitiesIsActive
+														? "text-foreground"
+														: "text-muted-foreground"
+												}
+												render={
 													<Link
 														to="/settings/organization/entities"
 														search={{}}
-													>
-														<span>Entities</span>
-													</Link>
-												</SidebarMenuSubButton>
-											</SidebarMenuSubItem>
-											<SidebarMenuSubItem>
-												<SidebarMenuSubButton
-													asChild
-													isActive={settingsEmailIsActive}
-													className={
-														settingsEmailIsActive
-															? "text-foreground"
-															: "text-muted-foreground"
-													}
-												>
-													<Link to="/settings/organization/email">
-														<span>Email</span>
-													</Link>
-												</SidebarMenuSubButton>
-											</SidebarMenuSubItem>
-										</SidebarMenuSub>
-									</CollapsibleContent>
-								</SidebarMenuItem>
+													/>
+												}
+											>
+												<span>Entities</span>
+											</SidebarMenuSubButton>
+										</SidebarMenuSubItem>
+										<SidebarMenuSubItem>
+											<SidebarMenuSubButton
+												isActive={settingsEmailIsActive}
+												className={
+													settingsEmailIsActive
+														? "text-foreground"
+														: "text-muted-foreground"
+												}
+												render={<Link to="/settings/organization/email" />}
+											>
+												<span>Email</span>
+											</SidebarMenuSubButton>
+										</SidebarMenuSubItem>
+									</SidebarMenuSub>
+								</CollapsibleContent>
 							</Collapsible>
 						</SidebarMenu>
 					</SidebarGroupContent>

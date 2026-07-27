@@ -94,11 +94,9 @@ export function AddFieldDialog({
 				setOpen(nextOpen);
 			}}
 		>
-			<DialogTrigger asChild>
-				<Button variant="outline" size="sm">
-					<IconPlus />
-					Add field
-				</Button>
+			<DialogTrigger render={<Button variant="outline" size="sm" />}>
+				<IconPlus />
+				Add field
 			</DialogTrigger>
 			<DialogContent>
 				<DialogHeader>
@@ -122,8 +120,18 @@ export function AddFieldDialog({
 						<Field>
 							<FieldLabel>Value type</FieldLabel>
 							<Select
+								items={Object.entries(ENTITY_FIELD_TYPE_LABELS).map(
+									([value, fieldLabel]) => ({
+										value,
+										label: fieldLabel,
+									}),
+								)}
 								value={valueType}
-								onValueChange={(value) => setValueType(parseFieldType(value))}
+								onValueChange={(value) => {
+									if (value !== null) {
+										setValueType(parseFieldType(value));
+									}
+								}}
 							>
 								<SelectTrigger className="w-full">
 									<SelectValue />

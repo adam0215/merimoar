@@ -1,3 +1,5 @@
+"use client";
+
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { IconCheck, IconChevronRight } from "@tabler/icons-react";
 import type * as React from "react";
@@ -20,7 +22,7 @@ function DropdownMenuContent({
 	alignOffset = 0,
 	side = "bottom",
 	sideOffset = 4,
-	portalContainer,
+	container,
 	className,
 	...props
 }: MenuPrimitive.Popup.Props &
@@ -28,10 +30,10 @@ function DropdownMenuContent({
 		MenuPrimitive.Positioner.Props,
 		"align" | "alignOffset" | "side" | "sideOffset"
 	> & {
-		portalContainer?: MenuPrimitive.Portal.Props["container"];
+		container?: MenuPrimitive.Portal.Props["container"];
 	}) {
 	return (
-		<MenuPrimitive.Portal container={portalContainer}>
+		<MenuPrimitive.Portal container={container}>
 			<MenuPrimitive.Positioner
 				className="isolate z-50 outline-none"
 				align={align}

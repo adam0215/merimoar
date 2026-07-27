@@ -200,7 +200,7 @@ function AddRelationshipDialog({
 	options: CaseCreateOptions | undefined;
 	currentContactIds: Set<Id<"contacts">>;
 	currentEntityIds: Set<Id<"entities">>;
-	trigger: React.ReactNode;
+	trigger: React.ReactElement;
 }) {
 	const addContact = useMutation(api.case.mutations.addContactRelation);
 	const addEntity = useMutation(api.case.mutations.addEntityRelation);
@@ -250,7 +250,7 @@ function AddRelationshipDialog({
 				}
 			}}
 		>
-			<DialogTrigger asChild>{trigger}</DialogTrigger>
+			<DialogTrigger render={trigger} />
 			<DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle>Add relationship</DialogTitle>

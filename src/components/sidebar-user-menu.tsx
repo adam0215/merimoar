@@ -83,7 +83,7 @@ export function SidebarUserMenu() {
 						side="top"
 						align="start"
 						sideOffset={8}
-						portalContainer={portalContainerRef}
+						container={portalContainerRef}
 						className="min-w-64"
 					>
 						<DropdownMenuItem render={<Link to="/profile" />}>

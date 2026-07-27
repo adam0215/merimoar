@@ -158,11 +158,9 @@ export function AddEmailConnectionDialog() {
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger asChild>
-				<Button>
-					<IconPlus />
-					Add connection
-				</Button>
+			<DialogTrigger render={<Button />}>
+				<IconPlus />
+				Add connection
 			</DialogTrigger>
 			<DialogContent className="sm:max-w-xl">
 				{step !== "success" && (
@@ -314,17 +312,15 @@ export function AddEmailConnectionDialog() {
 								inbox.
 							</DialogDescription>
 						</DialogHeader>
-						<DialogClose asChild>
-							<Button className="mt-6">Done</Button>
-						</DialogClose>
+						<DialogClose render={<Button className="mt-6" />}>Done</DialogClose>
 					</div>
 				)}
 
 				{step !== "success" && (
 					<DialogFooter className="gap-2 sm:justify-between">
 						{step === "provider" ? (
-							<DialogClose asChild>
-								<Button variant="ghost">Cancel</Button>
+							<DialogClose render={<Button variant="ghost" />}>
+								Cancel
 							</DialogClose>
 						) : (
 							<Button

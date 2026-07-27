@@ -90,14 +90,16 @@ function OrganizationEmailSettings() {
 							<CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-center">
 								<div className="flex min-w-0 items-center gap-4">
 									<Tooltip>
-										<TooltipTrigger asChild>
-											<button
-												type="button"
-												className="flex size-12 shrink-0 cursor-default items-center justify-center rounded-full bg-muted"
-												aria-label="Provider: Resend"
-											>
-												<ProviderMark provider={connection.provider} />
-											</button>
+										<TooltipTrigger
+											render={
+												<button
+													type="button"
+													className="flex size-12 shrink-0 cursor-default items-center justify-center rounded-full bg-muted"
+													aria-label="Provider: Resend"
+												/>
+											}
+										>
+											<ProviderMark provider={connection.provider} />
 										</TooltipTrigger>
 										<TooltipContent side="top">Resend</TooltipContent>
 									</Tooltip>

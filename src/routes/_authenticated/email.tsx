@@ -92,16 +92,15 @@ function EmailPage() {
 	const selectedThread = canUsePrefetchedSelectedThread
 		? prefetched.selectedThread
 		: liveSelectedThread;
-	const canUsePrefetchedThreads =
+	const prefetchedThreads =
 		liveThreadStatus === "LoadingFirstPage" &&
-		activeConnection?._id === prefetched.activeConnectionId &&
-		prefetched.threads !== null;
-	const threads = canUsePrefetchedThreads
-		? prefetched.threads.page
-		: liveThreads;
+		activeConnection?._id === prefetched.activeConnectionId
+			? prefetched.threads
+			: null;
+	const threads = prefetchedThreads ? prefetchedThreads.page : liveThreads;
 	const threadStatus = activeConnection
-		? canUsePrefetchedThreads
-			? prefetched.threads.isDone
+		? prefetchedThreads
+			? prefetchedThreads.isDone
 				? "Exhausted"
 				: "CanLoadMore"
 			: liveThreadStatus
@@ -116,7 +115,10 @@ function EmailPage() {
 				)}
 			>
 				<div className="relative h-full">
-					<ScrollArea className="h-full" viewportClassName="overscroll-none">
+					<ScrollArea
+						className="h-full"
+						viewportProps={{ className: "overscroll-none" }}
+					>
 						<ThreadList
 							items={threads}
 							selectedThreadId={selectedThreadId}
@@ -163,11 +165,14 @@ function EmailPage() {
 			>
 				<div className="flex h-full min-h-0 flex-col">
 					<div className="flex h-12 shrink-0 items-center border-b px-3 md:hidden">
-						<Button asChild variant="ghost" size="sm">
-							<Link to="/email" search={{}}>
-								<IconArrowLeft />
-								Back to inbox
-							</Link>
+						<Button
+							nativeButton={false}
+							variant="ghost"
+							size="sm"
+							render={<Link to="/email" search={{}} />}
+						>
+							<IconArrowLeft />
+							Back to inbox
 						</Button>
 					</div>
 					<div className="min-h-0 flex-1">

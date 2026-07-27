@@ -296,6 +296,13 @@ export function CaseHeader({
 				<Field>
 					<FieldLabel>Owner</FieldLabel>
 					<Select
+						items={[
+							{ value: "unassigned", label: "Unassigned" },
+							...members.map((member) => ({
+								value: member._id,
+								label: member.name,
+							})),
+						]}
 						value={form.ownerMemberId ?? "unassigned"}
 						onValueChange={(value) =>
 							setForm((current) => ({
@@ -329,6 +336,26 @@ export function CaseHeader({
 				<Field>
 					<FieldLabel>Status</FieldLabel>
 					<Select
+						items={[
+							{
+								value: "open",
+								label: (
+									<>
+										<StatusDot status="open" />
+										Open
+									</>
+								),
+							},
+							{
+								value: "closed",
+								label: (
+									<>
+										<StatusDot status="closed" />
+										Closed
+									</>
+								),
+							},
+						]}
 						value={form.status}
 						onValueChange={(value) =>
 							setForm((current) => ({
@@ -464,21 +491,23 @@ function DeadlineField({
 		<Field>
 			<FieldLabel>Deadline</FieldLabel>
 			<Popover open={open} onOpenChange={setOpen}>
-				<PopoverTrigger asChild>
-					<Button
-						type="button"
-						variant="outline"
-						className="w-full justify-start text-left font-normal"
-					>
-						<IconCalendar />
-						{selectedDate
-							? selectedDate.toLocaleDateString(undefined, {
-									year: "numeric",
-									month: "long",
-									day: "numeric",
-								})
-							: "Select date"}
-					</Button>
+				<PopoverTrigger
+					render={
+						<Button
+							type="button"
+							variant="outline"
+							className="w-full justify-start text-left font-normal"
+						/>
+					}
+				>
+					<IconCalendar />
+					{selectedDate
+						? selectedDate.toLocaleDateString(undefined, {
+								year: "numeric",
+								month: "long",
+								day: "numeric",
+							})
+						: "Select date"}
 				</PopoverTrigger>
 				<PopoverContent align="start" className="w-auto gap-0 p-0">
 					<Calendar

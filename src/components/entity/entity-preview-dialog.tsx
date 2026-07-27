@@ -55,11 +55,9 @@ export function EntityPreviewDialog({
 				}
 			}}
 		>
-			<DialogTrigger asChild>
-				<Button variant="secondary">
-					<IconEye />
-					Preview
-				</Button>
+			<DialogTrigger render={<Button variant="secondary" />}>
+				<IconEye />
+				Preview
 			</DialogTrigger>
 			<DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-2xl">
 				<DialogHeader>
@@ -70,6 +68,15 @@ export function EntityPreviewDialog({
 				</DialogHeader>
 
 				<Select
+					items={(entityTypes ?? []).map((entityType) => ({
+						value: entityType._id,
+						label: (
+							<>
+								<EntityIcon icon={entityType.icon} />
+								{entityType.pluralName}
+							</>
+						),
+					}))}
 					value={selectedTypeId ?? undefined}
 					onValueChange={(value) => {
 						const selectedType = entityTypes?.find(

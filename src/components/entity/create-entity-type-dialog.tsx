@@ -105,15 +105,17 @@ export function CreateEntityTypeDialog({
 				setOpen(nextOpen);
 			}}
 		>
-			<DialogTrigger asChild>
-				<button
-					type="button"
-					className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.97]"
-					aria-label="Create entity type"
-					title="Create entity type"
-				>
-					<IconPlus className="size-5" />
-				</button>
+			<DialogTrigger
+				render={
+					<button
+						type="button"
+						className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.97]"
+						aria-label="Create entity type"
+						title="Create entity type"
+					/>
+				}
+			>
+				<IconPlus className="size-5" />
 			</DialogTrigger>
 			<DialogContent className="max-h-[calc(100svh-2rem)] gap-4 overflow-y-auto p-5 sm:max-w-2xl">
 				<DialogHeader>
