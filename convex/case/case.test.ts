@@ -258,4 +258,22 @@ describe("cases", () => {
 			before?.lastActivityAt ?? 0,
 		);
 	});
+
+	it("accepts case descriptions without a character limit", async () => {
+		const { actor, ownerMemberId } = await createFixture();
+		const description = `<p>${"Detailed handover context. ".repeat(250)}</p>`;
+		const caseId = await actor.mutation(api.case.mutations.create, {
+			title: "Long handover context",
+			description,
+			ownerMemberId,
+			dueAt: null,
+			initialEventBody: "",
+			contactIds: [],
+			entityIds: [],
+		});
+
+		const detail = await actor.query(api.case.reader.get, { caseId });
+		expect(description.length).toBeGreaterThan(4_000);
+		expect(detail?.case.description).toBe(description);
+	});
 });

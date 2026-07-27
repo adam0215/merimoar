@@ -1,4 +1,10 @@
-import { IconCheck, IconLoader2, IconPlus, IconX } from "@tabler/icons-react";
+import {
+	IconAsterisk,
+	IconCheck,
+	IconLoader2,
+	IconPlus,
+	IconX,
+} from "@tabler/icons-react";
 import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import * as v from "valibot";
@@ -127,17 +133,35 @@ export function CaseEvents({
 				</div>
 			)}
 
-			<div className="relative mt-4 ml-2 border-l pl-5">
-				{events.map(({ event, author }) => (
-					<article key={event._id} className="relative pb-6 last:pb-0">
-						<span className="absolute top-1.5 -left-6 size-2 rounded-full bg-accent ring-4 ring-background" />
-						<p className="max-w-3xl whitespace-pre-wrap text-sm leading-6">
-							{event.body}
-						</p>
-						<p className="mt-1 text-xs text-muted-foreground">
-							{formatEventDate(event.occurredAt)}
-							{author ? ` · ${author.name}` : ""}
-						</p>
+			<div className="relative mt-4">
+				{events.map(({ event, author }, index) => (
+					<article
+						key={event._id}
+						className="relative flex gap-3 pb-6 last:pb-0"
+					>
+						<div className="relative w-4 shrink-0">
+							{index < events.length - 1 && (
+								<span
+									className="absolute top-6 -bottom-6 left-1/2 w-px -translate-x-1/2 rounded-full bg-border"
+									aria-hidden="true"
+								/>
+							)}
+							<IconAsterisk
+								className="relative z-1 mt-1 size-4 text-accent"
+								stroke={2.25}
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							/>
+						</div>
+						<div className="min-w-0">
+							<p className="max-w-3xl whitespace-pre-wrap text-sm leading-6">
+								{event.body}
+							</p>
+							<p className="mt-1 text-xs text-muted-foreground">
+								{formatEventDate(event.occurredAt)}
+								{author ? ` · ${author.name}` : ""}
+							</p>
+						</div>
 					</article>
 				))}
 				{events.length === 0 && (

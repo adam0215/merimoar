@@ -1,0 +1,103 @@
+.case-description-editor .ProseMirror {
+	min-height: 12rem;
+	padding: 0.875rem 1rem;
+	font-size: 0.875rem;
+	line-height: 1.5rem;
+	outline: none;
+	white-space: pre-wrap;
+}
+
+.case-description-editor .ProseMirror p {
+	margin: 0;
+}
+
+.case-description-editor .ProseMirror p + p {
+	margin-top: 0.5rem;
+}
+
+.case-description-editor .ProseMirror h1,
+.case-description-editor .ProseMirror h2,
+.case-description-editor .ProseMirror h3,
+.case-description-editor .ProseMirror h4,
+.case-description-editor .ProseMirror h5,
+.case-description-editor .ProseMirror h6 {
+	margin: 0.75rem 0 0.375rem;
+	font-weight: 600;
+	line-height: 1.25;
+}
+
+.case-description-editor .ProseMirror h1 {
+	font-size: 1.25rem;
+}
+
+.case-description-editor .ProseMirror h2 {
+	font-size: 1.125rem;
+}
+
+.case-description-editor .ProseMirror h3,
+.case-description-editor .ProseMirror h4,
+.case-description-editor .ProseMirror h5,
+.case-description-editor .ProseMirror h6 {
+	font-size: 1rem;
+}
+
+.case-description-editor .ProseMirror strong {
+	font-weight: 600;
+}
+
+.case-description-editor .ProseMirror ul,
+.case-description-editor .ProseMirror ol {
+	margin: 0.5rem 0;
+	padding-left: 1.5rem;
+}
+
+.case-description-editor .ProseMirror ul {
+	list-style: disc;
+}
+
+.case-description-editor .ProseMirror ol {
+	list-style: decimal;
+}
+
+.case-description-editor .ProseMirror li p {
+	margin: 0;
+}
+
+.case-description-editor .ProseMirror blockquote {
+	margin: 0.5rem 0;
+	padding-left: 0.75rem;
+	border-left: 2px solid var(--border);
+	color: var(--muted-foreground);
+}
+
+.case-description-editor .ProseMirror code {
+	padding: 0.125rem 0.25rem;
+	border-radius: 0.25rem;
+	background: var(--muted);
+	font-size: 0.8125rem;
+}
+
+.case-description-editor .ProseMirror pre {
+	margin: 0.5rem 0;
+	padding: 0.75rem;
+	overflow-x: auto;
+	border-radius: var(--radius);
+	background: var(--muted);
+}
+
+.case-description-editor .ProseMirror pre code {
+	padding: 0;
+	background: transparent;
+}
+
+.case-description-editor .ProseMirror hr {
+	margin: 0.75rem 0;
+	border: 0;
+	border-top: 1px solid var(--border);
+}
+
+@media (min-width: 48rem) {
+	.case-description-editor .ProseMirror {
+		min-height: 14rem;
+	}
+}

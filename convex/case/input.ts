@@ -8,11 +8,7 @@ export const caseTitleSchema = v.pipe(
 	v.maxLength(160, "Use no more than 160 characters."),
 );
 
-export const caseDescriptionSchema = v.pipe(
-	v.string(),
-	v.trim(),
-	v.maxLength(4000, "Use no more than 4,000 characters."),
-);
+export const caseDescriptionSchema = v.pipe(v.string(), v.trim());
 
 export const optionalCaseEventBodySchema = v.pipe(
 	v.string(),

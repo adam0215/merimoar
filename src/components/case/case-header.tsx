@@ -34,6 +34,7 @@ import {
 	caseDescriptionSchema,
 	caseTitleSchema,
 } from "../../../convex/case/input";
+import { CaseDescriptionEditor } from "./case-description-editor.tsx";
 import { formatShortDate } from "./format.ts";
 import type { CaseCreateOptions, CaseDetail } from "./types.ts";
 
@@ -243,10 +244,6 @@ export function CaseHeader({
 		? validation.issues.find((issue) => issue.path?.[0]?.key === "description")
 				?.message
 		: undefined;
-	const formattedDescriptionLength = useLocalizedNumber(
-		form.description.length,
-	);
-
 	return (
 		<header>
 			<div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
@@ -383,24 +380,16 @@ export function CaseHeader({
 
 			<section className="mt-7">
 				<Field data-invalid={Boolean(descriptionError) || undefined}>
-					<div className="flex items-baseline justify-between gap-4">
-						<FieldLabel htmlFor="case-description">Description</FieldLabel>
-						<span className="text-xs tabular-nums text-muted-foreground">
-							{formattedDescriptionLength} / 4,000
-						</span>
-					</div>
-					<Textarea
-						id="case-description"
+					<FieldLabel htmlFor="case-description">Description</FieldLabel>
+					<CaseDescriptionEditor
 						value={form.description}
-						onChange={(event) =>
+						onChange={(description) =>
 							setForm((current) => ({
 								...current,
-								description: event.target.value,
+								description,
 							}))
 						}
-						placeholder="Add the context someone needs before working on this case."
-						aria-invalid={Boolean(descriptionError) || undefined}
-						className="min-h-40 resize-y bg-background px-4 py-3.5 leading-6 md:min-h-48"
+						invalid={Boolean(descriptionError)}
 					/>
 					{descriptionError && <FieldError>{descriptionError}</FieldError>}
 				</Field>
@@ -552,16 +541,6 @@ function useBrowserCalendarLocale() {
 	}, []);
 
 	return locale;
-}
-
-function useLocalizedNumber(value: number) {
-	const [localizedValue, setLocalizedValue] = useState(String(value));
-
-	useEffect(() => {
-		setLocalizedValue(new Intl.NumberFormat(navigator.language).format(value));
-	}, [value]);
-
-	return localizedValue;
 }
 
 function caseToForm(caseRecord: Doc<"cases">) {
