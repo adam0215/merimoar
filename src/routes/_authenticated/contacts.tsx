@@ -16,6 +16,9 @@ type ContactsSearch = {
 	contact?: string;
 };
 
+const INITIAL_MESSAGE_PAGE_SIZE = 8;
+const ADDITIONAL_MESSAGE_PAGE_SIZE = 16;
+
 const preloadInitialContactPage = createServerFn({ method: "GET" })
 	.validator((input: { selectedContactId?: string }) => input)
 	.handler(async ({ data }) => {
@@ -33,19 +36,29 @@ const preloadInitialContactPage = createServerFn({ method: "GET" })
 					})
 				: null,
 		]);
-		const messages = selectedContact
-			? await client.query(api.contact.reader.listMessages, {
-					contactId: selectedContact._id,
-					paginationOpts: {
-						cursor: null,
-						numItems: 20,
-					},
-				})
-			: null;
+		const [messages, relatedCases] = selectedContact
+			? await Promise.all([
+					client.query(api.contact.reader.listMessages, {
+						contactId: selectedContact._id,
+						paginationOpts: {
+							cursor: null,
+							numItems: INITIAL_MESSAGE_PAGE_SIZE,
+						},
+					}),
+					client.query(api.contact.reader.listCases, {
+						contactId: selectedContact._id,
+						paginationOpts: {
+							cursor: null,
+							numItems: 20,
+						},
+					}),
+				])
+			: [null, null];
 
 		return {
 			contacts,
 			messages,
+			relatedCases,
 			selectedContact,
 			selectedContactId: data.selectedContactId,
 		};
@@ -102,7 +115,7 @@ function ContactsPage() {
 					contactId: selectedContact._id,
 				}
 			: "skip",
-		{ initialNumItems: 20 },
+		{ initialNumItems: INITIAL_MESSAGE_PAGE_SIZE },
 	);
 	const prefetchedMessages =
 		liveMessageStatus === "LoadingFirstPage" &&
@@ -115,6 +128,32 @@ function ContactsPage() {
 			? "Exhausted"
 			: "CanLoadMore"
 		: liveMessageStatus;
+	const {
+		results: liveRelatedCases,
+		status: liveRelatedCaseStatus,
+		loadMore: loadMoreRelatedCases,
+	} = usePaginatedQuery(
+		api.contact.reader.listCases,
+		selectedContact
+			? {
+					contactId: selectedContact._id,
+				}
+			: "skip",
+		{ initialNumItems: 20 },
+	);
+	const prefetchedRelatedCases =
+		liveRelatedCaseStatus === "LoadingFirstPage" &&
+		selectedContactId === prefetched.selectedContactId
+			? prefetched.relatedCases
+			: null;
+	const relatedCases = prefetchedRelatedCases
+		? prefetchedRelatedCases.page
+		: liveRelatedCases;
+	const relatedCaseStatus = prefetchedRelatedCases
+		? prefetchedRelatedCases.isDone
+			? "Exhausted"
+			: "CanLoadMore"
+		: liveRelatedCaseStatus;
 
 	return (
 		<div className="grid h-full min-h-0 overflow-hidden md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]">
@@ -163,11 +202,18 @@ function ContactsPage() {
 						<ContactView
 							contact={selectedContact}
 							contactWasSelected={Boolean(selectedContactId)}
+							cases={relatedCases}
+							caseStatus={relatedCaseStatus}
+							loadMoreCases={() => {
+								if (liveRelatedCaseStatus !== "LoadingFirstPage") {
+									loadMoreRelatedCases(20);
+								}
+							}}
 							messages={messages}
 							messageStatus={messageStatus}
 							loadMoreMessages={() => {
 								if (liveMessageStatus !== "LoadingFirstPage") {
-									loadMoreMessages(20);
+									loadMoreMessages(ADDITIONAL_MESSAGE_PAGE_SIZE);
 								}
 							}}
 						/>

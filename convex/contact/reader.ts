@@ -81,3 +81,40 @@ export const listMessages = query({
 		};
 	},
 });
+
+export const listCases = query({
+	args: {
+		contactId: v.id("contacts"),
+		paginationOpts: paginationOptsValidator,
+	},
+	handler: async (ctx, args) => {
+		const workspace = await requireActor(ctx);
+		const contact = await ctx.db.get(args.contactId);
+		if (contact?.organizationId !== workspace.organization._id) {
+			throw new Error("Contact not found");
+		}
+
+		const result = await ctx.db
+			.query("caseContactRelations")
+			.withIndex("by_contact_id_and_ended_at", (index) =>
+				index.eq("contactId", contact._id).eq("endedAt", null),
+			)
+			.order("desc")
+			.paginate(args.paginationOpts);
+
+		const page = (
+			await Promise.all(
+				result.page.map((relation) => ctx.db.get(relation.caseId)),
+			)
+		).flatMap((caseRecord) =>
+			caseRecord?.organizationId === workspace.organization._id
+				? [caseRecord]
+				: [],
+		);
+
+		return {
+			...result,
+			page,
+		};
+	},
+});

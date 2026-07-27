@@ -1,4 +1,9 @@
-import { IconAddressBook, IconInbox, IconLoader2 } from "@tabler/icons-react";
+import {
+	IconAddressBook,
+	IconFolder,
+	IconInbox,
+	IconLoader2,
+} from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import type { FunctionReturnType } from "convex/server";
 import { RetroDither } from "#/components/canvasui/RetroDither.tsx";
@@ -13,6 +18,9 @@ import type { api } from "../../../convex/_generated/api";
 type Contact = NonNullable<FunctionReturnType<typeof api.contact.reader.get>>;
 type ContactMessage = FunctionReturnType<
 	typeof api.contact.reader.listMessages
+>["page"][number];
+type ContactCase = FunctionReturnType<
+	typeof api.contact.reader.listCases
 >["page"][number];
 
 type PaginationStatus =
@@ -162,28 +170,46 @@ export function ContactList({
 export function ContactView({
 	contact,
 	contactWasSelected,
+	cases,
+	caseStatus,
+	loadMoreCases,
 	messages,
 	messageStatus,
 	loadMoreMessages,
 }: {
 	contact: Contact | null | undefined;
 	contactWasSelected: boolean;
+	cases: ContactCase[];
+	caseStatus: PaginationStatus;
+	loadMoreCases: () => void;
 	messages: ContactMessage[];
 	messageStatus: PaginationStatus;
 	loadMoreMessages: () => void;
 }) {
+	const casesWithOpenFirst = [...cases].sort(
+		(firstCase, secondCase) =>
+			Number(firstCase.status === "closed") -
+			Number(secondCase.status === "closed"),
+	);
+
 	if (contactWasSelected && contact === undefined) {
 		return (
 			<div className="mx-auto max-w-4xl p-6">
 				<div className="h-28 rounded-xl bg-accent/40" />
-				<div className="-mt-14 grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-4 lg:grid-cols-[7rem_minmax(0,1fr)_auto] lg:px-6">
-					<Skeleton className="row-span-2 size-28 shrink-0 rounded-full border-4 border-background" />
-					<Skeleton className="col-start-2 row-start-1 mt-16 h-5 w-40" />
-					<div className="col-span-2 row-start-3 mt-3 flex gap-2 lg:col-span-1 lg:col-start-3 lg:row-start-1 lg:mt-16 lg:justify-self-end lg:self-center">
-						<Skeleton className="h-5 w-28 rounded-4xl" />
-						<Skeleton className="h-5 w-28 rounded-4xl" />
+				<div className="-mt-14 flex items-start gap-4 px-6">
+					<Skeleton className="size-28 shrink-0 rounded-full border-4 border-background" />
+					<div className="@container mt-16 min-w-0 flex-1">
+						<div className="flex flex-col gap-3 @sm:grid @sm:grid-cols-[minmax(0,1fr)_auto] @sm:items-center @sm:gap-x-4 @sm:gap-y-0">
+							<div className="min-w-0 @sm:contents">
+								<Skeleton className="h-5 w-40 max-w-full @sm:col-start-1 @sm:row-start-1" />
+								<Skeleton className="mt-2 h-3 w-56 max-w-full @sm:col-span-2 @sm:col-start-1 @sm:row-start-2 @sm:mt-0" />
+							</div>
+							<div className="flex max-w-full flex-wrap gap-2 @sm:col-start-2 @sm:row-start-1 @sm:justify-self-end">
+								<Skeleton className="h-5 w-28 rounded-4xl" />
+								<Skeleton className="h-5 w-28 rounded-4xl" />
+							</div>
+						</div>
 					</div>
-					<Skeleton className="col-start-2 row-start-2 h-3 w-56 lg:col-end-4" />
 				</div>
 			</div>
 		);
@@ -227,30 +253,36 @@ export function ContactView({
 						/>
 					</RetroDither>
 				</div>
-				<header className="-mt-14 grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-4 lg:grid-cols-[7rem_minmax(0,1fr)_auto] lg:px-6">
-					<Avatar className="row-span-2 size-28 border-4 border-background">
+				<header className="-mt-14 flex items-start gap-4 px-6">
+					<Avatar className="size-28 shrink-0 border-4 border-background">
 						<AvatarFallback className="text-3xl">
 							{initials(contact)}
 						</AvatarFallback>
 					</Avatar>
-					<h1 className="col-start-2 row-start-1 mt-16 truncate text-xl font-semibold tracking-tight">
-						{contactLabel(contact)}
-					</h1>
-					<div className="col-span-2 row-start-3 mt-3 flex shrink-0 gap-2 lg:col-span-1 lg:col-start-3 lg:row-start-1 lg:mt-16 lg:justify-self-end lg:self-center">
-						<Badge variant="secondary">
-							<span>First:</span>
-							<span>{formatBadgeDate(contact.firstSeenAt)}</span>
-						</Badge>
-						<Badge variant="secondary">
-							<span>Latest:</span>
-							<span>{formatBadgeDate(contact.lastSeenAt)}</span>
-						</Badge>
+					<div className="@container mt-16 min-w-0 flex-1">
+						<div className="flex flex-col gap-3 @sm:grid @sm:grid-cols-[minmax(0,1fr)_auto] @sm:items-center @sm:gap-x-4 @sm:gap-y-0">
+							<div className="min-w-0 @sm:contents">
+								<h1 className="truncate text-xl font-semibold tracking-tight @sm:col-start-1 @sm:row-start-1">
+									{contactLabel(contact)}
+								</h1>
+								{contact.name && (
+									<p className="truncate text-sm text-muted-foreground @sm:col-span-2 @sm:col-start-1 @sm:row-start-2">
+										{contact.address}
+									</p>
+								)}
+							</div>
+							<div className="flex max-w-full flex-wrap gap-2 @sm:col-start-2 @sm:row-start-1 @sm:justify-self-end">
+								<Badge variant="secondary">
+									<span>First:</span>
+									<span>{formatBadgeDate(contact.firstSeenAt)}</span>
+								</Badge>
+								<Badge variant="secondary">
+									<span>Latest:</span>
+									<span>{formatBadgeDate(contact.lastSeenAt)}</span>
+								</Badge>
+							</div>
+						</div>
 					</div>
-					{contact.name && (
-						<p className="col-start-2 row-start-2 truncate text-sm text-muted-foreground lg:col-end-4">
-							{contact.address}
-						</p>
-					)}
 				</header>
 
 				<section className="mt-8">
@@ -324,6 +356,79 @@ export function ContactView({
 								</Button>
 							</div>
 						)}
+				</section>
+
+				<section className="mt-8">
+					<h2 className="text-sm font-semibold">Cases</h2>
+					<div className="mt-2 space-y-2">
+						{caseStatus === "LoadingFirstPage" &&
+							SKELETON_ROWS.slice(0, 2).map((row) => (
+								<div
+									key={row}
+									className="flex items-center gap-3 rounded-xl border p-3"
+								>
+									<Skeleton className="size-9 shrink-0 rounded-full" />
+									<div className="min-w-0 flex-1 space-y-2">
+										<Skeleton className="h-3 w-4/5" />
+										<Skeleton className="h-3 w-2/5" />
+									</div>
+								</div>
+							))}
+
+						{caseStatus !== "LoadingFirstPage" &&
+							casesWithOpenFirst.map((caseRecord) => (
+								<Link
+									key={caseRecord._id}
+									to="/cases"
+									search={{ case: caseRecord._id }}
+									className="flex w-full min-w-0 items-center gap-3 rounded-xl border p-3 text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+								>
+									<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+										<IconFolder className="size-4" />
+									</span>
+									<span className="min-w-0 flex-1">
+										<span className="block truncate text-sm font-medium">
+											{caseRecord.title}
+										</span>
+										<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+											<span
+												className={cn(
+													"size-1.5 shrink-0 rounded-full bg-muted-foreground/40",
+													caseRecord.status === "open" && "bg-accent",
+												)}
+											/>
+											<span className="truncate">
+												{caseRecord.reference} ·{" "}
+												{caseRecord.status === "open" ? "Open" : "Closed"}
+											</span>
+										</span>
+									</span>
+								</Link>
+							))}
+					</div>
+
+					{caseStatus !== "LoadingFirstPage" && cases.length === 0 && (
+						<div className="flex flex-col items-center py-10 text-center">
+							<IconFolder className="mb-3 size-5 text-muted-foreground/50" />
+							<p className="text-sm font-medium">No related cases</p>
+						</div>
+					)}
+
+					{caseStatus !== "Exhausted" && caseStatus !== "LoadingFirstPage" && (
+						<div className="flex justify-center py-3">
+							<Button
+								variant="ghost"
+								size="sm"
+								onClick={loadMoreCases}
+								disabled={caseStatus === "LoadingMore"}
+							>
+								{caseStatus === "LoadingMore" && (
+									<IconLoader2 className="animate-spin" />
+								)}
+								Load more
+							</Button>
+						</div>
+					)}
 				</section>
 			</div>
 		</div>

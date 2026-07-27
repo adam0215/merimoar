@@ -21,8 +21,8 @@ describe("contact reader", () => {
 				email: "other@example.com",
 			}),
 		]);
-		const { newestContactId, otherContactId, threadId } = await base.run(
-			async (ctx) => {
+		const { newestContactId, otherContactId, relatedCaseId, threadId } =
+			await base.run(async (ctx) => {
 				const organizationId = await ctx.db.insert("organizations", {
 					name: "Merimoar",
 					workosOrganizationId: "org_merimoar",
@@ -96,9 +96,53 @@ describe("contact reader", () => {
 				await ctx.db.patch(threadId, {
 					latestMessageId: messageId,
 				});
-				return { newestContactId, otherContactId, threadId };
-			},
-		);
+				const relatedCaseId = await ctx.db.insert("cases", {
+					organizationId,
+					reference: "CASE-1",
+					title: "Related case",
+					description: "",
+					ownerMemberId: null,
+					dueAt: null,
+					status: "open",
+					lastActivityAt: 3_000,
+					createdAt: 2_000,
+					updatedAt: 3_000,
+				});
+				const removedCaseId = await ctx.db.insert("cases", {
+					organizationId,
+					reference: "CASE-2",
+					title: "Removed case",
+					description: "",
+					ownerMemberId: null,
+					dueAt: null,
+					status: "closed",
+					lastActivityAt: 2_000,
+					createdAt: 1_000,
+					updatedAt: 2_000,
+				});
+				await ctx.db.insert("caseContactRelations", {
+					caseId: relatedCaseId,
+					contactId: newestContactId,
+					startedAt: 2_000,
+					endedAt: null,
+					addedByMemberId: null,
+					removedByMemberId: null,
+				});
+				await ctx.db.insert("caseContactRelations", {
+					caseId: removedCaseId,
+					contactId: newestContactId,
+					startedAt: 1_000,
+					endedAt: 2_000,
+					addedByMemberId: null,
+					removedByMemberId: null,
+				});
+				return {
+					newestContactId,
+					otherContactId,
+					relatedCaseId,
+					threadId,
+				};
+			});
 		const actor = base.withIdentity({
 			issuer: ISSUER,
 			subject: "user_adam",
@@ -115,6 +159,13 @@ describe("contact reader", () => {
 			contactId: otherContactId,
 		});
 		const messages = await actor.query(api.contact.reader.listMessages, {
+			contactId: newestContactId,
+			paginationOpts: {
+				numItems: 10,
+				cursor: null,
+			},
+		});
+		const relatedCases = await actor.query(api.contact.reader.listCases, {
 			contactId: newestContactId,
 			paginationOpts: {
 				numItems: 10,
@@ -138,6 +189,18 @@ describe("contact reader", () => {
 				address: "support@merimoar.test",
 			},
 		});
+		expect(relatedCases.page.map((caseRecord) => caseRecord._id)).toEqual([
+			relatedCaseId,
+		]);
+		await expect(
+			actor.query(api.contact.reader.listCases, {
+				contactId: otherContactId,
+				paginationOpts: {
+					numItems: 10,
+					cursor: null,
+				},
+			}),
+		).rejects.toThrow("Contact not found");
 	});
 
 	it("returns null for a malformed contact ID", async () => {
