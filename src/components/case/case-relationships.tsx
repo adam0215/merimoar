@@ -119,7 +119,7 @@ export function CaseRelationships({
 					trigger={
 						<button
 							type="button"
-							className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-dashed p-3 text-left text-muted-foreground transition-[color,background-color,transform] hover:bg-muted/50 hover:text-foreground active:scale-[0.99]"
+							className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-dashed p-3 text-left text-muted-foreground transition-[color,background-color,transform] hover:bg-muted/50 hover:text-foreground active:scale-99"
 						>
 							<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted">
 								<IconPlus className="size-4" />
@@ -174,7 +174,7 @@ function RemoveRelationshipButton({
 			type="button"
 			onClick={remove}
 			disabled={isRemoving}
-			className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[color,background-color,transform] hover:bg-muted hover:text-foreground active:scale-[0.97] disabled:opacity-50"
+			className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[color,background-color,transform] hover:bg-muted hover:text-foreground active:scale-97 disabled:opacity-50"
 			aria-label={`${error ? "Retry removing" : "Remove"} ${label}`}
 			title={error ?? `Remove ${label}`}
 		>

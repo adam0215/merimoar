@@ -1,0 +1,94 @@
+{
+	"$schema": "./node_modules/oxlint/configuration_schema.json",
+	// Oxlint is the project's only linter. Biome remains enabled separately for
+	// formatting and import organization, with its linter disabled in biome.json.
+	// Listing plugins replaces Oxlint's defaults, so the four defaults are kept
+	// alongside the plugins that match this React, Node, Convex, and Vitest app.
+	"plugins": [
+		"eslint",
+		"typescript",
+		"unicorn",
+		"oxc",
+		"react",
+		"react-perf",
+		"import",
+		"jsx-a11y",
+		"node",
+		"promise",
+		"vitest"
+	],
+	// Reuse Tailwind's own canonicalization engine through its Oxlint plugin so
+	// editor diagnostics, CLI linting, and autofixes agree on the preferred class.
+	"jsPlugins": ["oxlint-tailwindcss"],
+	"settings": {
+		"tailwindcss": {
+			// Use the real v4 entry point so @theme tokens and imported Tailwind
+			// plugins participate in canonicalization exactly as they do in the LSP.
+			"entryPoint": "src/styles.css",
+			// Tailwind needs the root size to prove px/rem equivalence safely.
+			"rootFontSize": 16
+		}
+	},
+	// Correctness failures block immediately. Suspicious and performance findings
+	// start as warnings, while --deny-warnings keeps the committed baseline clean.
+	"categories": {
+		"correctness": "error",
+		"suspicious": "warn",
+		"perf": "warn"
+	},
+	"rules": {
+		// Convex database work is often intentionally sequential within one
+		// transaction, so parallel Promise.all advice can be incorrect.
+		"eslint/no-await-in-loop": "off",
+		// Callback parameter names such as query, props, and IDs are deliberately
+		// reused close to their source and remain clear in this codebase.
+		"eslint/no-shadow": "off",
+		// _id and _creationTime are mandatory Convex system field names.
+		"eslint/no-underscore-dangle": "off",
+		// CSS imports are intentional bundler side effects.
+		"import/no-unassigned-import": "off",
+		// Base UI labels are polymorphic; static analysis cannot see the control
+		// association supplied by consumers.
+		"jsx-a11y/label-has-associated-control": "off",
+		// Dialogs intentionally focus their first task-specific field when opened.
+		"jsx-a11y/no-autofocus": "off",
+		// The rule misclassifies semantic form event handling in this app.
+		"jsx-a11y/no-noninteractive-element-interactions": "off",
+		// Canvas-backed images and custom progress indicators cannot always use the
+		// native element suggested by this rule.
+		"jsx-a11y/prefer-tag-over-role": "off",
+		// These map results create new discriminated-union values; mutating the
+		// original Convex documents would be the wrong optimization.
+		"oxc/no-map-spread": "off",
+		// Promise chains used as serialized save queues intentionally resolve void.
+		"promise/always-return": "off",
+		// React DayPicker requires component factories inside its components prop.
+		"react/no-unstable-nested-components": "off",
+		// The project uses the automatic JSX runtime.
+		"react/react-in-jsx-scope": "off",
+		// React Compiler handles referential stability. These syntactic rules would
+		// otherwise reject ordinary inline JSX props without measuring rerenders.
+		"react-perf/jsx-no-new-array-as-prop": "off",
+		"react-perf/jsx-no-jsx-as-prop": "off",
+		"react-perf/jsx-no-new-function-as-prop": "off",
+		"react-perf/jsx-no-new-object-as-prop": "off",
+		// Enforce the complete canonical rule—not only bracket values—because that
+		// is the policy behind IntelliSense's suggestCanonicalClasses diagnostic.
+		// Keeping one canonical policy also provides Tailwind's safe automatic fixes.
+		"tailwindcss/enforce-canonical": "error",
+		// Mutable callback placeholders are reassigned after WebGL initialization,
+		// so moving their initial function out of scope would obscure the lifecycle.
+		"unicorn/consistent-function-scoping": "off",
+		// The project targets ES2022; toReversed and toSorted require ES2023.
+		"unicorn/no-array-reverse": "off",
+		"unicorn/no-array-sort": "off"
+	},
+	"ignorePatterns": [
+		// Agent/plugin sources are vendored tooling, not application code.
+		".agents/**",
+		".codex/**",
+		// Convex and TanStack generate these files; their sources are linted instead.
+		"convex/_generated/**",
+		"src/routeTree.gen.ts"
+	]
+}

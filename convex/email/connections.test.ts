@@ -116,7 +116,7 @@ describe("email connections", () => {
 				displayName: "D",
 				address: "not-an-email",
 			}),
-		).rejects.toThrow();
+		).rejects.toThrow("Use at least 2 characters.");
 
 		await expect(
 			base.mutation(api.email.connections.create, {

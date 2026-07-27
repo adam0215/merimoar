@@ -58,7 +58,7 @@ export function AppNotificationCenter() {
 				<button
 					type="button"
 					onClick={() => setNotification(null)}
-					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[color,background-color,transform] hover:bg-muted hover:text-foreground active:scale-[0.97]"
+					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[color,background-color,transform] hover:bg-muted hover:text-foreground active:scale-97"
 					aria-label="Dismiss notification"
 				>
 					<IconX className="size-4" />

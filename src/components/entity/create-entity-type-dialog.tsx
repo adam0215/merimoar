@@ -109,7 +109,7 @@ export function CreateEntityTypeDialog({
 				render={
 					<button
 						type="button"
-						className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.97]"
+						className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-97"
 						aria-label="Create entity type"
 						title="Create entity type"
 					/>
@@ -218,7 +218,7 @@ export function CreateEntityTypeDialog({
 										aria-label={option.label}
 										title={option.label}
 										className={cn(
-											"flex size-10 shrink-0 items-center justify-center rounded-full border text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.97]",
+											"flex size-10 shrink-0 items-center justify-center rounded-full border text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:scale-97",
 											icon === option.key &&
 												"border-foreground bg-muted text-foreground",
 										)}

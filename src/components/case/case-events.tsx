@@ -130,7 +130,7 @@ export function CaseEvents({
 			<div className="relative mt-4 ml-2 border-l pl-5">
 				{events.map(({ event, author }) => (
 					<article key={event._id} className="relative pb-6 last:pb-0">
-						<span className="absolute top-1.5 -left-[1.55rem] size-2 rounded-full bg-accent ring-4 ring-background" />
+						<span className="absolute top-1.5 -left-6 size-2 rounded-full bg-accent ring-4 ring-background" />
 						<p className="max-w-3xl whitespace-pre-wrap text-sm leading-6">
 							{event.body}
 						</p>
