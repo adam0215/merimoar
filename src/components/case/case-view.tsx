@@ -36,7 +36,7 @@ export function CaseView({
 
 	return (
 		<div className="h-full overflow-y-auto overscroll-none">
-			<div className="mx-auto w-full max-w-5xl px-5 py-6 md:px-8 md:py-8">
+			<div className="mx-auto w-full max-w-6xl px-5 py-6 md:px-8 md:py-8">
 				<CaseHeader detail={detail} members={createOptions?.members ?? []} />
 				<CaseRelationships detail={detail} options={createOptions} />
 				<CaseEvents caseId={detail.case._id} events={detail.events} />
@@ -47,7 +47,7 @@ export function CaseView({
 
 function CaseViewSkeleton() {
 	return (
-		<div className="mx-auto max-w-5xl px-5 py-6 md:px-8 md:py-8">
+		<div className="mx-auto max-w-6xl px-5 py-6 md:px-8 md:py-8">
 			<Skeleton className="h-3 w-24" />
 			<Skeleton className="mt-3 h-7 w-3/5" />
 			<div className="mt-4 flex gap-3">

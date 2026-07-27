@@ -1,5 +1,6 @@
 import {
 	IconAddressBook,
+	IconAlertCircle,
 	IconCircleCheckFilled,
 	IconLoader2,
 	IconPlus,
@@ -9,7 +10,6 @@ import { Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
-import { Button } from "#/components/ui/button.tsx";
 import {
 	Dialog,
 	DialogContent,
@@ -18,6 +18,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "#/components/ui/dialog.tsx";
+import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { EntityIcon } from "#/lib/entity-icons.tsx";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -39,36 +40,25 @@ export function CaseRelationships({
 	);
 
 	return (
-		<>
-			<section className="mt-8">
-				<div className="flex items-center justify-between gap-4">
-					<div>
-						<h2 className="text-sm font-semibold">Contacts</h2>
-						<p className="mt-1 text-xs text-muted-foreground">
-							People and addresses directly involved in this case.
-						</p>
-					</div>
-					<AddRelationshipDialog
-						caseId={detail.case._id}
-						options={options}
-						currentContactIds={currentContactIds}
-						currentEntityIds={currentEntityIds}
-						trigger={
-							<Button variant="ghost" size="sm">
-								<IconPlus />
-								Add
-							</Button>
-						}
-					/>
-				</div>
-				<div className="mt-3 grid gap-2 sm:grid-cols-2">
-					{detail.contacts.map(({ relation, contact }) =>
-						contact ? (
+		<section className="mt-10 border-t pt-8">
+			<div>
+				<h2 className="text-sm font-semibold">Relationships</h2>
+				<p className="mt-1 text-xs text-muted-foreground">
+					People and records connected to this case.
+				</p>
+			</div>
+
+			<div className="mt-4 grid gap-2 sm:grid-cols-2">
+				{detail.contacts.map(({ relation, contact }) =>
+					contact ? (
+						<div
+							key={relation._id}
+							className="flex min-w-0 items-center gap-2 rounded-xl border bg-background p-2"
+						>
 							<Link
-								key={relation._id}
 								to="/contacts"
 								search={{ contact: contact._id }}
-								className="flex min-w-0 items-center gap-3 rounded-xl border p-3 text-foreground no-underline transition-colors hover:bg-muted"
+								className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-foreground no-underline transition-colors hover:bg-muted"
 							>
 								<Avatar className="size-9">
 									<AvatarFallback>
@@ -79,137 +69,123 @@ export function CaseRelationships({
 									<span className="block truncate text-sm font-medium">
 										{contact.name || contact.address}
 									</span>
-									{contact.name && (
-										<span className="block truncate text-xs text-muted-foreground">
-											{contact.address}
-										</span>
-									)}
+									<span className="block truncate text-xs text-muted-foreground">
+										{contact.name ? contact.address : "Contact"}
+									</span>
 								</span>
 							</Link>
-						) : null,
-					)}
-					{detail.contacts.length === 0 && (
-						<p className="col-span-full rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-							No contacts related to this case.
-						</p>
-					)}
-				</div>
-			</section>
-
-			<section className="mt-8">
-				<div className="flex items-center justify-between gap-4">
-					<div>
-						<h2 className="text-sm font-semibold">Relationships</h2>
-						<p className="mt-1 text-xs text-muted-foreground">
-							Contacts and organization-defined entities in one view.
-						</p>
-					</div>
-					<AddRelationshipDialog
-						caseId={detail.case._id}
-						options={options}
-						currentContactIds={currentContactIds}
-						currentEntityIds={currentEntityIds}
-						trigger={
-							<Button variant="outline" size="sm">
-								<IconPlus />
-								Add relationship
-							</Button>
-						}
-					/>
-				</div>
-
-				<div className="mt-3 flex flex-wrap gap-2">
-					{detail.contacts.map(({ relation, contact }) =>
-						contact ? (
-							<RelationshipPill
-								key={`contact-${relation._id}`}
-								icon={<IconAddressBook />}
-								type="Contact"
+							<RemoveRelationshipButton
 								label={contact.name || contact.address}
-								onRemove={{
+								relation={{
 									kind: "contact",
 									relationId: relation._id,
 								}}
 							/>
-						) : null,
-					)}
-					{detail.entities.map(({ relation, entity, entityType }) =>
-						entity && entityType ? (
-							<RelationshipPill
-								key={`entity-${relation._id}`}
-								icon={<EntityIcon icon={entityType.icon} />}
-								type={entityType.name}
+						</div>
+					) : null,
+				)}
+				{detail.entities.map(({ relation, entity, entityType }) =>
+					entity && entityType ? (
+						<div
+							key={relation._id}
+							className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3"
+						>
+							<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+								<EntityIcon icon={entityType.icon} className="size-4" />
+							</span>
+							<span className="min-w-0 flex-1">
+								<span className="block truncate text-sm font-medium">
+									{entity.displayName}
+								</span>
+								<span className="block truncate text-xs text-muted-foreground">
+									{entityType.name} · {entity.identifier}
+								</span>
+							</span>
+							<RemoveRelationshipButton
 								label={entity.displayName}
-								onRemove={{
+								relation={{
 									kind: "entity",
 									relationId: relation._id,
 								}}
 							/>
-						) : null,
-					)}
-					{detail.contacts.length === 0 && detail.entities.length === 0 && (
-						<p className="w-full rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-							No relationships yet.
-						</p>
-					)}
-				</div>
-			</section>
-		</>
+						</div>
+					) : null,
+				)}
+				<AddRelationshipDialog
+					caseId={detail.case._id}
+					options={options}
+					currentContactIds={currentContactIds}
+					currentEntityIds={currentEntityIds}
+					trigger={
+						<button
+							type="button"
+							className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-dashed p-3 text-left text-muted-foreground transition-[color,background-color,transform] hover:bg-muted/50 hover:text-foreground active:scale-[0.99]"
+						>
+							<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted">
+								<IconPlus className="size-4" />
+							</span>
+							<span className="text-sm font-medium">Add relationship</span>
+						</button>
+					}
+				/>
+			</div>
+		</section>
 	);
 }
 
-function RelationshipPill({
-	icon,
-	type,
+function RemoveRelationshipButton({
 	label,
-	onRemove,
+	relation,
 }: {
-	icon: React.ReactNode;
-	type: string;
 	label: string;
-	onRemove:
+	relation:
 		| { kind: "contact"; relationId: Id<"caseContactRelations"> }
 		| { kind: "entity"; relationId: Id<"caseEntityRelations"> };
 }) {
 	const removeContact = useMutation(api.case.mutations.removeContactRelation);
 	const removeEntity = useMutation(api.case.mutations.removeEntityRelation);
 	const [isRemoving, setIsRemoving] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
 	async function remove() {
 		setIsRemoving(true);
+		setError(null);
 
 		try {
-			if (onRemove.kind === "contact") {
-				await removeContact({ relationId: onRemove.relationId });
+			if (relation.kind === "contact") {
+				await removeContact({ relationId: relation.relationId });
 			} else {
-				await removeEntity({ relationId: onRemove.relationId });
+				await removeEntity({ relationId: relation.relationId });
 			}
+		} catch (caughtError) {
+			setError(
+				getConvexErrorMessage(
+					caughtError,
+					"Relationship could not be removed.",
+				),
+			);
 		} finally {
 			setIsRemoving(false);
 		}
 	}
 
 	return (
-		<div className="flex min-w-0 items-center gap-2 rounded-full border bg-muted/30 py-1.5 pr-1.5 pl-2.5">
-			<span className="flex size-4 items-center justify-center text-muted-foreground [&_svg]:size-4">
-				{icon}
-			</span>
-			<span className="max-w-48 truncate text-sm font-medium">{label}</span>
-			<span className="text-xs text-muted-foreground">{type}</span>
-			<button
-				type="button"
-				onClick={remove}
-				disabled={isRemoving}
-				className="flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-background hover:text-foreground disabled:opacity-50"
-				aria-label={`Remove ${label}`}
-			>
-				{isRemoving ? (
-					<IconLoader2 className="size-3.5 animate-spin" />
-				) : (
-					<IconX className="size-3.5" />
-				)}
-			</button>
-		</div>
+		<button
+			type="button"
+			onClick={remove}
+			disabled={isRemoving}
+			className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[color,background-color,transform] hover:bg-muted hover:text-foreground active:scale-[0.97] disabled:opacity-50"
+			aria-label={`${error ? "Retry removing" : "Remove"} ${label}`}
+			title={error ?? `Remove ${label}`}
+		>
+			{isRemoving ? (
+				<IconLoader2 className="size-3.5 animate-spin" />
+			) : error ? (
+				<IconAlertCircle className="size-4 text-destructive" />
+			) : (
+				<IconX className="size-4" />
+			)}
+		</button>
 	);
 }
 
@@ -230,13 +206,19 @@ function AddRelationshipDialog({
 	const addEntity = useMutation(api.case.mutations.addEntityRelation);
 	const [open, setOpen] = useState(false);
 	const [pendingId, setPendingId] = useState<string | null>(null);
+	const [error, setError] = useState<string | null>(null);
 
 	async function selectContact(contactId: Id<"contacts">) {
 		setPendingId(contactId);
+		setError(null);
 
 		try {
 			await addContact({ caseId, contactId });
 			setOpen(false);
+		} catch (caughtError) {
+			setError(
+				getConvexErrorMessage(caughtError, "Contact could not be added."),
+			);
 		} finally {
 			setPendingId(null);
 		}
@@ -244,17 +226,30 @@ function AddRelationshipDialog({
 
 	async function selectEntity(entityId: Id<"entities">) {
 		setPendingId(entityId);
+		setError(null);
 
 		try {
 			await addEntity({ caseId, entityId });
 			setOpen(false);
+		} catch (caughtError) {
+			setError(
+				getConvexErrorMessage(caughtError, "Record could not be added."),
+			);
 		} finally {
 			setPendingId(null);
 		}
 	}
 
 	return (
-		<Dialog open={open} onOpenChange={setOpen}>
+		<Dialog
+			open={open}
+			onOpenChange={(nextOpen) => {
+				setOpen(nextOpen);
+				if (nextOpen) {
+					setError(null);
+				}
+			}}
+		>
 			<DialogTrigger asChild>{trigger}</DialogTrigger>
 			<DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-xl">
 				<DialogHeader>
@@ -265,6 +260,15 @@ function AddRelationshipDialog({
 				</DialogHeader>
 
 				<div className="space-y-5 pt-1">
+					{error && (
+						<p
+							className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive"
+							role="alert"
+						>
+							<IconAlertCircle className="size-4 shrink-0" />
+							{error}
+						</p>
+					)}
 					<div>
 						<div className="mb-2 flex items-center gap-2">
 							<IconAddressBook className="size-4 text-muted-foreground" />

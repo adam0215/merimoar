@@ -1,9 +1,9 @@
-import { IconLoader2, IconPlus, IconTimelineEvent } from "@tabler/icons-react";
+import { IconCheck, IconLoader2, IconPlus, IconX } from "@tabler/icons-react";
 import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import * as v from "valibot";
 import { Button } from "#/components/ui/button.tsx";
-import { Textarea } from "#/components/ui/textarea.tsx";
+import { Input } from "#/components/ui/input.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -23,11 +23,11 @@ export function CaseEvents({
 	const [body, setBody] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const inputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
 		if (composerOpen) {
-			textareaRef.current?.focus();
+			inputRef.current?.focus();
 		}
 	}, [composerOpen]);
 
@@ -45,7 +45,7 @@ export function CaseEvents({
 		try {
 			await addEvent({ caseId, body: result.output });
 			setBody("");
-			requestAnimationFrame(() => textareaRef.current?.focus());
+			requestAnimationFrame(() => inputRef.current?.focus());
 		} catch (caughtError) {
 			setError(getConvexErrorMessage(caughtError));
 		} finally {
@@ -54,74 +54,76 @@ export function CaseEvents({
 	}
 
 	return (
-		<section className="mt-8">
+		<section className="mt-10 border-t pt-8">
 			<div className="flex items-center justify-between gap-4">
-				<div>
-					<h2 className="text-sm font-semibold">Events</h2>
-					<p className="mt-1 text-xs text-muted-foreground">
-						A fast, chronological record of what has happened.
-					</p>
-				</div>
-				<Button variant="ghost" size="sm" onClick={() => setComposerOpen(true)}>
+				<h2 className="text-sm font-semibold">Events</h2>
+				<Button
+					variant="secondary"
+					size="sm"
+					onClick={() => setComposerOpen(true)}
+				>
 					<IconPlus />
 					Add event
 				</Button>
 			</div>
 
 			{composerOpen && (
-				<div className="mt-3 rounded-xl border bg-muted/20 p-3">
-					<Textarea
-						ref={textareaRef}
-						value={body}
-						onChange={(event) => {
-							setBody(event.target.value);
-							setError(null);
-						}}
-						onKeyDown={(event) => {
-							if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-								event.preventDefault();
-								void submit();
-							}
-							if (event.key === "Escape" && body.length === 0) {
-								setComposerOpen(false);
-							}
-						}}
-						placeholder="Write an event…"
-						className="min-h-20 border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
-					/>
-					<div className="mt-2 flex items-center justify-between gap-3">
-						<div>
-							{error ? (
-								<p className="text-xs text-destructive">{error}</p>
-							) : (
-								<p className="text-xs text-muted-foreground">
-									Press ⌘ Enter to add
-								</p>
-							)}
-						</div>
-						<div className="flex gap-2">
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => {
+				<div className="mt-3">
+					<div className="flex items-center gap-2 rounded-xl border bg-muted/20 p-2">
+						<Input
+							ref={inputRef}
+							value={body}
+							onChange={(event) => {
+								setBody(event.target.value);
+								setError(null);
+							}}
+							onKeyDown={(event) => {
+								if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+									event.preventDefault();
+									void submit();
+								}
+								if (event.key === "Escape") {
 									setComposerOpen(false);
 									setBody("");
 									setError(null);
-								}}
-								disabled={isSubmitting}
-							>
-								Cancel
-							</Button>
-							<Button size="sm" onClick={submit} disabled={isSubmitting}>
-								{isSubmitting ? (
-									<IconLoader2 className="animate-spin" />
-								) : (
-									<IconTimelineEvent />
-								)}
-								Add event
-							</Button>
-						</div>
+								}
+							}}
+							placeholder="Write an event…  ⌘ Enter to add"
+							className="h-8 border-0 bg-transparent shadow-none focus-visible:ring-0"
+						/>
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							onClick={() => {
+								setComposerOpen(false);
+								setBody("");
+								setError(null);
+							}}
+							disabled={isSubmitting}
+							aria-label="Cancel"
+							title="Cancel"
+						>
+							<IconX />
+						</Button>
+						<Button
+							size="icon-sm"
+							onClick={submit}
+							disabled={isSubmitting}
+							aria-label="Add event"
+							title="Add event"
+						>
+							{isSubmitting ? (
+								<IconLoader2 className="animate-spin" />
+							) : (
+								<IconCheck />
+							)}
+						</Button>
 					</div>
+					{error && (
+						<p className="mt-1.5 text-xs text-destructive" role="alert">
+							{error}
+						</p>
+					)}
 				</div>
 			)}
 
