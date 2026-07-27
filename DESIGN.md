@@ -4,6 +4,14 @@
 
 - Headings are semi bold.
 
+## Inputs
+
+- Labels above inputs (text, select, checkbox, etc.) are always 14px/w500 if nothing else is specified.
+
+## Interaction states
+
+- Gray hover, active, highlighted, and selected backgrounds always use the `muted` color token (`bg-muted` in Tailwind). Do not recreate this state with foreground opacity or one-off gray values.
+
 ## Icons
 
 - Tabler Icons is always used as the main icon library.
