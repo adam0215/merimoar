@@ -498,7 +498,11 @@ function DeadlineField({
 							})
 						: "Select date"}
 				</PopoverTrigger>
-				<PopoverContent align="start" className="w-auto gap-0 p-0">
+				<PopoverContent
+					align="start"
+					variant="calendar"
+					className="w-auto gap-0 p-0"
+				>
 					<Calendar
 						mode="single"
 						selected={selectedDate}
