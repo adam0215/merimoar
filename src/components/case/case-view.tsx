@@ -38,7 +38,7 @@ export function CaseView({
 		<div className="h-full overflow-y-auto overscroll-none">
 			<div className="mx-auto w-full max-w-6xl px-5 py-6 md:px-8 md:py-8">
 				<CaseHeader detail={detail} members={createOptions?.members ?? []} />
-				<CaseRelationships detail={detail} options={createOptions} />
+				<CaseRelationships detail={detail} />
 				<CaseEvents caseId={detail.case._id} events={detail.events} />
 			</div>
 		</div>

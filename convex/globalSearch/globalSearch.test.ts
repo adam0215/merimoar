@@ -170,6 +170,7 @@ describe("global search", () => {
 				identifier: "FAST-1042",
 				label: "Storgatan 12",
 				descriptor: "Property",
+				icon: "home",
 			},
 		]);
 		expect(caseResults).toMatchObject([
@@ -200,6 +201,101 @@ describe("global search", () => {
 		expect(
 			await actor.query(api.globalSearch.reader.search, { query: "   " }),
 		).toEqual([]);
+	});
+
+	it("backfills search entries for existing relation-capable objects", async () => {
+		const { actor, base } = await createFixture();
+		const legacy = await actor.run(async (ctx) => {
+			const organization = await ctx.db
+				.query("organizations")
+				.withIndex("by_workos_organization_id", (index) =>
+					index.eq("workosOrganizationId", "org_merimoar"),
+				)
+				.unique();
+			if (!organization) {
+				throw new Error("Expected the organization");
+			}
+
+			const entityTypeId = await ctx.db.insert("entityTypes", {
+				organizationId: organization._id,
+				key: "legacy-property",
+				name: "Legacy property",
+				pluralName: "Legacy properties",
+				identifierLabel: "Property ID",
+				description: "",
+				icon: "estate",
+				archivedAt: null,
+			});
+			const contactId = await ctx.db.insert("contacts", {
+				organizationId: organization._id,
+				address: "legacy@example.com",
+				name: "Legacy Contact",
+				firstSeenAt: 1,
+				lastSeenAt: 1,
+			});
+			const entityId = await ctx.db.insert("entities", {
+				entityTypeId,
+				identifier: "LEGACY-ENTITY-1",
+				normalizedIdentifier: "legacy-entity-1",
+				displayName: "Legacy Home",
+				createdAt: 1,
+				updatedAt: 1,
+				archivedAt: null,
+			});
+			const caseId = await ctx.db.insert("cases", {
+				organizationId: organization._id,
+				reference: "LEGACY-CASE-1",
+				title: "Legacy Case",
+				description: "",
+				ownerMemberId: null,
+				dueAt: null,
+				status: "open",
+				lastActivityAt: 1,
+				createdAt: 1,
+				updatedAt: 1,
+			});
+
+			return { caseId, contactId, entityId };
+		});
+
+		await expect(
+			actor.query(api.globalSearch.reader.search, {
+				query: "legacy@example.com",
+			}),
+		).resolves.toEqual([]);
+
+		await expect(
+			base.mutation(
+				internal.globalSearch.model.backfillExistingSearchEntries,
+				{},
+			),
+		).resolves.toMatchObject({
+			contacts: 1,
+			cases: 1,
+			entities: 1,
+		});
+
+		const [contactResults, entityResults, caseResults] = await Promise.all([
+			actor.query(api.globalSearch.reader.search, {
+				query: "legacy@example.com",
+			}),
+			actor.query(api.globalSearch.reader.search, {
+				query: "LEGACY-ENTITY-1",
+			}),
+			actor.query(api.globalSearch.reader.search, {
+				query: "LEGACY-CASE-1",
+			}),
+		]);
+
+		expect(contactResults).toMatchObject([
+			{ target: { kind: "contact", contactId: legacy.contactId } },
+		]);
+		expect(entityResults).toMatchObject([
+			{ target: { kind: "entity", entityId: legacy.entityId } },
+		]);
+		expect(caseResults).toMatchObject([
+			{ target: { kind: "case", caseId: legacy.caseId } },
+		]);
 	});
 
 	it("requires an authenticated organization member", async () => {
