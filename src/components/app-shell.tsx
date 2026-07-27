@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
+import { AppNotificationCenter } from "#/components/app-notification-center.tsx";
 import { AppSidebar } from "#/components/app-sidebar.tsx";
 import { MerimoarLogo } from "#/components/merimoar-logo.tsx";
 import {
@@ -41,6 +42,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 	return (
 		<SidebarProvider className="app-shell-enter pt-14">
+			<AppNotificationCenter />
 			<AppSidebar />
 			<AppHeader
 				pathname={pathname}
