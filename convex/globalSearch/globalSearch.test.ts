@@ -54,10 +54,12 @@ async function createFixture() {
 			externalEventId: "contact-event",
 			externalMessageId: "contact-message",
 			eventType: "email.received",
-			status: "pending",
+			status: "queued",
 			rawPayload: "{}",
 			receivedAt: 1_100,
 			attempts: 0,
+			replayCount: 0,
+			processingGeneration: 0,
 		});
 		return { ingestEventId };
 	});
@@ -103,6 +105,7 @@ describe("global search", () => {
 		const { actor, base, ingestEventId } = await createFixture();
 		await base.mutation(internal.email.ingest.storeInboundEmail, {
 			eventId: ingestEventId,
+			processingGeneration: 0,
 			email: {
 				externalMessageId: "contact-message",
 				internetMessageId: "<contact-message@example.com>",

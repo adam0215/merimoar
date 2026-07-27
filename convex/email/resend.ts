@@ -4,55 +4,129 @@ import { v } from "convex/values";
 import { convert } from "html-to-text";
 import { Resend } from "resend";
 import { internal } from "../_generated/api";
+import type { Doc } from "../_generated/dataModel";
+import type { ActionCtx } from "../_generated/server";
 import { env, internalAction } from "../_generated/server";
+import {
+	classifyResendRetrievalError,
+	createNonRetryableIngestError,
+} from "./ingestErrors";
 import { normalizeResendEmail } from "./normalize";
+
+async function failPermanently(
+	ctx: ActionCtx,
+	args: {
+		eventId: Doc<"emailIngestEvents">["_id"];
+		processingGeneration: number;
+		failureKind: NonNullable<Doc<"emailIngestEvents">["failureKind"]>;
+		message: string;
+		cause?: unknown;
+	},
+): Promise<never> {
+	let recordingFailure: unknown;
+	try {
+		await ctx.runMutation(
+			internal.email.ingest.recordTerminalProcessingFailure,
+			{
+				eventId: args.eventId,
+				error: args.message,
+				failureKind: args.failureKind,
+				processingGeneration: args.processingGeneration,
+			},
+		);
+	} catch (cause) {
+		recordingFailure = cause;
+	}
+	throw createNonRetryableIngestError(
+		args.failureKind,
+		args.message,
+		args.cause ?? recordingFailure,
+	);
+}
 
 export const processInboundEmail = internalAction({
 	args: {
 		eventId: v.id("emailIngestEvents"),
-		attempt: v.number(),
+		processingGeneration: v.number(),
 	},
 	handler: async (ctx, args): Promise<null> => {
-		const ingestContext = await ctx.runQuery(
-			internal.email.ingest.getIngestContext,
-			{ eventId: args.eventId },
+		const ingestContext = await ctx.runMutation(
+			internal.email.ingest.prepareProcessingAttempt,
+			{
+				eventId: args.eventId,
+				processingGeneration: args.processingGeneration,
+			},
 		);
 		if (!ingestContext) {
 			return null;
 		}
+
 		if (!env.RESEND_API_KEY) {
-			throw new Error("RESEND_API_KEY is not configured");
+			return await failPermanently(ctx, {
+				...args,
+				failureKind: "configuration",
+				message: "Email ingest is not configured",
+			});
 		}
 
-		try {
-			const resend = new Resend(env.RESEND_API_KEY);
-			const { data, error } = await resend.emails.receiving.get(
-				ingestContext.event.externalMessageId,
-			);
-			if (error || !data) {
-				throw new Error(error?.message ?? "Resend returned no email");
+		const resend = new Resend(env.RESEND_API_KEY);
+		const { data, error } = await resend.emails.receiving.get(
+			ingestContext.event.externalMessageId,
+		);
+		if (error) {
+			const classification = classifyResendRetrievalError(error);
+			if (classification.retryable) {
+				throw new Error("Resend is temporarily unavailable");
 			}
+			return await failPermanently(ctx, {
+				...args,
+				failureKind: classification.failureKind,
+				message:
+					classification.failureKind === "configuration"
+						? "Email ingest authentication was rejected"
+						: "Resend rejected the email lookup",
+				cause: error,
+			});
+		}
+		if (!data) {
+			return await failPermanently(ctx, {
+				...args,
+				failureKind: "unknown",
+				message: "Resend returned no email data",
+			});
+		}
 
-			const email = normalizeResendEmail(data, (html) =>
-				convert(html, {
-					wordwrap: false,
-					selectors: [{ selector: "img", format: "skip" }],
-				}),
-			);
+		const email = await (async () => {
+			try {
+				return normalizeResendEmail(data, (html) =>
+					convert(html, {
+						wordwrap: false,
+						selectors: [{ selector: "img", format: "skip" }],
+					}),
+				);
+			} catch (cause) {
+				return await failPermanently(ctx, {
+					...args,
+					failureKind: "unknown",
+					message: "Email normalization failed",
+					cause,
+				});
+			}
+		})();
+		try {
 			await ctx.runMutation(internal.email.ingest.storeInboundEmail, {
 				eventId: args.eventId,
+				processingGeneration: args.processingGeneration,
 				email,
 			});
-			return null;
-		} catch (error) {
-			const message =
-				error instanceof Error ? error.message : "Unknown Resend error";
-			await ctx.runMutation(internal.email.ingest.recordProcessingFailure, {
-				eventId: args.eventId,
-				error: message,
-				attempt: args.attempt,
+		} catch (cause) {
+			return await failPermanently(ctx, {
+				...args,
+				failureKind: "unknown",
+				message: "Email storage failed",
+				cause,
 			});
-			return null;
 		}
+		return null;
 	},
 });

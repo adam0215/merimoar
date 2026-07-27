@@ -1,13 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { useQuery } from "convex-helpers/react/cache";
+import { useMutation } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { useQueries, useQuery } from "convex-helpers/react/cache";
+import { useState } from "react";
 import { AddEmailConnectionDialog } from "#/components/email/add-email-connection-dialog.tsx";
 import { ProviderMark } from "#/components/email/provider-mark.tsx";
 import { RemoveEmailConnectionDialog } from "#/components/email/remove-email-connection-dialog.tsx";
 import { Badge } from "#/components/ui/badge.tsx";
+import { Button } from "#/components/ui/button.tsx";
 import {
 	Card,
 	CardAction,
+	CardContent,
 	CardDescription,
 	CardHeader,
 	CardTitle,
@@ -18,7 +23,10 @@ import {
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
+import { showAppNotification } from "#/lib/app-notifications.ts";
+import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { api } from "../../../../../convex/_generated/api";
+import type { Id } from "../../../../../convex/_generated/dataModel";
 
 const preloadEmailConnections = createServerFn({ method: "GET" }).handler(
 	async () => {
@@ -129,8 +137,124 @@ function OrganizationEmailSettings() {
 						</Card>
 					))}
 				</div>
+
+				<FailedIngestEvents connections={connections} />
 			</div>
 		</ScrollContainer>
+	);
+}
+
+type FailedIngestEvent = FunctionReturnType<
+	typeof api.email.ingestOperations.listFailedEvents
+>[number];
+
+function FailedIngestEvents({
+	connections,
+}: {
+	connections: FunctionReturnType<typeof api.email.reader.listConnections>;
+}) {
+	const failureQueries = Object.fromEntries(
+		connections.map((connection) => [
+			connection._id,
+			{
+				query: api.email.ingestOperations.listFailedEvents,
+				args: { connectionId: connection._id },
+			},
+		]),
+	);
+	const failureResults = useQueries(failureQueries);
+	const failures = Object.values(failureResults).flatMap((result) =>
+		result === undefined || result instanceof Error
+			? []
+			: (result as FailedIngestEvent[]),
+	);
+	const replayFailedEvent = useMutation(
+		api.email.ingestOperations.replayFailedEvent,
+	);
+	const [replayingEventId, setReplayingEventId] =
+		useState<Id<"emailIngestEvents">>();
+
+	async function replay(
+		eventId: Id<"emailIngestEvents">,
+		connectionId: Id<"emailConnections">,
+	) {
+		setReplayingEventId(eventId);
+		try {
+			const result = await replayFailedEvent({ connectionId, eventId });
+			showAppNotification({
+				title:
+					result.status === "queued"
+						? "Email queued"
+						: result.status === "already_processed"
+							? "Email already processed"
+							: "Email is already being processed",
+			});
+		} catch (error) {
+			showAppNotification({
+				title: "Email could not be retried",
+				description: getConvexErrorMessage(
+					error,
+					"Try again after checking the connection.",
+				),
+			});
+		} finally {
+			setReplayingEventId(undefined);
+		}
+	}
+
+	if (failures.length === 0) {
+		return null;
+	}
+
+	return (
+		<section className="mt-10">
+			<div className="mb-4">
+				<h2 className="text-lg font-semibold">Failed email ingest</h2>
+				<p className="mt-1 text-sm text-muted-foreground">
+					Retry email that could not be routed or processed.
+				</p>
+			</div>
+			<div className="space-y-3">
+				{failures.map((failure) => (
+					<Card key={`${failure.connectionId}:${failure.eventId}`} size="sm">
+						<CardHeader className="items-center">
+							<div className="min-w-0">
+								<CardTitle className="truncate">
+									{failure.connection.displayName}
+								</CardTitle>
+								<CardDescription className="mt-1 truncate">
+									{failure.connection.address}
+								</CardDescription>
+							</div>
+							<CardAction>
+								<Badge variant="outline">
+									{failure.status === "unroutable" ? "Unroutable" : "Failed"}
+								</Badge>
+							</CardAction>
+						</CardHeader>
+						<CardContent className="flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+							<div>
+								<p>{failure.reason}</p>
+								<p className="mt-1 text-xs text-muted-foreground">
+									{new Date(failure.receivedAt).toLocaleString()} ·{" "}
+									{failure.attempts}{" "}
+									{failure.attempts === 1 ? "attempt" : "attempts"}
+								</p>
+							</div>
+							<Button
+								type="button"
+								size="sm"
+								variant="outline"
+								disabled={!failure.canReplay || replayingEventId !== undefined}
+								onClick={() => replay(failure.eventId, failure.connectionId)}
+							>
+								{replayingEventId === failure.eventId ? "Retrying…" : "Retry"}
+							</Button>
+						</CardContent>
+					</Card>
+				))}
+			</div>
+		</section>
 	);
 }
 

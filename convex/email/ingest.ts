@@ -2,20 +2,21 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { internalMutation, internalQuery } from "../_generated/server";
+import { internalMutation } from "../_generated/server";
 import { upsertSenderContact } from "../contact/model";
-import { normalizedInboundEmailValidator } from "./model";
-import { normalizeEmailAddress } from "./normalize";
-
-const RETRY_DELAYS_MS = [15_000, 60_000, 5 * 60_000];
+import { emailIngestPool } from "./ingestQueue";
+import { selectIngestRecipientAddresses } from "./ingestRecipients";
+import { updateIngestRecipientStatuses } from "./ingestState";
+import {
+	emailIngestFailureKindValidator,
+	normalizedInboundEmailValidator,
+} from "./model";
 
 async function findConnection(ctx: MutationCtx, recipientAddresses: string[]) {
 	for (const recipientAddress of recipientAddresses) {
 		const connection = await ctx.db
 			.query("emailConnections")
-			.withIndex("by_address", (query) =>
-				query.eq("address", normalizeEmailAddress(recipientAddress)),
-			)
+			.withIndex("by_address", (query) => query.eq("address", recipientAddress))
 			.unique();
 
 		if (connection?.status === "active") {
@@ -77,7 +78,8 @@ export const recordResendEvent = internalMutation({
 		externalEventId: v.string(),
 		externalMessageId: v.string(),
 		eventType: v.string(),
-		recipientAddresses: v.array(v.string()),
+		receivedForAddresses: v.array(v.string()),
+		toAddresses: v.array(v.string()),
 		rawPayload: v.string(),
 		receivedAt: v.number(),
 	},
@@ -93,46 +95,85 @@ export const recordResendEvent = internalMutation({
 			return { status: "duplicate" as const, eventId: existing._id };
 		}
 
-		const connection = await findConnection(ctx, args.recipientAddresses);
+		const recipientAddresses = selectIngestRecipientAddresses(args);
+		const connection = await findConnection(ctx, recipientAddresses);
 		const eventId = await ctx.db.insert("emailIngestEvents", {
 			connectionId: connection?._id,
 			externalEventId: args.externalEventId,
 			externalMessageId: args.externalMessageId,
 			eventType: args.eventType,
-			status: connection ? "pending" : "failed",
+			status: connection ? "queued" : "unroutable",
 			rawPayload: args.rawPayload,
 			receivedAt: args.receivedAt,
 			error: connection
 				? undefined
 				: "No active connection matched the recipient",
+			failureKind: connection ? undefined : "unroutable",
 			attempts: 0,
+			replayCount: 0,
+			processingGeneration: 0,
 		});
+		await Promise.all(
+			recipientAddresses.map((address) =>
+				ctx.db.insert("emailIngestRecipients", {
+					eventId,
+					address,
+					status: connection ? "queued" : "unroutable",
+					receivedAt: args.receivedAt,
+				}),
+			),
+		);
 
 		if (!connection) {
 			return { status: "unroutable" as const, eventId };
 		}
 
-		await ctx.scheduler.runAfter(0, internal.email.resend.processInboundEmail, {
-			eventId,
-			attempt: 0,
-		});
+		const workId = await emailIngestPool.enqueueAction(
+			ctx,
+			internal.email.resend.processInboundEmail,
+			{
+				eventId,
+				processingGeneration: 0,
+			},
+			{
+				onComplete: internal.email.ingestQueue.completeEmailIngestWork,
+				context: { eventId, processingGeneration: 0 },
+			},
+		);
+		await ctx.db.patch(eventId, { workId });
 		return { status: "accepted" as const, eventId };
 	},
 });
 
-export const getIngestContext = internalQuery({
-	args: { eventId: v.id("emailIngestEvents") },
+export const prepareProcessingAttempt = internalMutation({
+	args: {
+		eventId: v.id("emailIngestEvents"),
+		processingGeneration: v.number(),
+	},
 	handler: async (ctx, args) => {
 		const event = await ctx.db.get(args.eventId);
-		if (!event?.connectionId || event.status === "processed") {
+		if (
+			!event?.connectionId ||
+			event.status !== "queued" ||
+			(event.processingGeneration ?? 0) !== args.processingGeneration
+		) {
 			return null;
 		}
 
 		const connection = await ctx.db.get(event.connectionId);
 		if (!connection || connection.status !== "active") {
+			await ctx.db.patch(event._id, {
+				status: "failed",
+				error: "The email connection is not active",
+				failureKind: "connection",
+			});
+			await updateIngestRecipientStatuses(ctx, event._id, "failed");
 			return null;
 		}
 
+		await ctx.db.patch(event._id, {
+			attempts: event.attempts + 1,
+		});
 		return { event, connection };
 	},
 });
@@ -140,6 +181,7 @@ export const getIngestContext = internalQuery({
 export const storeInboundEmail = internalMutation({
 	args: {
 		eventId: v.id("emailIngestEvents"),
+		processingGeneration: v.number(),
 		email: normalizedInboundEmailValidator,
 	},
 	handler: async (ctx, args) => {
@@ -148,6 +190,16 @@ export const storeInboundEmail = internalMutation({
 			throw new Error("Ingest event is not connected to an inbox");
 		}
 		if (event.status === "processed") {
+			return await findExistingMessage(
+				ctx,
+				event.connectionId,
+				args.email.externalMessageId,
+			).then((message) => message?._id ?? null);
+		}
+		if (
+			event.status !== "queued" ||
+			(event.processingGeneration ?? 0) !== args.processingGeneration
+		) {
 			return null;
 		}
 
@@ -166,8 +218,9 @@ export const storeInboundEmail = internalMutation({
 				status: "processed",
 				processedAt: Date.now(),
 				error: undefined,
-				attempts: event.attempts + 1,
+				failureKind: undefined,
 			});
+			await updateIngestRecipientStatuses(ctx, event._id, "processed");
 			return existingMessage._id;
 		}
 
@@ -252,41 +305,36 @@ export const storeInboundEmail = internalMutation({
 			status: "processed",
 			processedAt: Date.now(),
 			error: undefined,
-			attempts: event.attempts + 1,
+			failureKind: undefined,
 		});
+		await updateIngestRecipientStatuses(ctx, event._id, "processed");
 		return messageId;
 	},
 });
 
-export const recordProcessingFailure = internalMutation({
+export const recordTerminalProcessingFailure = internalMutation({
 	args: {
 		eventId: v.id("emailIngestEvents"),
 		error: v.string(),
-		attempt: v.number(),
+		failureKind: emailIngestFailureKindValidator,
+		processingGeneration: v.number(),
 	},
 	handler: async (ctx, args) => {
 		const event = await ctx.db.get(args.eventId);
-		if (!event || event.status === "processed") {
+		if (
+			!event ||
+			event.status !== "queued" ||
+			(event.processingGeneration ?? 0) !== args.processingGeneration
+		) {
 			return null;
 		}
 
 		await ctx.db.patch(event._id, {
 			status: "failed",
 			error: args.error.slice(0, 500),
-			attempts: event.attempts + 1,
+			failureKind: args.failureKind,
 		});
-
-		const retryDelay = RETRY_DELAYS_MS[args.attempt];
-		if (retryDelay !== undefined) {
-			await ctx.scheduler.runAfter(
-				retryDelay,
-				internal.email.resend.processInboundEmail,
-				{
-					eventId: args.eventId,
-					attempt: args.attempt + 1,
-				},
-			);
-		}
+		await updateIngestRecipientStatuses(ctx, event._id, "failed");
 		return null;
 	},
 });

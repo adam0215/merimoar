@@ -49,10 +49,8 @@ http.route({
 				externalEventId,
 				externalMessageId: receivedEvent.data.email_id,
 				eventType: receivedEvent.type,
-				recipientAddresses: [
-					...receivedEvent.data.to,
-					...receivedEvent.data.received_for,
-				],
+				receivedForAddresses: receivedEvent.data.received_for,
+				toAddresses: receivedEvent.data.to,
 				rawPayload,
 				receivedAt: Date.now(),
 			},

@@ -21,6 +21,11 @@ import type * as contact_model from "../contact/model.js";
 import type * as contact_reader from "../contact/reader.js";
 import type * as email_connections from "../email/connections.js";
 import type * as email_ingest from "../email/ingest.js";
+import type * as email_ingestErrors from "../email/ingestErrors.js";
+import type * as email_ingestOperations from "../email/ingestOperations.js";
+import type * as email_ingestQueue from "../email/ingestQueue.js";
+import type * as email_ingestRecipients from "../email/ingestRecipients.js";
+import type * as email_ingestState from "../email/ingestState.js";
 import type * as email_input from "../email/input.js";
 import type * as email_model from "../email/model.js";
 import type * as email_normalize from "../email/normalize.js";
@@ -35,6 +40,7 @@ import type * as entity_values from "../entity/values.js";
 import type * as globalSearch_model from "../globalSearch/model.js";
 import type * as globalSearch_reader from "../globalSearch/reader.js";
 import type * as http from "../http.js";
+import type * as migrations from "../migrations.js";
 import type * as workos from "../workos.js";
 
 import type {
@@ -57,6 +63,11 @@ declare const fullApi: ApiFromModules<{
   "contact/reader": typeof contact_reader;
   "email/connections": typeof email_connections;
   "email/ingest": typeof email_ingest;
+  "email/ingestErrors": typeof email_ingestErrors;
+  "email/ingestOperations": typeof email_ingestOperations;
+  "email/ingestQueue": typeof email_ingestQueue;
+  "email/ingestRecipients": typeof email_ingestRecipients;
+  "email/ingestState": typeof email_ingestState;
   "email/input": typeof email_input;
   "email/model": typeof email_model;
   "email/normalize": typeof email_normalize;
@@ -71,6 +82,7 @@ declare const fullApi: ApiFromModules<{
   "globalSearch/model": typeof globalSearch_model;
   "globalSearch/reader": typeof globalSearch_reader;
   http: typeof http;
+  migrations: typeof migrations;
   workos: typeof workos;
 }>;
 
@@ -102,4 +114,6 @@ export declare const internal: FilterApi<
 
 export declare const components: {
   workOSAuthKit: import("@convex-dev/workos-authkit/_generated/component.js").ComponentApi<"workOSAuthKit">;
+  migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
+  emailIngestWorkpool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"emailIngestWorkpool">;
 };
