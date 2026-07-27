@@ -109,7 +109,6 @@ export const addField = mutation({
 	args: {
 		entityTypeId: v.id("entityTypes"),
 		label: v.string(),
-		key: v.string(),
 		valueType: entityFieldTypeValidator,
 		required: v.boolean(),
 	},
@@ -136,19 +135,6 @@ export const addField = mutation({
 			);
 		}
 
-		const existing = await ctx.db
-			.query("entityFieldDefinitions")
-			.withIndex("by_entity_type_id_and_key", (index) =>
-				index.eq("entityTypeId", args.entityTypeId).eq("key", input.output.key),
-			)
-			.unique();
-		if (existing) {
-			throw new ConvexError({
-				code: "ENTITY_FIELD_ALREADY_EXISTS",
-				message: "A field with this name already exists.",
-			});
-		}
-
 		const lastField = await ctx.db
 			.query("entityFieldDefinitions")
 			.withIndex("by_entity_type_id_and_position", (index) =>
@@ -159,7 +145,6 @@ export const addField = mutation({
 
 		return await ctx.db.insert("entityFieldDefinitions", {
 			entityTypeId: args.entityTypeId,
-			key: input.output.key,
 			label: input.output.label,
 			valueType: input.output.valueType,
 			required: input.output.required,

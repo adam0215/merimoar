@@ -1,8 +1,9 @@
-import { IconLoader2, IconPlus } from "@tabler/icons-react";
+import { IconCalendar, IconLoader2, IconPlus } from "@tabler/icons-react";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import * as v from "valibot";
 import { Button } from "#/components/ui/button.tsx";
+import { Calendar } from "#/components/ui/calendar.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
 	Dialog,
@@ -22,6 +23,11 @@ import {
 } from "#/components/ui/field.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "#/components/ui/popover.tsx";
+import {
 	Select,
 	SelectContent,
 	SelectItem,
@@ -29,6 +35,8 @@ import {
 	SelectValue,
 } from "#/components/ui/select.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
+import { formatDateInput, parseDateInput } from "#/lib/date-input.ts";
+import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
 import type { Doc, Id } from "../../../convex/_generated/dataModel";
 import { entityInputSchema } from "../../../convex/entity/input";
@@ -129,9 +137,9 @@ export function CreateEntityDialog({
 			}}
 		>
 			<DialogTrigger asChild>
-				<Button>
+				<Button size="sm">
 					<IconPlus />
-					Create {entityType.name.toLowerCase()}
+					New
 				</Button>
 			</DialogTrigger>
 			<DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-xl">
@@ -174,6 +182,18 @@ export function CreateEntityDialog({
 									field={field}
 									value={booleanValues.get(field._id)}
 									onChange={(value) => setBooleanValue(field._id, value)}
+								/>
+							) : field.valueType === "date" ? (
+								<EntityDateFieldInput
+									key={field._id}
+									field={field}
+									value={textValues[field._id] ?? ""}
+									onChange={(value) =>
+										setTextValues((current) => ({
+											...current,
+											[field._id]: value,
+										}))
+									}
 								/>
 							) : (
 								<Field key={field._id}>
@@ -226,6 +246,81 @@ export function CreateEntityDialog({
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+function EntityDateFieldInput({
+	field,
+	value,
+	onChange,
+}: {
+	field: Doc<"entityFieldDefinitions">;
+	value: string;
+	onChange: (value: string) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const timestamp = value ? parseDateInput(value) : Number.NaN;
+	const selectedDate = Number.isFinite(timestamp)
+		? new Date(timestamp)
+		: undefined;
+
+	return (
+		<Field>
+			<FieldLabel>
+				{field.label}
+				{field.required && <span className="text-destructive">*</span>}
+			</FieldLabel>
+			<Popover open={open} onOpenChange={setOpen}>
+				<PopoverTrigger asChild>
+					<Button
+						type="button"
+						variant="outline"
+						className={cn(
+							"w-full justify-start text-left font-normal",
+							!selectedDate && "text-muted-foreground",
+						)}
+					>
+						<IconCalendar />
+						{selectedDate
+							? selectedDate.toLocaleDateString(undefined, {
+									year: "numeric",
+									month: "long",
+									day: "numeric",
+								})
+							: "Select date"}
+					</Button>
+				</PopoverTrigger>
+				<PopoverContent align="start" className="w-auto gap-0 p-0">
+					<Calendar
+						mode="single"
+						selected={selectedDate}
+						onSelect={(date) => {
+							if (!date) {
+								return;
+							}
+							onChange(formatDateInput(date.getTime()));
+							setOpen(false);
+						}}
+					/>
+					{selectedDate && !field.required && (
+						<div className="border-t p-2">
+							<Button
+								type="button"
+								variant="ghost"
+								size="sm"
+								className="w-full"
+								onClick={() => {
+									onChange("");
+									setOpen(false);
+								}}
+							>
+								Clear date
+							</Button>
+						</div>
+					)}
+				</PopoverContent>
+			</Popover>
+		</Field>
 	);
 }
 

@@ -15,7 +15,7 @@ export function EntityTypeView({
 		return (
 			<div className="mx-auto max-w-5xl px-5 py-8 md:px-10 md:py-12">
 				<div className="flex gap-4">
-					<Skeleton className="size-12 rounded-xl" />
+					<Skeleton className="size-12 rounded-full" />
 					<div className="flex-1 space-y-2">
 						<Skeleton className="h-6 w-48" />
 						<Skeleton className="h-4 w-80 max-w-full" />
@@ -39,38 +39,29 @@ export function EntityTypeView({
 		);
 	}
 
-	const { entityType, fieldDefinitions, entities } = detail;
+	const { entityType, fieldDefinitions } = detail;
 
 	return (
 		<div className="mx-auto w-full max-w-5xl px-5 py-8 md:px-10 md:py-12">
-			<header className="flex flex-wrap items-start justify-between gap-4">
-				<div className="flex min-w-0 gap-4">
-					<span className="flex size-12 shrink-0 items-center justify-center rounded-xl border bg-muted/30">
-						<EntityIcon icon={entityType.icon} className="size-5" />
-					</span>
-					<div className="min-w-0">
-						<h1 className="text-2xl font-semibold tracking-tight">
-							{entityType.pluralName}
-						</h1>
-						<p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-							{entityType.description || `Manage ${entityType.pluralName}.`}
-						</p>
-					</div>
-				</div>
+			<header className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4">
+				<span className="row-span-2 flex size-12 shrink-0 items-center justify-center rounded-full bg-muted">
+					<EntityIcon icon={entityType.icon} className="size-5" />
+				</span>
+				<h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
+					{entityType.pluralName}
+				</h1>
 				<CreateEntityDialog
 					entityType={entityType}
 					fieldDefinitions={fieldDefinitions}
 				/>
+				<p className="col-start-2 mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+					{entityType.description || `Manage ${entityType.pluralName}.`}
+				</p>
 			</header>
 
 			<section className="mt-8">
 				<div className="flex items-center justify-between gap-4">
-					<div>
-						<h2 className="text-sm font-semibold">Metadata fields</h2>
-						<p className="mt-1 text-xs text-muted-foreground">
-							Typed attributes stored as separate, searchable values.
-						</p>
-					</div>
+					<h2 className="text-sm font-semibold">Fields</h2>
 					<AddFieldDialog entityTypeId={entityType._id} />
 				</div>
 
@@ -86,7 +77,7 @@ export function EntityTypeView({
 								{entityType.identifierLabel}
 							</p>
 							<p className="truncate text-xs text-muted-foreground">
-								System identifier
+								Identifier
 							</p>
 						</div>
 						<div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -102,9 +93,6 @@ export function EntityTypeView({
 						>
 							<div className="min-w-0">
 								<p className="truncate text-sm font-medium">{field.label}</p>
-								<p className="truncate text-xs text-muted-foreground">
-									{field.key}
-								</p>
 							</div>
 							<div className="flex items-center gap-2 text-sm text-muted-foreground">
 								<EntityFieldTypeIcon valueType={field.valueType} />
@@ -117,44 +105,6 @@ export function EntityTypeView({
 						<p className="border-t px-4 py-5 text-sm text-muted-foreground">
 							No custom metadata fields yet.
 						</p>
-					)}
-				</div>
-			</section>
-
-			<section className="mt-8">
-				<div>
-					<h2 className="text-sm font-semibold">{entityType.pluralName}</h2>
-					<p className="mt-1 text-xs text-muted-foreground">
-						Available records that can be related to a case.
-					</p>
-				</div>
-				<div className="mt-3 overflow-hidden rounded-2xl border">
-					<div className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.65fr)] gap-3 border-b bg-muted/30 px-4 py-2.5 text-xs font-medium text-muted-foreground">
-						<span>Name</span>
-						<span>{entityType.identifierLabel}</span>
-					</div>
-					{entities.map((entity) => (
-						<div
-							key={entity._id}
-							className="grid grid-cols-[minmax(0,1fr)_minmax(8rem,0.65fr)] items-center gap-3 border-b px-4 py-3 last:border-b-0"
-						>
-							<p className="truncate text-sm font-medium">
-								{entity.displayName}
-							</p>
-							<p className="truncate font-mono text-xs text-muted-foreground">
-								{entity.identifier}
-							</p>
-						</div>
-					))}
-					{entities.length === 0 && (
-						<div className="px-4 py-8 text-center">
-							<p className="text-sm font-medium">
-								No {entityType.pluralName.toLowerCase()} yet
-							</p>
-							<p className="mt-1 text-sm text-muted-foreground">
-								Create one to make it available on cases.
-							</p>
-						</div>
 					)}
 				</div>
 			</section>

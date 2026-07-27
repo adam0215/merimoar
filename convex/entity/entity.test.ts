@@ -81,14 +81,12 @@ describe("entity configuration", () => {
 		const addressFieldId = await actor.mutation(api.entity.mutations.addField, {
 			entityTypeId,
 			label: "Street address",
-			key: "Street Address",
 			valueType: "text",
 			required: true,
 		});
 		const priceFieldId = await actor.mutation(api.entity.mutations.addField, {
 			entityTypeId,
 			label: "Asking price",
-			key: "Asking Price",
 			valueType: "number",
 			required: false,
 		});
@@ -134,6 +132,27 @@ describe("entity configuration", () => {
 		});
 		expect(state.textValues).toMatchObject([{ value: "Storgatan 12" }]);
 		expect(state.numberValues).toMatchObject([{ value: 8_950_000 }]);
+
+		const preview = await actor.query(api.entity.reader.previewType, {
+			entityTypeId,
+		});
+		expect(preview?.records).toMatchObject([
+			{
+				entity: { displayName: "Storgatan 12", identifier: "FAST-1042" },
+				values: expect.arrayContaining([
+					expect.objectContaining({
+						fieldDefinitionId: addressFieldId,
+						kind: "text",
+						value: "Storgatan 12",
+					}),
+					expect.objectContaining({
+						fieldDefinitionId: priceFieldId,
+						kind: "number",
+						value: 8_950_000,
+					}),
+				]),
+			},
+		]);
 	});
 
 	it("rejects blank required text and non-finite number/date values", async () => {
@@ -142,21 +161,18 @@ describe("entity configuration", () => {
 		const addressFieldId = await actor.mutation(api.entity.mutations.addField, {
 			entityTypeId,
 			label: "Address",
-			key: "address",
 			valueType: "text",
 			required: true,
 		});
 		const priceFieldId = await actor.mutation(api.entity.mutations.addField, {
 			entityTypeId,
 			label: "Price",
-			key: "price",
 			valueType: "number",
 			required: false,
 		});
 		const dateFieldId = await actor.mutation(api.entity.mutations.addField, {
 			entityTypeId,
 			label: "Inspection date",
-			key: "inspection-date",
 			valueType: "date",
 			required: false,
 		});
@@ -230,7 +246,6 @@ describe("entity configuration", () => {
 		await actor.mutation(api.entity.mutations.addField, {
 			entityTypeId,
 			label: "Approved",
-			key: "approved",
 			valueType: "boolean",
 			required: true,
 		});
@@ -262,7 +277,6 @@ describe("entity configuration", () => {
 			otherActor.mutation(api.entity.mutations.addField, {
 				entityTypeId,
 				label: "Cross tenant",
-				key: "cross-tenant",
 				valueType: "text",
 				required: false,
 			}),
@@ -270,6 +284,28 @@ describe("entity configuration", () => {
 		expect(
 			await otherActor.query(api.entity.reader.getType, { entityTypeId }),
 		).toBeNull();
+		expect(
+			await otherActor.query(api.entity.reader.previewType, { entityTypeId }),
+		).toBeNull();
+	});
+
+	it("limits previews to ten records", async () => {
+		const { actor } = await createFixture();
+		const entityTypeId = await createPropertyType(actor);
+
+		for (let index = 0; index < 11; index += 1) {
+			await actor.mutation(api.entity.mutations.createEntity, {
+				entityTypeId,
+				identifier: `PROPERTY-${index}`,
+				displayName: `Property ${String(index).padStart(2, "0")}`,
+				values: [],
+			});
+		}
+
+		const preview = await actor.query(api.entity.reader.previewType, {
+			entityTypeId,
+		});
+		expect(preview?.records).toHaveLength(10);
 	});
 
 	it("enforces the field cap and never hides active rows behind archived rows", async () => {
@@ -283,7 +319,6 @@ describe("entity configuration", () => {
 			) {
 				await ctx.db.insert("entityFieldDefinitions", {
 					entityTypeId,
-					key: `field-${position}`,
 					label: `Field ${position}`,
 					valueType: "text",
 					required: false,
@@ -297,7 +332,6 @@ describe("entity configuration", () => {
 			actor.mutation(api.entity.mutations.addField, {
 				entityTypeId,
 				label: "One too many",
-				key: "one-too-many",
 				valueType: "text",
 				required: false,
 			}),
@@ -321,7 +355,6 @@ describe("entity configuration", () => {
 			) {
 				await ctx.db.insert("entityFieldDefinitions", {
 					entityTypeId: archivedTypeId,
-					key: `archived-${position}`,
 					label: `Archived ${position}`,
 					valueType: "text",
 					required: false,
@@ -331,7 +364,6 @@ describe("entity configuration", () => {
 			}
 			await ctx.db.insert("entityFieldDefinitions", {
 				entityTypeId: archivedTypeId,
-				key: "active",
 				label: "Active",
 				valueType: "text",
 				required: false,
@@ -343,8 +375,8 @@ describe("entity configuration", () => {
 		const detail = await actor.query(api.entity.reader.getType, {
 			entityTypeId: archivedTypeId,
 		});
-		expect(detail?.fieldDefinitions.map((field) => field.key)).toEqual([
-			"active",
+		expect(detail?.fieldDefinitions.map((field) => field.label)).toEqual([
+			"Active",
 		]);
 	});
 });

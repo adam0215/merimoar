@@ -80,14 +80,12 @@ export default defineSchema({
 
 	entityFieldDefinitions: defineTable({
 		entityTypeId: v.id("entityTypes"),
-		key: v.string(),
 		label: v.string(),
 		valueType: entityFieldTypeValidator,
 		required: v.boolean(),
 		position: v.number(),
 		archivedAt: v.union(v.number(), v.null()),
 	})
-		.index("by_entity_type_id_and_key", ["entityTypeId", "key"])
 		.index("by_entity_type_id_and_position", ["entityTypeId", "position"])
 		.index("by_entity_type_id_and_archived_at_and_position", [
 			"entityTypeId",

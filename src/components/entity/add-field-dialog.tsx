@@ -3,7 +3,6 @@ import { useMutation } from "convex/react";
 import { useState } from "react";
 import * as v from "valibot";
 import { Button } from "#/components/ui/button.tsx";
-import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
 	Dialog,
 	DialogContent,
@@ -27,13 +26,11 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select.tsx";
+import { Switch } from "#/components/ui/switch.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
-import {
-	type EntityFieldType,
-	normalizeEntityKey,
-} from "../../../convex/entity/constants";
+import type { EntityFieldType } from "../../../convex/entity/constants";
 import { entityFieldInputSchema } from "../../../convex/entity/input";
 import { ENTITY_FIELD_TYPE_LABELS } from "./types.ts";
 
@@ -45,8 +42,6 @@ export function AddFieldDialog({
 	const addField = useMutation(api.entity.mutations.addField);
 	const [open, setOpen] = useState(false);
 	const [label, setLabel] = useState("");
-	const [key, setKey] = useState("");
-	const [keyWasEdited, setKeyWasEdited] = useState(false);
 	const [valueType, setValueType] = useState<EntityFieldType>("text");
 	const [required, setRequired] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,8 +49,6 @@ export function AddFieldDialog({
 
 	function reset() {
 		setLabel("");
-		setKey("");
-		setKeyWasEdited(false);
 		setValueType("text");
 		setRequired(false);
 		setIsSubmitting(false);
@@ -66,13 +59,12 @@ export function AddFieldDialog({
 		event.preventDefault();
 		const result = v.safeParse(entityFieldInputSchema, {
 			label,
-			key,
 			valueType,
 			required,
 		});
 
 		if (!result.success) {
-			setError("Enter a field label and key.");
+			setError("Enter a field label.");
 			return;
 		}
 
@@ -110,9 +102,9 @@ export function AddFieldDialog({
 			</DialogTrigger>
 			<DialogContent>
 				<DialogHeader>
-					<DialogTitle>Add metadata field</DialogTitle>
+					<DialogTitle>Add field</DialogTitle>
 					<DialogDescription>
-						The field definition and its typed values are stored separately.
+						Choose how this value is entered.
 					</DialogDescription>
 				</DialogHeader>
 				<form id="add-entity-field-form" onSubmit={submit}>
@@ -122,67 +114,46 @@ export function AddFieldDialog({
 							<Input
 								id="entity-field-label"
 								value={label}
-								onChange={(event) => {
-									const nextLabel = event.target.value;
-									setLabel(nextLabel);
-									if (!keyWasEdited) {
-										setKey(normalizeEntityKey(nextLabel));
-									}
-								}}
+								onChange={(event) => setLabel(event.target.value)}
 								placeholder="Municipality"
 								autoFocus
 							/>
 						</Field>
-						<div className="grid gap-5 sm:grid-cols-2">
-							<Field>
-								<FieldLabel htmlFor="entity-field-key">Field key</FieldLabel>
-								<Input
-									id="entity-field-key"
-									value={key}
-									onChange={(event) => {
-										setKeyWasEdited(true);
-										setKey(normalizeEntityKey(event.target.value));
-									}}
-									placeholder="municipality"
-									className="font-mono"
-								/>
-							</Field>
-							<Field>
-								<FieldLabel>Value type</FieldLabel>
-								<Select
-									value={valueType}
-									onValueChange={(value) => setValueType(parseFieldType(value))}
-								>
-									<SelectTrigger className="w-full">
-										<SelectValue />
-									</SelectTrigger>
-									<SelectContent>
-										{Object.entries(ENTITY_FIELD_TYPE_LABELS).map(
-											([value, fieldLabel]) => (
-												<SelectItem key={value} value={value}>
-													{fieldLabel}
-												</SelectItem>
-											),
-										)}
-									</SelectContent>
-								</Select>
-							</Field>
-						</div>
+						<Field>
+							<FieldLabel>Value type</FieldLabel>
+							<Select
+								value={valueType}
+								onValueChange={(value) => setValueType(parseFieldType(value))}
+							>
+								<SelectTrigger className="w-full">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									{Object.entries(ENTITY_FIELD_TYPE_LABELS).map(
+										([value, fieldLabel]) => (
+											<SelectItem key={value} value={value}>
+												{fieldLabel}
+											</SelectItem>
+										),
+									)}
+								</SelectContent>
+							</Select>
+						</Field>
 						<label
 							htmlFor="entity-field-required"
-							className="flex cursor-pointer items-start gap-3 rounded-xl border p-3"
+							className="flex cursor-pointer items-center justify-between gap-4 rounded-xl border p-3"
 						>
-							<Checkbox
-								id="entity-field-required"
-								checked={required}
-								onCheckedChange={(value) => setRequired(value === true)}
-							/>
 							<span>
 								<span className="block text-sm font-medium">Required</span>
 								<span className="block text-xs text-muted-foreground">
 									Every new record must provide this value.
 								</span>
 							</span>
+							<Switch
+								id="entity-field-required"
+								checked={required}
+								onCheckedChange={setRequired}
+							/>
 						</label>
 						{error && <FieldError>{error}</FieldError>}
 					</FieldGroup>

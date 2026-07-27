@@ -17,7 +17,6 @@ function booleanField({
 		_id: id,
 		_creationTime: 1,
 		entityTypeId: ENTITY_TYPE_ID,
-		key: required ? "required-boolean" : "optional-boolean",
 		label: required ? "Required boolean" : "Optional boolean",
 		valueType: "boolean",
 		required,

@@ -1,8 +1,13 @@
-import { IconLoader2, IconPlus } from "@tabler/icons-react";
+import { IconChevronDown, IconLoader2, IconPlus } from "@tabler/icons-react";
 import { useMutation } from "convex/react";
 import { useMemo, useState } from "react";
 import * as v from "valibot";
 import { Button } from "#/components/ui/button.tsx";
+import {
+	Collapsible,
+	CollapsibleContent,
+	CollapsibleTrigger,
+} from "#/components/ui/collapsible.tsx";
 import {
 	Dialog,
 	DialogContent,
@@ -45,19 +50,22 @@ export function CreateEntityTypeDialog({
 	const [open, setOpen] = useState(false);
 	const [form, setForm] = useState(INITIAL_FORM);
 	const [icon, setIcon] = useState<EntityIconKey>("box");
-	const [pluralWasEdited, setPluralWasEdited] = useState(false);
 	const [showValidation, setShowValidation] = useState(false);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const validation = useMemo(
-		() => v.safeParse(entityTypeInputSchema, { ...form, icon }),
+		() =>
+			v.safeParse(entityTypeInputSchema, {
+				...form,
+				pluralName: form.pluralName || suggestPlural(form.name),
+				icon,
+			}),
 		[form, icon],
 	);
 
 	function reset() {
 		setForm(INITIAL_FORM);
 		setIcon("box");
-		setPluralWasEdited(false);
 		setShowValidation(false);
 		setIsSubmitting(false);
 		setError(null);
@@ -98,59 +106,66 @@ export function CreateEntityTypeDialog({
 			}}
 		>
 			<DialogTrigger asChild>
-				<Button size="icon-sm" aria-label="Create entity type">
-					<IconPlus />
-				</Button>
+				<button
+					type="button"
+					className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.97]"
+					aria-label="Create entity type"
+					title="Create entity type"
+				>
+					<IconPlus className="size-5" />
+				</button>
 			</DialogTrigger>
-			<DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-2xl">
+			<DialogContent className="max-h-[calc(100svh-2rem)] gap-4 overflow-y-auto p-5 sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>Create entity type</DialogTitle>
-					<DialogDescription>
-						Define a reusable business object and how people recognize it.
-					</DialogDescription>
+					<DialogDescription>Add a reusable business object.</DialogDescription>
 				</DialogHeader>
 				<form id="create-entity-type-form" onSubmit={submit} noValidate>
-					<FieldGroup className="gap-5">
-						<div className="grid gap-5 sm:grid-cols-2">
+					<FieldGroup className="gap-4">
+						<Collapsible>
 							<Field>
-								<FieldLabel htmlFor="entity-type-name">
-									Singular name
-								</FieldLabel>
+								<div className="flex items-center justify-between gap-4">
+									<FieldLabel htmlFor="entity-type-name">Name</FieldLabel>
+									<CollapsibleTrigger className="flex items-center gap-1 text-sm font-normal text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&[data-state=open]>svg]:rotate-180">
+										Advanced
+										<IconChevronDown className="size-3.5 transition-transform" />
+									</CollapsibleTrigger>
+								</div>
 								<Input
 									id="entity-type-name"
 									value={form.name}
-									onChange={(event) => {
-										const name = event.target.value;
+									onChange={(event) =>
 										setForm((current) => ({
 											...current,
-											name,
-											pluralName: pluralWasEdited
-												? current.pluralName
-												: suggestPlural(name),
-										}));
-									}}
+											name: event.target.value,
+										}))
+									}
 									placeholder="Property"
 									autoFocus
 								/>
+								<CollapsibleContent>
+									<Field className="pt-1">
+										<FieldLabel htmlFor="entity-type-plural">
+											Plural name
+											<span className="text-xs font-normal text-muted-foreground">
+												Optional
+											</span>
+										</FieldLabel>
+										<Input
+											id="entity-type-plural"
+											value={form.pluralName}
+											onChange={(event) =>
+												setForm((current) => ({
+													...current,
+													pluralName: event.target.value,
+												}))
+											}
+											placeholder={suggestPlural(form.name) || "Properties"}
+										/>
+									</Field>
+								</CollapsibleContent>
 							</Field>
-							<Field>
-								<FieldLabel htmlFor="entity-type-plural">
-									Plural name
-								</FieldLabel>
-								<Input
-									id="entity-type-plural"
-									value={form.pluralName}
-									onChange={(event) => {
-										setPluralWasEdited(true);
-										setForm((current) => ({
-											...current,
-											pluralName: event.target.value,
-										}));
-									}}
-									placeholder="Properties"
-								/>
-							</Field>
-						</div>
+						</Collapsible>
 						<Field>
 							<FieldLabel htmlFor="entity-type-identifier">
 								Identifier label
@@ -167,12 +182,15 @@ export function CreateEntityTypeDialog({
 								placeholder="Property ID"
 							/>
 							<FieldDescription>
-								The stable, unique reference people use to find a record.
+								For example, “Invoice ID” or “Policy number”.
 							</FieldDescription>
 						</Field>
 						<Field>
 							<FieldLabel htmlFor="entity-type-description">
 								Description
+								<span className="text-xs font-normal text-muted-foreground">
+									Optional
+								</span>
 							</FieldLabel>
 							<Textarea
 								id="entity-type-description"
@@ -188,26 +206,22 @@ export function CreateEntityTypeDialog({
 						</Field>
 						<Field>
 							<FieldLabel>Icon</FieldLabel>
-							<FieldDescription>
-								A curated set keeps entity types recognizable across the app.
-							</FieldDescription>
-							<div className="grid grid-cols-4 gap-2 sm:grid-cols-9">
+							<div className="flex flex-wrap gap-2">
 								{ENTITY_ICON_OPTIONS.map((option) => (
 									<button
 										key={option.key}
 										type="button"
 										onClick={() => setIcon(option.key)}
 										aria-pressed={icon === option.key}
+										aria-label={option.label}
+										title={option.label}
 										className={cn(
-											"flex min-w-0 flex-col items-center gap-1.5 rounded-xl border px-1 py-2.5 text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+											"flex size-10 shrink-0 items-center justify-center rounded-full border text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.97]",
 											icon === option.key &&
 												"border-foreground bg-muted text-foreground",
 										)}
 									>
 										<option.icon className="size-5" />
-										<span className="w-full truncate text-[11px]">
-											{option.label}
-										</span>
 									</button>
 								))}
 							</div>

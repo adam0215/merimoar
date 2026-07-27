@@ -1,9 +1,5 @@
 import * as v from "valibot";
-import {
-	ENTITY_FIELD_TYPES,
-	ENTITY_ICON_KEYS,
-	normalizeEntityKey,
-} from "./constants";
+import { ENTITY_FIELD_TYPES, ENTITY_ICON_KEYS } from "./constants";
 
 const nameSchema = v.pipe(
 	v.string(),
@@ -26,14 +22,6 @@ export const entityTypeInputSchema = v.object({
 
 export const entityFieldInputSchema = v.object({
 	label: nameSchema,
-	key: v.pipe(
-		v.string(),
-		v.trim(),
-		v.minLength(1, "Enter a field key."),
-		v.maxLength(80, "Use no more than 80 characters."),
-		v.transform(normalizeEntityKey),
-		v.minLength(1, "Enter a field key."),
-	),
 	valueType: v.picklist(ENTITY_FIELD_TYPES),
 	required: v.boolean(),
 });
