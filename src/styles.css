@@ -3,7 +3,7 @@
 
 @import 'tw-animate-css';
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/inter";
+@import "@fontsource-variable/tiktok-sans";
 @import "@radix-ui/themes/styles.css";
 @import "@workos-inc/widgets/styles.css";
 
@@ -79,7 +79,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Inter Variable', sans-serif;
+  --font-sans: 'TikTok Sans Variable', sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

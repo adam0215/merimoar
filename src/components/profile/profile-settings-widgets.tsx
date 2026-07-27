@@ -26,7 +26,7 @@ const WIDGET_THEME = {
 	hasBackground: false,
 	panelBackground: "solid",
 	radius: "large",
-	fontFamily: "Inter Variable, sans-serif",
+	fontFamily: "TikTok Sans Variable, sans-serif",
 } satisfies WorkOsWidgetsProps["theme"];
 
 const WIDGET_ELEMENTS = {
