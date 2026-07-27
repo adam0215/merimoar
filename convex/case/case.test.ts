@@ -88,6 +88,30 @@ async function createFixture() {
 			updatedAt: 100,
 			archivedAt: null,
 		});
+		const relatedCaseId = await ctx.db.insert("cases", {
+			organizationId,
+			reference: "CASE-RELATED",
+			title: "Related handover",
+			description: "",
+			ownerMemberId,
+			dueAt: null,
+			status: "open",
+			lastActivityAt: 100,
+			createdAt: 100,
+			updatedAt: 100,
+		});
+		const otherCaseId = await ctx.db.insert("cases", {
+			organizationId: otherOrganizationId,
+			reference: "CASE-OTHER",
+			title: "Other organization case",
+			description: "",
+			ownerMemberId: null,
+			dueAt: null,
+			status: "open",
+			lastActivityAt: 100,
+			createdAt: 100,
+			updatedAt: 100,
+		});
 		return {
 			organizationId,
 			actorMemberId,
@@ -95,6 +119,8 @@ async function createFixture() {
 			contactId,
 			otherContactId,
 			entityId,
+			relatedCaseId,
+			otherCaseId,
 		};
 	});
 
@@ -116,8 +142,14 @@ async function createFixture() {
 
 describe("cases", () => {
 	it("derives tenant and audit actor from WorkOS identity", async () => {
-		const { actor, actorMemberId, ownerMemberId, contactId, entityId } =
-			await createFixture();
+		const {
+			actor,
+			actorMemberId,
+			ownerMemberId,
+			contactId,
+			entityId,
+			relatedCaseId,
+		} = await createFixture();
 		const caseId = await actor.mutation(api.case.mutations.create, {
 			title: "Missing keys before possession",
 			description: "Coordinate the handover.",
@@ -126,6 +158,7 @@ describe("cases", () => {
 			initialEventBody: "Buyer reported two missing keys.",
 			contactIds: [contactId],
 			entityIds: [entityId],
+			relatedCaseIds: [relatedCaseId],
 		});
 
 		const detail = await actor.query(api.case.reader.get, { caseId });
@@ -139,6 +172,62 @@ describe("cases", () => {
 		expect(detail?.events[0]?.event.createdByMemberId).toBe(actorMemberId);
 		expect(detail?.contacts[0]?.relation.addedByMemberId).toBe(actorMemberId);
 		expect(detail?.entities[0]?.relation.addedByMemberId).toBe(actorMemberId);
+		expect(detail?.relatedCases[0]).toMatchObject({
+			relation: { addedByMemberId: actorMemberId },
+			relatedCase: { _id: relatedCaseId },
+		});
+	});
+
+	it("adds and removes a case relation without duplicates", async () => {
+		const { actor, actorMemberId, ownerMemberId, relatedCaseId } =
+			await createFixture();
+		const caseId = await actor.mutation(api.case.mutations.create, {
+			title: "Inspection follow-up",
+			description: "",
+			ownerMemberId,
+			dueAt: null,
+			initialEventBody: "",
+			contactIds: [],
+			entityIds: [],
+			relatedCaseIds: [],
+		});
+
+		const relationId = await actor.mutation(
+			api.case.mutations.addCaseRelation,
+			{
+				caseId,
+				relatedCaseId,
+			},
+		);
+		const duplicateRelationId = await actor.mutation(
+			api.case.mutations.addCaseRelation,
+			{
+				caseId,
+				relatedCaseId,
+			},
+		);
+		expect(duplicateRelationId).toBe(relationId);
+		await expect(
+			actor.mutation(api.case.mutations.addCaseRelation, {
+				caseId,
+				relatedCaseId: caseId,
+			}),
+		).rejects.toThrow("cannot be related to itself");
+
+		await actor.mutation(api.case.mutations.removeCaseRelation, {
+			relationId,
+		});
+
+		const [caseDetail, historicalRelation] = await Promise.all([
+			actor.query(api.case.reader.get, { caseId }),
+			actor.run(async (ctx) => ctx.db.get(relationId)),
+		]);
+		expect(caseDetail?.relatedCases).toHaveLength(0);
+		expect(caseDetail?.events[0]?.event.body).toContain("Removed CASE-RELATED");
+		expect(historicalRelation).toMatchObject({
+			endedAt: expect.any(Number),
+			removedByMemberId: actorMemberId,
+		});
 	});
 
 	it("preserves relation history and records the removing actor", async () => {
@@ -152,6 +241,7 @@ describe("cases", () => {
 			initialEventBody: "",
 			contactIds: [contactId],
 			entityIds: [],
+			relatedCaseIds: [],
 		});
 		const before = await actor.query(api.case.reader.get, { caseId });
 		const relationId = before?.contacts[0]?.relation._id;
@@ -187,6 +277,7 @@ describe("cases", () => {
 				initialEventBody: "",
 				contactIds: [],
 				entityIds: [],
+				relatedCaseIds: [],
 			}),
 		).rejects.toThrow("Sign in");
 		await expect(
@@ -195,7 +286,7 @@ describe("cases", () => {
 	});
 
 	it("prevents cross-tenant reads, writes, and relations", async () => {
-		const { actor, otherActor, ownerMemberId, otherContactId } =
+		const { actor, otherActor, ownerMemberId, otherContactId, otherCaseId } =
 			await createFixture();
 		await expect(
 			actor.mutation(api.case.mutations.create, {
@@ -206,6 +297,19 @@ describe("cases", () => {
 				initialEventBody: "",
 				contactIds: [otherContactId],
 				entityIds: [],
+				relatedCaseIds: [],
+			}),
+		).rejects.toThrow("does not belong");
+		await expect(
+			actor.mutation(api.case.mutations.create, {
+				title: "Invalid case relation",
+				description: "",
+				ownerMemberId,
+				dueAt: null,
+				initialEventBody: "",
+				contactIds: [],
+				entityIds: [],
+				relatedCaseIds: [otherCaseId],
 			}),
 		).rejects.toThrow("does not belong");
 
@@ -217,8 +321,25 @@ describe("cases", () => {
 			initialEventBody: "",
 			contactIds: [],
 			entityIds: [],
+			relatedCaseIds: [],
 		});
 		expect(await otherActor.query(api.case.reader.get, { caseId })).toBeNull();
+		const createOptions = await actor.query(
+			api.case.reader.getCreateOptions,
+			{},
+		);
+		expect(createOptions.cases.map((caseOption) => caseOption._id)).toContain(
+			caseId,
+		);
+		expect(
+			createOptions.cases.map((caseOption) => caseOption._id),
+		).not.toContain(otherCaseId);
+		await expect(
+			actor.mutation(api.case.mutations.addCaseRelation, {
+				caseId,
+				relatedCaseId: otherCaseId,
+			}),
+		).rejects.toThrow("does not belong");
 		await expect(
 			otherActor.mutation(api.case.mutations.update, {
 				caseId,
@@ -241,6 +362,7 @@ describe("cases", () => {
 			initialEventBody: "",
 			contactIds: [],
 			entityIds: [],
+			relatedCaseIds: [],
 		});
 		const before = await actor.run(async (ctx) => ctx.db.get(caseId));
 
@@ -270,6 +392,7 @@ describe("cases", () => {
 			initialEventBody: "",
 			contactIds: [],
 			entityIds: [],
+			relatedCaseIds: [],
 		});
 
 		const detail = await actor.query(api.case.reader.get, { caseId });

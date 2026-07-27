@@ -2,6 +2,7 @@ import {
 	IconAddressBook,
 	IconAlertCircle,
 	IconCircleCheckFilled,
+	IconFolder,
 	IconLoader2,
 	IconPlus,
 	IconX,
@@ -37,6 +38,11 @@ export function CaseRelationships({
 	);
 	const currentEntityIds = new Set(
 		detail.entities.flatMap((item) => (item.entity ? [item.entity._id] : [])),
+	);
+	const currentRelatedCaseIds = new Set(
+		detail.relatedCases.flatMap((item) =>
+			item.relatedCase ? [item.relatedCase._id] : [],
+		),
 	);
 
 	return (
@@ -111,11 +117,45 @@ export function CaseRelationships({
 						</div>
 					) : null,
 				)}
+				{detail.relatedCases.map(({ relation, relatedCase }) =>
+					relatedCase ? (
+						<div
+							key={relation._id}
+							className="flex min-w-0 items-center gap-2 rounded-xl border bg-background p-2"
+						>
+							<Link
+								to="/cases"
+								search={{ case: relatedCase._id }}
+								className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-foreground no-underline transition-colors hover:bg-muted"
+							>
+								<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+									<IconFolder className="size-4" />
+								</span>
+								<span className="min-w-0">
+									<span className="block truncate text-sm font-medium">
+										{relatedCase.title}
+									</span>
+									<span className="block truncate text-xs text-muted-foreground">
+										{relatedCase.reference} · Case
+									</span>
+								</span>
+							</Link>
+							<RemoveRelationshipButton
+								label={`${relatedCase.reference}: ${relatedCase.title}`}
+								relation={{
+									kind: "case",
+									relationId: relation._id,
+								}}
+							/>
+						</div>
+					) : null,
+				)}
 				<AddRelationshipDialog
 					caseId={detail.case._id}
 					options={options}
 					currentContactIds={currentContactIds}
 					currentEntityIds={currentEntityIds}
+					currentRelatedCaseIds={currentRelatedCaseIds}
 					trigger={
 						<button
 							type="button"
@@ -140,10 +180,12 @@ function RemoveRelationshipButton({
 	label: string;
 	relation:
 		| { kind: "contact"; relationId: Id<"caseContactRelations"> }
-		| { kind: "entity"; relationId: Id<"caseEntityRelations"> };
+		| { kind: "entity"; relationId: Id<"caseEntityRelations"> }
+		| { kind: "case"; relationId: Id<"caseCaseRelations"> };
 }) {
 	const removeContact = useMutation(api.case.mutations.removeContactRelation);
 	const removeEntity = useMutation(api.case.mutations.removeEntityRelation);
+	const removeCase = useMutation(api.case.mutations.removeCaseRelation);
 	const [isRemoving, setIsRemoving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -154,8 +196,10 @@ function RemoveRelationshipButton({
 		try {
 			if (relation.kind === "contact") {
 				await removeContact({ relationId: relation.relationId });
-			} else {
+			} else if (relation.kind === "entity") {
 				await removeEntity({ relationId: relation.relationId });
+			} else {
+				await removeCase({ relationId: relation.relationId });
 			}
 		} catch (caughtError) {
 			setError(
@@ -194,16 +238,19 @@ function AddRelationshipDialog({
 	options,
 	currentContactIds,
 	currentEntityIds,
+	currentRelatedCaseIds,
 	trigger,
 }: {
 	caseId: Id<"cases">;
 	options: CaseCreateOptions | undefined;
 	currentContactIds: Set<Id<"contacts">>;
 	currentEntityIds: Set<Id<"entities">>;
+	currentRelatedCaseIds: Set<Id<"cases">>;
 	trigger: React.ReactElement;
 }) {
 	const addContact = useMutation(api.case.mutations.addContactRelation);
 	const addEntity = useMutation(api.case.mutations.addEntityRelation);
+	const addCase = useMutation(api.case.mutations.addCaseRelation);
 	const [open, setOpen] = useState(false);
 	const [pendingId, setPendingId] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
@@ -240,6 +287,20 @@ function AddRelationshipDialog({
 		}
 	}
 
+	async function selectCase(relatedCaseId: Id<"cases">) {
+		setPendingId(relatedCaseId);
+		setError(null);
+
+		try {
+			await addCase({ caseId, relatedCaseId });
+			setOpen(false);
+		} catch (caughtError) {
+			setError(getConvexErrorMessage(caughtError, "Case could not be added."));
+		} finally {
+			setPendingId(null);
+		}
+	}
+
 	return (
 		<Dialog
 			open={open}
@@ -255,7 +316,7 @@ function AddRelationshipDialog({
 				<DialogHeader>
 					<DialogTitle>Add relationship</DialogTitle>
 					<DialogDescription>
-						Choose a contact or an organization-defined entity.
+						Choose a contact, case, or organization-defined entity.
 					</DialogDescription>
 				</DialogHeader>
 
@@ -310,6 +371,50 @@ function AddRelationshipDialog({
 									</button>
 								);
 							})}
+						</div>
+					</div>
+
+					<div>
+						<div className="mb-2 flex items-center gap-2">
+							<IconFolder className="size-4 text-muted-foreground" />
+							<h3 className="text-sm font-semibold">Cases</h3>
+						</div>
+						<div className="space-y-1">
+							{options?.cases
+								.filter((relatedCase) => relatedCase._id !== caseId)
+								.map((relatedCase) => {
+									const alreadyAdded = currentRelatedCaseIds.has(
+										relatedCase._id,
+									);
+
+									return (
+										<button
+											key={relatedCase._id}
+											type="button"
+											onClick={() => selectCase(relatedCase._id)}
+											disabled={alreadyAdded || pendingId !== null}
+											className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted disabled:cursor-default disabled:opacity-50"
+										>
+											<span className="flex size-8 items-center justify-center rounded-full bg-muted">
+												<IconFolder className="size-4" />
+											</span>
+											<span className="min-w-0 flex-1">
+												<span className="block truncate text-sm font-medium">
+													{relatedCase.title}
+												</span>
+												<span className="block truncate text-xs text-muted-foreground">
+													{relatedCase.reference}
+												</span>
+											</span>
+											{alreadyAdded && (
+												<IconCircleCheckFilled className="size-4 text-accent" />
+											)}
+											{pendingId === relatedCase._id && (
+												<IconLoader2 className="size-4 animate-spin" />
+											)}
+										</button>
+									);
+								})}
 						</div>
 					</div>
 

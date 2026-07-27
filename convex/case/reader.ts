@@ -10,6 +10,7 @@ import {
 } from "../entity/constants";
 import { getWorkosUser } from "../workos";
 import {
+	MAX_CASE_CASE_RELATIONS,
 	MAX_CASE_CONTACT_RELATIONS,
 	MAX_CASE_ENTITY_RELATIONS,
 } from "./relations";
@@ -17,6 +18,7 @@ import {
 const MAX_CASE_EVENTS = 100;
 const MAX_ORGANIZATION_MEMBERS = 50;
 const MAX_CONTACT_OPTIONS = 50;
+const MAX_CASE_OPTIONS = 100;
 
 function getUserName(
 	user: NonNullable<Awaited<ReturnType<typeof getWorkosUser>>>,
@@ -106,6 +108,13 @@ export const get = query({
 			return null;
 		}
 
+		const caseRelationsPromise = ctx.db
+			.query("caseCaseRelations")
+			.withIndex("by_case_id_and_ended_at", (index) =>
+				index.eq("caseId", caseRecord._id).eq("endedAt", null),
+			)
+			.take(MAX_CASE_CASE_RELATIONS);
+
 		const [owner, events, contactRelations, entityRelations] =
 			await Promise.all([
 				caseRecord.ownerMemberId
@@ -131,6 +140,13 @@ export const get = query({
 					)
 					.take(MAX_CASE_ENTITY_RELATIONS),
 			]);
+		const caseRelations = await caseRelationsPromise;
+		const relatedCasesPromise = Promise.all(
+			caseRelations.map(async (relation) => ({
+				relation,
+				relatedCase: await ctx.db.get(relation.relatedCaseId),
+			})),
+		);
 
 		const [resolvedEvents, contacts, entities] = await Promise.all([
 			Promise.all(
@@ -157,6 +173,7 @@ export const get = query({
 				}),
 			),
 		]);
+		const relatedCases = await relatedCasesPromise;
 
 		return {
 			case: caseRecord,
@@ -166,6 +183,7 @@ export const get = query({
 			entities: entities.filter(
 				(item) => item.entity !== null && item.entityType !== null,
 			),
+			relatedCases: relatedCases.filter((item) => item.relatedCase !== null),
 		};
 	},
 });
@@ -174,6 +192,13 @@ export const getCreateOptions = query({
 	args: {},
 	handler: async (ctx) => {
 		const workspace = await requireActor(ctx);
+		const caseOptionsPromise = ctx.db
+			.query("cases")
+			.withIndex("by_organization_id_and_last_activity_at", (index) =>
+				index.eq("organizationId", workspace.organization._id),
+			)
+			.order("desc")
+			.take(MAX_CASE_OPTIONS);
 		const [memberDocuments, contacts, entityTypes] = await Promise.all([
 			ctx.db
 				.query("organizationMembers")
@@ -199,6 +224,7 @@ export const getCreateOptions = query({
 				)
 				.take(MAX_ENTITY_TYPES_PER_ORGANIZATION),
 		]);
+		const caseOptions = await caseOptionsPromise;
 
 		const members = (
 			await Promise.all(
@@ -211,6 +237,7 @@ export const getCreateOptions = query({
 		return {
 			members,
 			contacts,
+			cases: caseOptions,
 			entityTypes: await Promise.all(
 				entityTypes.map(async (entityType) => ({
 					entityType,

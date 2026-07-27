@@ -5,6 +5,7 @@ import { appendCaseEvent } from "./events";
 
 export const MAX_CASE_CONTACT_RELATIONS = 50;
 export const MAX_CASE_ENTITY_RELATIONS = 100;
+export const MAX_CASE_CASE_RELATIONS = 100;
 
 async function requireContact(
 	ctx: MutationCtx,
@@ -43,6 +44,21 @@ async function requireEntity(
 	return entity;
 }
 
+async function requireRelatedCase(
+	ctx: MutationCtx,
+	organizationId: Id<"organizations">,
+	relatedCaseId: Id<"cases">,
+) {
+	const relatedCase = await ctx.db.get(relatedCaseId);
+	if (!relatedCase || relatedCase.organizationId !== organizationId) {
+		throw new ConvexError({
+			code: "INVALID_CASE_RELATION",
+			message: "A selected case does not belong to this organization.",
+		});
+	}
+	return relatedCase;
+}
+
 function uniqueWithinLimit<T extends string>(
 	values: T[],
 	limit: number,
@@ -63,6 +79,7 @@ export async function validateInitialRelations(
 	organizationId: Id<"organizations">,
 	contactIds: Id<"contacts">[],
 	entityIds: Id<"entities">[],
+	relatedCaseIds: Id<"cases">[],
 ) {
 	const contacts = uniqueWithinLimit(
 		contactIds,
@@ -74,14 +91,26 @@ export async function validateInitialRelations(
 		MAX_CASE_ENTITY_RELATIONS,
 		"entity relations",
 	);
+	const relatedCases = uniqueWithinLimit(
+		relatedCaseIds,
+		MAX_CASE_CASE_RELATIONS,
+		"related cases",
+	);
 
 	await Promise.all([
 		...contacts.map((contactId) =>
 			requireContact(ctx, organizationId, contactId),
 		),
 		...entities.map((entityId) => requireEntity(ctx, organizationId, entityId)),
+		...relatedCases.map((relatedCaseId) =>
+			requireRelatedCase(ctx, organizationId, relatedCaseId),
+		),
 	]);
-	return { contactIds: contacts, entityIds: entities };
+	return {
+		contactIds: contacts,
+		entityIds: entities,
+		relatedCaseIds: relatedCases,
+	};
 }
 
 export async function insertInitialRelations(
@@ -90,6 +119,7 @@ export async function insertInitialRelations(
 	actorMemberId: Id<"organizationMembers">,
 	contactIds: Id<"contacts">[],
 	entityIds: Id<"entities">[],
+	relatedCaseIds: Id<"cases">[],
 	startedAt: number,
 ) {
 	for (const contactId of contactIds) {
@@ -106,6 +136,16 @@ export async function insertInitialRelations(
 		await ctx.db.insert("caseEntityRelations", {
 			caseId,
 			entityId,
+			startedAt,
+			endedAt: null,
+			addedByMemberId: actorMemberId,
+			removedByMemberId: null,
+		});
+	}
+	for (const relatedCaseId of relatedCaseIds) {
+		await ctx.db.insert("caseCaseRelations", {
+			caseId,
+			relatedCaseId,
 			startedAt,
 			endedAt: null,
 			addedByMemberId: actorMemberId,
@@ -279,6 +319,107 @@ export async function removeEntityCaseRelation(
 		ctx,
 		caseRecord,
 		`Removed ${entity?.displayName || "an entity"} from the case.`,
+		actorMemberId,
+		now,
+	);
+}
+
+export async function addRelatedCaseRelation(
+	ctx: MutationCtx,
+	organizationId: Id<"organizations">,
+	caseRecord: Doc<"cases">,
+	relatedCaseId: Id<"cases">,
+	actorMemberId: Id<"organizationMembers">,
+) {
+	if (caseRecord._id === relatedCaseId) {
+		throw new ConvexError({
+			code: "INVALID_CASE_RELATION",
+			message: "A case cannot be related to itself.",
+		});
+	}
+
+	const relatedCase = await requireRelatedCase(
+		ctx,
+		organizationId,
+		relatedCaseId,
+	);
+	const existing = await ctx.db
+		.query("caseCaseRelations")
+		.withIndex("by_case_id_and_related_case_id_and_ended_at", (index) =>
+			index
+				.eq("caseId", caseRecord._id)
+				.eq("relatedCaseId", relatedCase._id)
+				.eq("endedAt", null),
+		)
+		.unique();
+	if (existing) {
+		return existing._id;
+	}
+
+	const activeRelations = await ctx.db
+		.query("caseCaseRelations")
+		.withIndex("by_case_id_and_ended_at", (index) =>
+			index.eq("caseId", caseRecord._id).eq("endedAt", null),
+		)
+		.take(MAX_CASE_CASE_RELATIONS);
+	if (activeRelations.length >= MAX_CASE_CASE_RELATIONS) {
+		throw new ConvexError({
+			code: "TOO_MANY_RELATIONS",
+			message: `A case can have at most ${MAX_CASE_CASE_RELATIONS} related cases.`,
+		});
+	}
+
+	const now = Date.now();
+	const relationId = await ctx.db.insert("caseCaseRelations", {
+		caseId: caseRecord._id,
+		relatedCaseId: relatedCase._id,
+		startedAt: now,
+		endedAt: null,
+		addedByMemberId: actorMemberId,
+		removedByMemberId: null,
+	});
+	await appendCaseEvent(
+		ctx,
+		caseRecord,
+		`Added ${relatedCase.reference}: ${relatedCase.title} as a related case.`,
+		actorMemberId,
+		now,
+	);
+	return relationId;
+}
+
+export async function removeRelatedCaseRelation(
+	ctx: MutationCtx,
+	organizationId: Id<"organizations">,
+	relationId: Id<"caseCaseRelations">,
+	actorMemberId: Id<"organizationMembers">,
+) {
+	const relation = await ctx.db.get(relationId);
+	if (!relation || relation.endedAt !== null) {
+		return;
+	}
+	const caseRecord = await ctx.db.get(relation.caseId);
+	if (!caseRecord || caseRecord.organizationId !== organizationId) {
+		throw new ConvexError({
+			code: "CASE_NOT_FOUND",
+			message: "The case could not be found.",
+		});
+	}
+
+	const relatedCase = await ctx.db.get(relation.relatedCaseId);
+	const now = Date.now();
+	await ctx.db.patch("caseCaseRelations", relation._id, {
+		endedAt: now,
+		removedByMemberId: actorMemberId,
+	});
+	await appendCaseEvent(
+		ctx,
+		caseRecord,
+		`Removed ${
+			relatedCase
+				? `${relatedCase.reference}: ${relatedCase.title}`
+				: "a related case"
+		} from the case.`,
 		actorMemberId,
 		now,
 	);

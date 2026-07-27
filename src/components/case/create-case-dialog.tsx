@@ -1,6 +1,7 @@
 import {
 	IconAddressBook,
 	IconCalendar,
+	IconFolder,
 	IconLoader2,
 	IconPlus,
 } from "@tabler/icons-react";
@@ -72,6 +73,9 @@ export function CreateCaseDialog({
 	const [ownerMemberId, setOwnerMemberId] = useState<string>("unassigned");
 	const [contactIds, setContactIds] = useState<Set<Id<"contacts">>>(new Set());
 	const [entityIds, setEntityIds] = useState<Set<Id<"entities">>>(new Set());
+	const [relatedCaseIds, setRelatedCaseIds] = useState<Set<Id<"cases">>>(
+		new Set(),
+	);
 	const [showValidation, setShowValidation] = useState(false);
 	const [submissionError, setSubmissionError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -89,6 +93,7 @@ export function CreateCaseDialog({
 		setOwnerMemberId("unassigned");
 		setContactIds(new Set());
 		setEntityIds(new Set());
+		setRelatedCaseIds(new Set());
 		setShowValidation(false);
 		setSubmissionError(null);
 		setIsSubmitting(false);
@@ -125,6 +130,18 @@ export function CreateCaseDialog({
 		});
 	}
 
+	function toggleRelatedCase(relatedCaseId: Id<"cases">, checked: boolean) {
+		setRelatedCaseIds((current) => {
+			const next = new Set(current);
+			if (checked) {
+				next.add(relatedCaseId);
+			} else {
+				next.delete(relatedCaseId);
+			}
+			return next;
+		});
+	}
+
 	async function submit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		setShowValidation(true);
@@ -147,6 +164,7 @@ export function CreateCaseDialog({
 				initialEventBody: validation.output.initialEventBody,
 				contactIds: [...contactIds],
 				entityIds: [...entityIds],
+				relatedCaseIds: [...relatedCaseIds],
 			});
 			setOpen(false);
 			onCreated(caseId);
@@ -293,7 +311,7 @@ export function CreateCaseDialog({
 							<div>
 								<p className="text-sm font-medium">Relationships</p>
 								<p className="mt-1 text-sm text-muted-foreground">
-									Contacts remain visible in their own section on the case.
+									Choose the records connected to this case.
 								</p>
 							</div>
 
@@ -317,6 +335,31 @@ export function CreateCaseDialog({
 									{options?.contacts.length === 0 && (
 										<p className="px-2 py-3 text-sm text-muted-foreground">
 											No contacts yet.
+										</p>
+									)}
+								</div>
+							</div>
+
+							<div className="rounded-xl border">
+								<div className="flex items-center gap-2 border-b px-3 py-2.5">
+									<IconFolder className="size-4 text-muted-foreground" />
+									<p className="text-sm font-medium">Cases</p>
+								</div>
+								<div className="grid max-h-36 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
+									{options?.cases.map((relatedCase) => (
+										<RelationCheckbox
+											key={relatedCase._id}
+											checked={relatedCaseIds.has(relatedCase._id)}
+											onCheckedChange={(checked) =>
+												toggleRelatedCase(relatedCase._id, checked)
+											}
+											label={relatedCase.title}
+											description={relatedCase.reference}
+										/>
+									))}
+									{options?.cases.length === 0 && (
+										<p className="px-2 py-3 text-sm text-muted-foreground">
+											No other cases yet.
 										</p>
 									)}
 								</div>

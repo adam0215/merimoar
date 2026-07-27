@@ -218,6 +218,22 @@ export default defineSchema({
 		])
 		.index("by_entity_id_and_ended_at", ["entityId", "endedAt"]),
 
+	caseCaseRelations: defineTable({
+		caseId: v.id("cases"),
+		relatedCaseId: v.id("cases"),
+		startedAt: v.number(),
+		endedAt: v.union(v.number(), v.null()),
+		addedByMemberId: v.union(v.id("organizationMembers"), v.null()),
+		removedByMemberId: v.union(v.id("organizationMembers"), v.null()),
+	})
+		.index("by_case_id_and_ended_at", ["caseId", "endedAt"])
+		.index("by_related_case_id_and_ended_at", ["relatedCaseId", "endedAt"])
+		.index("by_case_id_and_related_case_id_and_ended_at", [
+			"caseId",
+			"relatedCaseId",
+			"endedAt",
+		]),
+
 	emailMessages: defineTable({
 		connectionId: v.id("emailConnections"),
 		threadId: v.id("emailThreads"),

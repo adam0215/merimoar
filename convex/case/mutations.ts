@@ -15,9 +15,11 @@ import { caseStatusValidator } from "./model";
 import {
 	addContactCaseRelation,
 	addEntityCaseRelation,
+	addRelatedCaseRelation,
 	insertInitialRelations,
 	removeContactCaseRelation,
 	removeEntityCaseRelation,
+	removeRelatedCaseRelation,
 	validateInitialRelations,
 } from "./relations";
 
@@ -53,6 +55,7 @@ export const create = mutation({
 		initialEventBody: v.string(),
 		contactIds: v.array(v.id("contacts")),
 		entityIds: v.array(v.id("entities")),
+		relatedCaseIds: v.array(v.id("cases")),
 	},
 	returns: v.id("cases"),
 	handler: async (ctx, args) => {
@@ -85,6 +88,7 @@ export const create = mutation({
 				actor.organization._id,
 				args.contactIds,
 				args.entityIds,
+				args.relatedCaseIds,
 			),
 			generateCaseReference(ctx, actor.organization._id),
 		]);
@@ -109,6 +113,7 @@ export const create = mutation({
 			actor.member._id,
 			relations.contactIds,
 			relations.entityIds,
+			relations.relatedCaseIds,
 			now,
 		);
 		if (initialEvent.output) {
@@ -274,6 +279,46 @@ export const removeEntityRelation = mutation({
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
 		await removeEntityCaseRelation(
+			ctx,
+			actor.organization._id,
+			args.relationId,
+			actor.member._id,
+		);
+		return null;
+	},
+});
+
+export const addCaseRelation = mutation({
+	args: {
+		caseId: v.id("cases"),
+		relatedCaseId: v.id("cases"),
+	},
+	returns: v.id("caseCaseRelations"),
+	handler: async (ctx, args) => {
+		const actor = await requireActor(ctx);
+		const caseRecord = await requireCase(
+			ctx,
+			actor.organization._id,
+			args.caseId,
+		);
+		return await addRelatedCaseRelation(
+			ctx,
+			actor.organization._id,
+			caseRecord,
+			args.relatedCaseId,
+			actor.member._id,
+		);
+	},
+});
+
+export const removeCaseRelation = mutation({
+	args: {
+		relationId: v.id("caseCaseRelations"),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const actor = await requireActor(ctx);
+		await removeRelatedCaseRelation(
 			ctx,
 			actor.organization._id,
 			args.relationId,

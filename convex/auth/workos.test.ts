@@ -140,6 +140,7 @@ describe("official WorkOS component projection", () => {
 				initialEventBody: "",
 				contactIds: [],
 				entityIds: [],
+				relatedCaseIds: [],
 			}),
 		).rejects.toThrow("active WorkOS");
 	});
