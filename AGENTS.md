@@ -27,6 +27,8 @@ Always refer to instructions in the DESIGN.md when implementing UI. Then use exi
 - Run targeted formatting, lint, and type checks for the affected scope when available.
 - When asked to commit, write messages in the format of the current commit history, if nothing else is specified.
 
+# Convex
+
 <!-- convex-ai-start -->
 
 This project uses [Convex](https://convex.dev) as its backend.
@@ -40,3 +42,5 @@ Convex agent skills for common tasks can be installed by running
 `npx convex ai-files install`.
 
 <!-- convex-ai-end -->
+
+- When doing schema changes, always make sure schema validation succeeds and that there are no mismatches between current rows and the schema. Do this by migrating existing data over to the new schema when needed. Never delete data.
