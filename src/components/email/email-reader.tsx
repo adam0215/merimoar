@@ -3,12 +3,19 @@ import {
 	IconChevronDown,
 	IconInbox,
 	IconLoader2,
+	IconMail,
 	IconMailOpened,
 	IconMessages,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
+import type { OptimisticLocalStore } from "convex/browser";
+import {
+	optimisticallyUpdateValueInPaginatedQuery,
+	useMutation,
+} from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useQuery } from "convex-helpers/react/cache";
+import { useEffect, useMemo } from "react";
 import type { CaseCreateOptions } from "#/components/case/types.ts";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -24,10 +31,14 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { showAppNotification } from "#/lib/app-notifications.ts";
+import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { EmailCaseActions } from "./email-case-actions.tsx";
 import { parseEmailReply } from "./parse-email-reply";
+import { ThreadUnreadDot } from "./thread-unread-dot.tsx";
 
 type ThreadListItem = FunctionReturnType<
 	typeof api.email.reader.listThreads
@@ -37,6 +48,37 @@ type ThreadDetails = NonNullable<
 >;
 type Message = ThreadDetails["messages"][number];
 type Participant = Message["from"];
+
+function optimisticallySetThreadUnread(
+	localStore: OptimisticLocalStore,
+	args: {
+		threadId: Id<"emailThreads">;
+		isUnread: boolean;
+	},
+) {
+	optimisticallyUpdateValueInPaginatedQuery(
+		localStore,
+		api.email.reader.listThreads,
+		{},
+		(item) =>
+			item.thread._id === args.threadId
+				? {
+						...item,
+						thread: { ...item.thread, isUnread: args.isUnread },
+					}
+				: item,
+	);
+
+	for (const query of localStore.getAllQueries(api.email.reader.getThread)) {
+		if (query.value?.thread._id !== args.threadId) {
+			continue;
+		}
+		localStore.setQuery(api.email.reader.getThread, query.args, {
+			...query.value,
+			thread: { ...query.value.thread, isUnread: args.isUnread },
+		});
+	}
+}
 
 const SKELETON_ROWS = [
 	"skeleton-a",
@@ -83,7 +125,13 @@ function formatMessageDate(timestamp: number) {
 	}).format(new Date(timestamp));
 }
 
-function ThreadMessageCount({ threadId }: { threadId: string }) {
+function ThreadMessageCount({
+	threadId,
+	emphasized = false,
+}: {
+	threadId: string;
+	emphasized?: boolean;
+}) {
 	const thread = useQuery(api.email.reader.getThread, { threadId });
 	if (!thread || thread.messages.length <= 1) {
 		return null;
@@ -91,7 +139,10 @@ function ThreadMessageCount({ threadId }: { threadId: string }) {
 
 	return (
 		<span
-			className="inline-flex shrink-0 items-center gap-0.5 text-muted-foreground"
+			className={cn(
+				"inline-flex shrink-0 items-center gap-0.5",
+				emphasized ? "font-semibold text-foreground" : "text-muted-foreground",
+			)}
 			aria-label={`${thread.messages.length} messages in thread`}
 		>
 			<IconMessages className="size-3.5" aria-hidden="true" />
@@ -140,12 +191,13 @@ export function ThreadList({
 						className={cn(
 							"rounded-xl px-3",
 							compact
-								? "grid grid-cols-[max-content_minmax(0,1fr)_4.5rem] items-center gap-x-2 py-2"
+								? "grid grid-cols-[0.5rem_max-content_minmax(0,1fr)_4.5rem] items-center gap-x-2 py-2"
 								: "flex gap-3 py-4",
 						)}
 					>
 						{compact ? (
 							<>
+								<span className="size-2" />
 								<Skeleton className="h-3 w-3/4" />
 								<Skeleton className="h-3 w-full" />
 								<Skeleton className="ml-auto h-3 w-12" />
@@ -196,25 +248,57 @@ export function ThreadList({
 							to="/email"
 							search={{ thread: thread._id }}
 							className={cn(
-								"mb-0.5 grid grid-cols-[max-content_minmax(0,1fr)_auto] items-center gap-x-2 rounded-lg px-3 py-2 text-xs text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+								"mb-0.5 grid items-center gap-x-2 rounded-lg px-3 py-2 text-xs text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+								thread.isUnread
+									? "grid-cols-[0.5rem_max-content_minmax(0,1fr)_auto]"
+									: "grid-cols-[max-content_minmax(0,1fr)_auto]",
 								isActive && "bg-muted",
 							)}
 						>
+							{thread.isUnread && <ThreadUnreadDot isUnread />}
 							<div className="flex min-w-0 items-center gap-2">
-								<p className="truncate font-medium text-muted-foreground">
+								<p
+									className={cn(
+										"truncate",
+										thread.isUnread
+											? "font-semibold text-foreground"
+											: "font-medium text-muted-foreground",
+									)}
+								>
 									{participantLabel(latestMessage.from)}
 								</p>
-								<ThreadMessageCount threadId={thread._id} />
+								<ThreadMessageCount
+									threadId={thread._id}
+									emphasized={thread.isUnread}
+								/>
 							</div>
 							<p className="min-w-0 truncate">
-								<span className="font-semibold">
+								<span
+									className={thread.isUnread ? "font-semibold" : "font-medium"}
+								>
 									{latestMessage.subject || "(No subject)"}
 								</span>
 								{preview && (
-									<span className="text-muted-foreground"> {preview}</span>
+									<span
+										className={cn(
+											thread.isUnread
+												? "font-semibold text-foreground"
+												: "text-muted-foreground",
+										)}
+									>
+										{" "}
+										{preview}
+									</span>
 								)}
 							</p>
-							<time className="shrink-0 text-muted-foreground">
+							<time
+								className={cn(
+									"shrink-0",
+									thread.isUnread
+										? "font-semibold text-foreground"
+										: "text-muted-foreground",
+								)}
+							>
 								{formatListDate(latestMessage.receivedAt)}
 							</time>
 						</Link>
@@ -227,15 +311,28 @@ export function ThreadList({
 						to="/email"
 						search={{ thread: thread._id }}
 						className={cn(
-							"mb-1 flex gap-3 rounded-xl px-3 py-3.5 text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+							"group mb-1 flex gap-3 rounded-xl px-3 py-3.5 text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
 							isActive && "bg-muted",
 						)}
 					>
-						<Avatar className="mt-0.5">
-							<AvatarFallback className={cn(isActive && "bg-background")}>
-								{initials(latestMessage.from)}
-							</AvatarFallback>
-						</Avatar>
+						<div className="relative mt-0.5 shrink-0">
+							<Avatar>
+								<AvatarFallback className={cn(isActive && "bg-background")}>
+									{initials(latestMessage.from)}
+								</AvatarFallback>
+							</Avatar>
+							{thread.isUnread && (
+								<ThreadUnreadDot
+									className={cn(
+										"absolute -top-0.5 -left-0.5 box-content border-2",
+										isActive
+											? "border-muted"
+											: "border-background group-hover:border-muted",
+									)}
+									isUnread
+								/>
+							)}
+						</div>
 						<div className="min-w-0 flex-1">
 							<div className="flex items-baseline gap-2">
 								<div className="flex min-w-0 flex-1 items-center gap-2">
@@ -287,6 +384,40 @@ export function ThreadView({
 	isLoading: boolean;
 	createOptions: CaseCreateOptions | undefined;
 }) {
+	const setUnreadMutation = useMutation(api.email.reader.setUnread);
+	const setUnread = useMemo(
+		() => setUnreadMutation.withOptimisticUpdate(optimisticallySetThreadUnread),
+		[setUnreadMutation],
+	);
+	const threadId = thread?.thread._id;
+
+	useEffect(() => {
+		if (threadId) {
+			void setUnread({ threadId, isUnread: false }).catch(() => undefined);
+		}
+	}, [setUnread, threadId]);
+
+	async function toggleUnread() {
+		if (!thread) {
+			return;
+		}
+
+		try {
+			await setUnread({
+				threadId: thread.thread._id,
+				isUnread: !(thread.thread.isUnread ?? false),
+			});
+		} catch (error) {
+			showAppNotification({
+				title: "Thread could not be updated",
+				description: getConvexErrorMessage(
+					error,
+					"The email thread could not be updated.",
+				),
+			});
+		}
+	}
+
 	if (isLoading) {
 		return (
 			<div className="mx-auto max-w-3xl space-y-8 p-6 md:p-10">
@@ -313,11 +444,38 @@ export function ThreadView({
 
 	return (
 		<div className="relative h-full">
+			<div
+				role="toolbar"
+				aria-label="Thread actions"
+				className="absolute inset-x-0 top-0 z-30 flex h-8 items-center border-b bg-background px-4"
+			>
+				<Tooltip>
+					<TooltipTrigger
+						render={
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								onClick={() => void toggleUnread()}
+								aria-label={
+									thread.thread.isUnread
+										? "Mark thread as read"
+										: "Mark thread as unread"
+								}
+							/>
+						}
+					>
+						{thread.thread.isUnread ? <IconMailOpened /> : <IconMail />}
+					</TooltipTrigger>
+					<TooltipContent side="bottom">
+						{thread.thread.isUnread ? "Mark as read" : "Mark as unread"}
+					</TooltipContent>
+				</Tooltip>
+			</div>
 			<ScrollArea
 				className="h-full"
 				viewportProps={{ className: "overscroll-none" }}
 			>
-				<div className="w-full px-5 pt-5 pb-28 md:px-8 md:pt-7 md:pb-32">
+				<div className="w-full px-6 pt-14 pb-28 md:pb-32">
 					<div className="divide-y">
 						{thread.messages.map((message) => {
 							const repliedToMessage = findRepliedToMessage(

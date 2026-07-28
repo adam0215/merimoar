@@ -280,6 +280,7 @@ export const storeInboundEmail = internalMutation({
 				organizationId: inbox.organizationId,
 				inboxId: event.inboxId,
 				lastActivityAt: args.email.receivedAt,
+				isUnread: true,
 			});
 			thread = await ctx.db.get(threadId);
 		}
@@ -334,15 +335,17 @@ export const storeInboundEmail = internalMutation({
 			receivedAt: args.email.receivedAt,
 		});
 
-		if (
-			!thread.latestMessageId ||
-			args.email.receivedAt >= thread.lastActivityAt
-		) {
-			await ctx.db.patch(thread._id, {
-				latestMessageId: messageId,
-				lastActivityAt: args.email.receivedAt,
-			});
-		}
+		const isLatestMessage =
+			!thread.latestMessageId || args.email.receivedAt >= thread.lastActivityAt;
+		await ctx.db.patch(thread._id, {
+			isUnread: true,
+			...(isLatestMessage
+				? {
+						latestMessageId: messageId,
+						lastActivityAt: args.email.receivedAt,
+					}
+				: {}),
+		});
 
 		const activeCaseRelation = await getActiveCaseRelationForEmailThread(
 			ctx,

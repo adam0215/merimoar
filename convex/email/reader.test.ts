@@ -117,6 +117,36 @@ describe("email reader authorization", () => {
 				threadId: "not-a-thread-id",
 			}),
 		).toBeNull();
+		await actor.mutation(api.email.reader.setUnread, {
+			threadId: firstThreadId,
+			isUnread: true,
+		});
+		expect(
+			await actor.query(api.email.reader.getThread, {
+				threadId: firstThreadId,
+			}),
+		).toMatchObject({ thread: { isUnread: true } });
+		await actor.mutation(api.email.reader.setUnread, {
+			threadId: firstThreadId,
+			isUnread: false,
+		});
+		expect(
+			await actor.query(api.email.reader.getThread, {
+				threadId: firstThreadId,
+			}),
+		).toMatchObject({ thread: { isUnread: false } });
+		await expect(
+			actor.mutation(api.email.reader.setUnread, {
+				threadId: otherThreadId,
+				isUnread: true,
+			}),
+		).rejects.toThrow("could not be found");
+		await expect(
+			base.mutation(api.email.reader.setUnread, {
+				threadId: firstThreadId,
+				isUnread: true,
+			}),
+		).rejects.toThrow("Sign in");
 		await expect(base.query(api.email.reader.listInboxes, {})).rejects.toThrow(
 			"Sign in",
 		);

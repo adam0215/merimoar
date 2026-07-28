@@ -46,12 +46,7 @@ export function CaseRelationships({ detail }: { detail: CaseDetail }) {
 
 	return (
 		<section className="mt-10 border-t pt-8">
-			<div>
-				<h2 className="text-sm font-semibold">Relationships</h2>
-				<p className="mt-1 text-xs text-muted-foreground">
-					People and records connected to this case.
-				</p>
-			</div>
+			<h2 className="text-sm font-semibold">Relationships</h2>
 
 			<div className="mt-4 grid gap-2 sm:grid-cols-2">
 				{detail.contacts.map(({ relation, contact }) =>

@@ -77,6 +77,7 @@ export default defineSchema({
 		inboxId: v.id("emailInboxes"),
 		latestMessageId: v.optional(v.id("emailMessages")),
 		lastActivityAt: v.number(),
+		isUnread: v.optional(v.boolean()),
 	}).index("by_organization_id_and_last_activity_at", [
 		"organizationId",
 		"lastActivityAt",

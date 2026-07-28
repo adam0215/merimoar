@@ -1,6 +1,6 @@
 import { paginationOptsValidator } from "convex/server";
-import { v } from "convex/values";
-import { query } from "../_generated/server";
+import { ConvexError, v } from "convex/values";
+import { mutation, query } from "../_generated/server";
 import { requireActor } from "../auth/access";
 import { getActiveCaseRelationForEmailThread } from "../case/emailRelations";
 
@@ -103,5 +103,28 @@ export const getThread = query({
 						}
 					: null,
 		};
+	},
+});
+
+export const setUnread = mutation({
+	args: {
+		threadId: v.id("emailThreads"),
+		isUnread: v.boolean(),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const workspace = await requireActor(ctx);
+		const thread = await ctx.db.get(args.threadId);
+		if (!thread || thread.organizationId !== workspace.organization._id) {
+			throw new ConvexError({
+				code: "EMAIL_THREAD_NOT_FOUND",
+				message: "The email thread could not be found.",
+			});
+		}
+
+		if (thread.isUnread !== args.isUnread) {
+			await ctx.db.patch(thread._id, { isUnread: args.isUnread });
+		}
+		return null;
 	},
 });

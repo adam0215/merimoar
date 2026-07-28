@@ -12,6 +12,11 @@
 
 - Gray hover, active, highlighted, and selected backgrounds always use the `muted` color token (`bg-muted` in Tailwind). Do not recreate this state with foreground opacity or one-off gray values.
 
+## Detail views
+
+- Detail views use 24px content padding. Additional safe space is allowed where floating controls would otherwise cover the content.
+- Toolbar content inside detail views aligns to the same 24px inset. Account for a control's internal padding when setting the toolbar container padding.
+
 ## Icons
 
 - Tabler Icons is always used as the main icon library.

@@ -79,7 +79,7 @@ export function EmailCaseActions({
 		<>
 			<div className="pointer-events-none absolute right-4 bottom-4 z-30 flex max-w-[calc(100%-2rem)] flex-col items-end gap-2 sm:right-6 sm:bottom-6">
 				{thread.activeCase && (
-					<div className="group/case-pill pointer-events-auto relative min-w-0 max-w-64 rounded-full border bg-background/90 shadow-lg backdrop-blur-xl sm:max-w-80">
+					<div className="group/case-pill pointer-events-auto relative min-w-0 max-w-66 rounded-full border bg-background/90 shadow-lg backdrop-blur-xl">
 						<Link
 							to="/cases"
 							search={{ case: thread.activeCase._id }}
@@ -89,7 +89,7 @@ export function EmailCaseActions({
 							<span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
 								<IconFolder className="size-3.5" />
 							</span>
-							<span className="min-w-0">
+							<span className="min-w-0 pr-4">
 								<span className="block truncate text-xs font-semibold">
 									{thread.activeCase.title}
 								</span>

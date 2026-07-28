@@ -73,6 +73,16 @@ describe("inbound email ingestion", () => {
 				email: firstEmail,
 			},
 		);
+		await t.run(async (ctx) => {
+			if (!firstMessageId) {
+				throw new Error("Expected the first email to be stored");
+			}
+			const firstMessage = await ctx.db.get(firstMessageId);
+			if (!firstMessage) {
+				throw new Error("Expected the first email to exist");
+			}
+			await ctx.db.patch(firstMessage.threadId, { isUnread: false });
+		});
 
 		const secondEventId = await t.run(async (ctx) =>
 			ctx.db.insert("emailIngestEvents", {
@@ -164,6 +174,7 @@ describe("inbound email ingestion", () => {
 			),
 		).toBe(true);
 		expect(state.threads[0]?.latestMessageId).toBe(secondMessageId);
+		expect(state.threads[0]?.isUnread).toBe(true);
 		expect(state.duplicateEvent?.status).toBe("processed");
 	});
 
