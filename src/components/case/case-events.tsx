@@ -149,7 +149,9 @@ export function CaseEvents({
 									aria-hidden="true"
 								/>
 							)}
-							{"type" in event && event.type === "inbound_email" ? (
+							{"type" in event &&
+							(event.type === "inbound_email" ||
+								event.type === "outbound_email") ? (
 								<IconMail className="relative z-1 mt-1 size-4 text-accent" />
 							) : "type" in event && event.type === "system_change" ? (
 								<IconRefresh className="relative z-1 mt-1 size-4 text-muted-foreground" />
@@ -163,12 +165,18 @@ export function CaseEvents({
 							)}
 						</div>
 						<div className="min-w-0">
-							{"type" in event && event.type === "inbound_email" ? (
+							{"type" in event &&
+							(event.type === "inbound_email" ||
+								event.type === "outbound_email") ? (
 								<>
 									<p className="max-w-3xl text-sm leading-6">
-										Inbound email
+										{event.type === "inbound_email"
+											? "Inbound email"
+											: "Outbound email"}
 										{emailMessage
-											? ` from ${emailMessage.from.name || emailMessage.from.address}`
+											? event.type === "inbound_email"
+												? ` from ${emailMessage.from.name || emailMessage.from.address}`
+												: ` to ${emailMessage.to[0]?.name || emailMessage.to[0]?.address || "recipient"}`
 											: ""}
 									</p>
 									{emailMessage && (

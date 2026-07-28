@@ -81,3 +81,33 @@ export async function appendInboundEmailCaseEvent(
 	await updateCaseActivity(ctx, caseRecord, occurredAt, createdAt);
 	return eventId;
 }
+
+export async function appendOutboundEmailCaseEvent(
+	ctx: MutationCtx,
+	caseRecord: Doc<"cases">,
+	emailMessageId: Id<"emailMessages">,
+	actorMemberId: Id<"organizationMembers">,
+	occurredAt: number,
+) {
+	const existingEvent = await ctx.db
+		.query("caseEvents")
+		.withIndex("by_case_id_and_email_message_id", (index) =>
+			index.eq("caseId", caseRecord._id).eq("emailMessageId", emailMessageId),
+		)
+		.unique();
+	if (existingEvent) {
+		return existingEvent._id;
+	}
+
+	const createdAt = Date.now();
+	const eventId = await ctx.db.insert("caseEvents", {
+		caseId: caseRecord._id,
+		type: "outbound_email",
+		emailMessageId,
+		occurredAt,
+		createdAt,
+		createdByMemberId: actorMemberId,
+	});
+	await updateCaseActivity(ctx, caseRecord, occurredAt, createdAt);
+	return eventId;
+}

@@ -65,6 +65,9 @@ export function EmailCaseActions({
 			}
 		>();
 		for (const message of thread.messages) {
+			if (message.direction !== "inbound") {
+				continue;
+			}
 			contactsById.set(message.senderContactId, {
 				_id: message.senderContactId,
 				address: message.from.address,

@@ -1,6 +1,6 @@
 import { Migrations } from "@convex-dev/migrations";
 import { v } from "convex/values";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { internalQuery } from "./_generated/server";
 
@@ -34,3 +34,42 @@ export const verifyTypedCaseEvents = internalQuery({
 		};
 	},
 });
+
+// The previous emailMessages schema already required direction: "inbound" and
+// every field in the inbound union branch. The union deployment is therefore a
+// schema-compatible widen/narrow change with no data rewrite; this migration
+// records a batched validation pass over the rows that existed at deployment.
+export const validateInboundMessagesForOutboundUnion = migrations.define({
+	table: "emailMessages",
+	migrateOne: async (_ctx, message) => {
+		if (message.direction !== "inbound" && message.direction !== "outbound") {
+			throw new Error("Email message has no supported direction");
+		}
+		if (
+			message.direction === "inbound" &&
+			(!message.senderContactId || !message.externalMessageId)
+		) {
+			throw new Error("Inbound email message is missing required identity");
+		}
+	},
+});
+
+export const reconcileConnectedResendWebhooksForOutboundEvents =
+	migrations.define({
+		table: "emailIntegrations",
+		migrateOne: async (ctx, integration) => {
+			if (integration.status !== "connected") {
+				return;
+			}
+			await ctx.scheduler.runAfter(
+				0,
+				internal.email.integrationActions.reconcileResendWebhook,
+				{
+					integrationId: integration._id,
+					expectedConnectedAccountUpdatedAt:
+						integration.workosConnectedAccountUpdatedAt,
+					attempt: 0,
+				},
+			);
+		},
+	});

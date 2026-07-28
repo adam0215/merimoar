@@ -4,7 +4,9 @@ import { caseEventValidator, caseStatusValidator } from "./case/model";
 import {
 	emailIngestFailureKindValidator,
 	emailIngestStatusValidator,
-	emailParticipantValidator,
+	emailMessageValidator,
+	emailSendFailureValidator,
+	emailSendStatusValidator,
 } from "./email/model";
 import { entityFieldTypeValidator, entityIconValidator } from "./entity/model";
 import { globalSearchTargetValidator } from "./globalSearch/model";
@@ -56,6 +58,7 @@ export default defineSchema({
 		displayName: v.string(),
 		address: v.string(),
 		status: v.union(v.literal("active"), v.literal("disabled")),
+		outboundIntegrationId: v.optional(v.id("emailIntegrations")),
 	})
 		.index("by_organization_id", ["organizationId"])
 		.index("by_organization_id_and_address", ["organizationId", "address"])
@@ -327,26 +330,15 @@ export default defineSchema({
 			"endedAt",
 		]),
 
-	emailMessages: defineTable({
-		inboxId: v.id("emailInboxes"),
-		integrationId: v.id("emailIntegrations"),
-		threadId: v.id("emailThreads"),
-		senderContactId: v.id("contacts"),
-		externalMessageId: v.string(),
-		internetMessageId: v.optional(v.string()),
-		inReplyTo: v.optional(v.string()),
-		references: v.array(v.string()),
-		direction: v.literal("inbound"),
-		from: emailParticipantValidator,
-		to: v.array(emailParticipantValidator),
-		cc: v.array(emailParticipantValidator),
-		bcc: v.array(emailParticipantValidator),
-		replyTo: v.array(emailParticipantValidator),
-		subject: v.string(),
-		textBody: v.string(),
-		sentAt: v.number(),
-		receivedAt: v.number(),
-	})
+	// For outbound messages, sentAt is when Merimoar queued the immutable
+	// message, not when a provider accepted or delivered it.
+	emailMessages: defineTable(emailMessageValidator)
+		.index("by_thread_id_and_sent_at", ["threadId", "sentAt"])
+		.index("by_thread_id_and_direction_and_sent_at", [
+			"threadId",
+			"direction",
+			"sentAt",
+		])
 		.index("by_thread_id_and_received_at", ["threadId", "receivedAt"])
 		.index("by_sender_contact_id_and_received_at", [
 			"senderContactId",
@@ -360,6 +352,34 @@ export default defineSchema({
 		.index("by_inbox_id_and_internet_message_id", [
 			"inboxId",
 			"internetMessageId",
+		]),
+
+	emailDrafts: defineTable({
+		threadId: v.id("emailThreads"),
+		authorMemberId: v.id("organizationMembers"),
+		body: v.string(),
+		revision: v.number(),
+		updatedAt: v.number(),
+	}).index("by_thread_id_and_author_member_id", ["threadId", "authorMemberId"]),
+
+	emailSends: defineTable({
+		messageId: v.id("emailMessages"),
+		requestedByMemberId: v.id("organizationMembers"),
+		clientRequestId: v.string(),
+		status: emailSendStatusValidator,
+		generation: v.number(),
+		workId: v.optional(v.string()),
+		attemptCount: v.number(),
+		providerCallGeneration: v.optional(v.number()),
+		idempotencyExpiresAt: v.optional(v.number()),
+		lastAttemptAt: v.optional(v.number()),
+		acceptedAt: v.optional(v.number()),
+		failure: v.optional(emailSendFailureValidator),
+	})
+		.index("by_message_id", ["messageId"])
+		.index("by_requested_by_member_id_and_client_request_id", [
+			"requestedByMemberId",
+			"clientRequestId",
 		]),
 
 	emailIngestEvents: defineTable({

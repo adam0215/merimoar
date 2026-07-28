@@ -20,6 +20,7 @@ export function createTest() {
 	workOSAuthKitTest.register(test);
 	registerMigrationsTest(test);
 	registerWorkpoolTest(test, "emailIngestWorkpool");
+	registerWorkpoolTest(test, "emailOutboundWorkpool");
 	return test;
 }
 

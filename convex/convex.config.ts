@@ -16,5 +16,6 @@ const app = defineApp({
 app.use(workOSAuthKit);
 app.use(migrations);
 app.use(workpool, { name: "emailIngestWorkpool" });
+app.use(workpool, { name: "emailOutboundWorkpool" });
 
 export default app;

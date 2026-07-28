@@ -1,8 +1,44 @@
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
+import type { Id } from "../_generated/dataModel";
+import type { QueryCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
 import { requireActor } from "../auth/access";
 import { getActiveCaseRelationForEmailThread } from "../case/emailRelations";
+
+async function listLatestThreadMessages(
+	ctx: QueryCtx,
+	threadId: Id<"emailThreads">,
+) {
+	const messages = await ctx.db
+		.query("emailMessages")
+		.withIndex("by_thread_id_and_sent_at", (query) =>
+			query.eq("threadId", threadId),
+		)
+		.order("desc")
+		.take(100);
+	return messages.reverse();
+}
+
+export const listOutboundIntegrations = query({
+	args: {},
+	handler: async (ctx) => {
+		const workspace = await requireActor(ctx);
+		const integrations = await ctx.db
+			.query("emailIntegrations")
+			.withIndex("by_organization_id_and_provider", (index) =>
+				index
+					.eq("organizationId", workspace.organization._id)
+					.eq("provider", "resend"),
+			)
+			.take(100);
+		return integrations.map((integration) => ({
+			integrationId: integration._id,
+			provider: integration.provider,
+			status: integration.status,
+		}));
+	},
+});
 
 export const listInboxes = query({
 	args: {},
@@ -16,13 +52,28 @@ export const listInboxes = query({
 					.eq("status", "active"),
 			)
 			.take(100);
-		return inboxes.map((inbox) => ({
-			_id: inbox._id,
-			_creationTime: inbox._creationTime,
-			displayName: inbox.displayName,
-			address: inbox.address,
-			status: "active" as const,
-		}));
+		return await Promise.all(
+			inboxes.map(async (inbox) => {
+				const outboundIntegration = inbox.outboundIntegrationId
+					? await ctx.db.get(inbox.outboundIntegrationId)
+					: null;
+				return {
+					_id: inbox._id,
+					_creationTime: inbox._creationTime,
+					displayName: inbox.displayName,
+					address: inbox.address,
+					status: "active" as const,
+					outboundIntegration:
+						outboundIntegration?.organizationId === workspace.organization._id
+							? {
+									integrationId: outboundIntegration._id,
+									provider: outboundIntegration.provider,
+									status: outboundIntegration.status,
+								}
+							: null,
+				};
+			}),
+		);
 	},
 });
 
@@ -71,16 +122,18 @@ export const getThread = query({
 			return null;
 		}
 
-		const [inbox, messages, activeCaseRelation] = await Promise.all([
+		const [inbox, messages, activeCaseRelation, draft] = await Promise.all([
 			ctx.db.get(thread.inboxId),
-			ctx.db
-				.query("emailMessages")
-				.withIndex("by_thread_id_and_received_at", (query) =>
-					query.eq("threadId", thread._id),
-				)
-				.order("asc")
-				.take(100),
+			listLatestThreadMessages(ctx, thread._id),
 			getActiveCaseRelationForEmailThread(ctx, thread._id),
+			ctx.db
+				.query("emailDrafts")
+				.withIndex("by_thread_id_and_author_member_id", (index) =>
+					index
+						.eq("threadId", thread._id)
+						.eq("authorMemberId", workspace.member._id),
+				)
+				.unique(),
 		]);
 
 		if (!inbox) {
@@ -90,10 +143,39 @@ export const getThread = query({
 			? await ctx.db.get(activeCaseRelation.caseId)
 			: null;
 
+		const sendStatuses = await Promise.all(
+			messages.flatMap((message) =>
+				message.direction === "outbound"
+					? [
+							ctx.db
+								.query("emailSends")
+								.withIndex("by_message_id", (index) =>
+									index.eq("messageId", message._id),
+								)
+								.unique()
+								.then((send) => {
+									if (!send) {
+										throw new Error(
+											"Outbound email message is missing send state",
+										);
+									}
+									return {
+										messageId: message._id,
+										status: send.status,
+										failure: send.failure,
+									};
+								}),
+						]
+					: [],
+			),
+		);
+
 		return {
 			thread,
 			inbox,
 			messages,
+			sendStatuses,
+			draft,
 			activeCase:
 				activeCaseRelation &&
 				activeCase?.organizationId === workspace.organization._id

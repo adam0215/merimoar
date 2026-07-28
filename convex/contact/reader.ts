@@ -60,6 +60,11 @@ export const listMessages = query({
 
 		const page = await Promise.all(
 			result.page.map(async (message) => {
+				if (message.direction !== "inbound") {
+					throw new Error(
+						"Contact email activity cannot contain an outbound message",
+					);
+				}
 				const inbox = await ctx.db.get(message.inboxId);
 				if (!inbox) {
 					throw new Error("Email inbox not found");

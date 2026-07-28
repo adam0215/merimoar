@@ -96,7 +96,7 @@ export const getResendProvisioningContext = internalQuery({
 	returns: v.union(
 		v.object({
 			integrationId: v.id("emailIntegrations"),
-			webhookConfigured: v.boolean(),
+			webhookId: v.optional(v.string()),
 			workosOrganizationId: v.string(),
 			workosUserId: v.string(),
 		}),
@@ -115,12 +115,44 @@ export const getResendProvisioningContext = internalQuery({
 		}
 		return {
 			integrationId: integration._id,
-			webhookConfigured:
-				integration.webhookId !== undefined &&
-				integration.webhookSecret !== undefined,
+			webhookId:
+				integration.webhookSecret !== undefined
+					? integration.webhookId
+					: undefined,
 			workosOrganizationId: integration.workosOrganizationId,
 			workosUserId: integration.workosUserId,
 		};
+	},
+});
+
+export const getResendAccessContext = internalQuery({
+	args: {
+		integrationId: v.id("emailIntegrations"),
+	},
+	returns: v.union(
+		v.object({
+			_id: v.id("emailIntegrations"),
+			_creationTime: v.number(),
+			organizationId: v.id("organizations"),
+			provider: v.literal("resend"),
+			status: v.union(
+				v.literal("connected"),
+				v.literal("needs_reauthorization"),
+				v.literal("disconnected"),
+			),
+			workosUserId: v.string(),
+			workosOrganizationId: v.string(),
+			workosDataIntegrationId: v.string(),
+			workosConnectedAccountId: v.string(),
+			workosConnectedAccountUpdatedAt: v.number(),
+			webhookId: v.optional(v.string()),
+			webhookSecret: v.optional(v.string()),
+			webhookProvisionedAt: v.optional(v.number()),
+		}),
+		v.null(),
+	),
+	handler: async (ctx, args) => {
+		return await ctx.db.get(args.integrationId);
 	},
 });
 

@@ -30,6 +30,10 @@ export const caseEventValidator = v.union(
 		emailMessageId: v.id("emailMessages"),
 	}),
 	caseEventBaseValidator.extend({
+		type: v.literal("outbound_email"),
+		emailMessageId: v.id("emailMessages"),
+	}),
+	caseEventBaseValidator.extend({
 		type: v.literal("system_change"),
 		body: v.string(),
 	}),

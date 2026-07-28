@@ -170,7 +170,9 @@ describe("inbound email ingestion", () => {
 		});
 		expect(
 			state.messages.every(
-				(message) => message.senderContactId === state.contacts[0]?._id,
+				(message) =>
+					message.direction === "inbound" &&
+					message.senderContactId === state.contacts[0]?._id,
 			),
 		).toBe(true);
 		expect(state.threads[0]?.latestMessageId).toBe(secondMessageId);

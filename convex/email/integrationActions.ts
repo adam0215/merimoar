@@ -51,9 +51,13 @@ export const reconcileResendWebhook = internalAction({
 	handler: async (ctx, args): Promise<null> => {
 		const context = await ctx.runQuery(
 			internal.email.integrations.getResendProvisioningContext,
-			args,
+			{
+				integrationId: args.integrationId,
+				expectedConnectedAccountUpdatedAt:
+					args.expectedConnectedAccountUpdatedAt,
+			},
 		);
-		if (!context || context.webhookConfigured) {
+		if (!context) {
 			return null;
 		}
 
@@ -74,9 +78,20 @@ export const reconcileResendWebhook = internalAction({
 			}
 
 			resend = new Resend(access.token);
+			if (context.webhookId) {
+				const updatedWebhook = await resend.webhooks.update(context.webhookId, {
+					endpoint: `${process.env.CONVEX_SITE_URL}/webhooks/email/resend/${args.integrationId}`,
+					events: ["email.received", "email.sent"],
+					status: "enabled",
+				});
+				if (updatedWebhook.error || !updatedWebhook.data) {
+					throw new Error("Resend rejected webhook reconciliation");
+				}
+				return null;
+			}
 			const webhook = await resend.webhooks.create({
 				endpoint: `${process.env.CONVEX_SITE_URL}/webhooks/email/resend/${args.integrationId}`,
-				events: ["email.received"],
+				events: ["email.received", "email.sent"],
 			});
 			if (webhook.error || !webhook.data) {
 				throw new Error("Resend rejected webhook provisioning");

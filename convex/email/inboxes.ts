@@ -74,3 +74,48 @@ export const remove = mutation({
 		return null;
 	},
 });
+
+export const setOutboundIntegration = mutation({
+	args: {
+		inboxId: v.id("emailInboxes"),
+		integrationId: v.union(v.id("emailIntegrations"), v.null()),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const workspace = await requireActor(ctx);
+		const inbox = await ctx.db.get(args.inboxId);
+		if (!inbox || inbox.organizationId !== workspace.organization._id) {
+			throw new ConvexError({
+				code: "EMAIL_INBOX_NOT_FOUND",
+				message: "The email inbox could not be found.",
+			});
+		}
+
+		if (args.integrationId === null) {
+			await ctx.db.patch(inbox._id, { outboundIntegrationId: undefined });
+			return null;
+		}
+
+		const integration = await ctx.db.get(args.integrationId);
+		if (
+			!integration ||
+			integration.organizationId !== workspace.organization._id
+		) {
+			throw new ConvexError({
+				code: "EMAIL_INTEGRATION_NOT_FOUND",
+				message: "The email integration could not be found.",
+			});
+		}
+		if (integration.status !== "connected") {
+			throw new ConvexError({
+				code: "EMAIL_INTEGRATION_NOT_CONNECTED",
+				message: "Connect the email integration before selecting it.",
+			});
+		}
+
+		await ctx.db.patch(inbox._id, {
+			outboundIntegrationId: integration._id,
+		});
+		return null;
+	},
+});

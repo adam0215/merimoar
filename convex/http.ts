@@ -1,7 +1,8 @@
 import { createFunctionHandle, httpRouter } from "convex/server";
-import { type EmailReceivedEvent, Resend } from "resend";
+import { type EmailReceivedEvent, type EmailSentEvent, Resend } from "resend";
 import { components, internal } from "./_generated/api";
 import { env, httpAction } from "./_generated/server";
+import { readResendInternetMessageId } from "./email/outboundModel";
 import {
 	AUTHKIT_ADDITIONAL_EVENT_TYPES,
 	authKit,
@@ -98,28 +99,56 @@ http.route({
 			return new Response("Invalid webhook signature", { status: 400 });
 		}
 
-		if (!verification.acceptsEmail) {
-			return Response.json({ status: "ignored" });
+		if (event.type === "email.received") {
+			if (!verification.acceptsEmail) {
+				return Response.json({ status: "ignored" });
+			}
+			const receivedEvent: EmailReceivedEvent = event;
+			const result = await ctx.runMutation(
+				internal.email.ingest.routeResendEvent,
+				{
+					integrationId: verification.integrationId,
+					externalEventId,
+					externalMessageId: receivedEvent.data.email_id,
+					eventType: receivedEvent.type,
+					receivedForAddresses: receivedEvent.data.received_for,
+					toAddresses: receivedEvent.data.to,
+					rawPayload,
+					receivedAt: Date.now(),
+				},
+			);
+			return Response.json(result, { status: 202 });
 		}
-		if (event.type !== "email.received") {
-			return Response.json({ status: "ignored" });
+		if (event.type === "email.sent") {
+			const sentEvent: EmailSentEvent = event;
+			const messageId = sentEvent.data.tags?.merimoar_message_id;
+			if (!messageId) {
+				return Response.json({ status: "ignored" });
+			}
+			const result = await ctx.runMutation(
+				internal.email.outbound.acceptResendSentWebhook,
+				{
+					integrationId: verification.integrationId,
+					messageId,
+					externalMessageId: sentEvent.data.email_id,
+					internetMessageId: readResendInternetMessageId(sentEvent.data),
+					acceptedAt: Date.parse(sentEvent.data.created_at) || Date.now(),
+				},
+			);
+			if (result.status === "accepted" && result.needsMetadata) {
+				await ctx.scheduler.runAfter(
+					0,
+					internal.email.outboundResend.reconcileProviderMetadata,
+					{
+						messageId: result.messageId,
+						externalMessageId: sentEvent.data.email_id,
+						integrationId: verification.integrationId,
+					},
+				);
+			}
+			return Response.json(result, { status: 202 });
 		}
-
-		const receivedEvent: EmailReceivedEvent = event;
-		const result = await ctx.runMutation(
-			internal.email.ingest.routeResendEvent,
-			{
-				integrationId: verification.integrationId,
-				externalEventId,
-				externalMessageId: receivedEvent.data.email_id,
-				eventType: receivedEvent.type,
-				receivedForAddresses: receivedEvent.data.received_for,
-				toAddresses: receivedEvent.data.to,
-				rawPayload,
-				receivedAt: Date.now(),
-			},
-		);
-		return Response.json(result, { status: 202 });
+		return Response.json({ status: "ignored" });
 	}),
 });
 

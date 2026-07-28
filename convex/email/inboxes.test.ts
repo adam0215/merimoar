@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
-import { createTest, syncWorkosUser } from "../test.setup";
+import {
+	createConnectedResendIntegration,
+	createTest,
+	syncWorkosUser,
+} from "../test.setup";
 
 const ISSUER = "https://api.workos.com/";
 
@@ -163,5 +167,69 @@ describe("email inboxes", () => {
 		expect(await base.run(async (ctx) => ctx.db.get(inboxId))).toMatchObject({
 			status: "disabled",
 		});
+	});
+
+	it("selects or clears only a connected integration from the same organization", async () => {
+		const { actor, base, organizationId } = await createFixture();
+		const inboxId = await actor.mutation(api.email.inboxes.create, {
+			displayName: "Support",
+			address: "support@example.com",
+		});
+		const integrationId = await createConnectedResendIntegration(
+			base,
+			organizationId,
+		);
+		await actor.mutation(api.email.inboxes.setOutboundIntegration, {
+			inboxId,
+			integrationId,
+		});
+		expect(await base.run(async (ctx) => ctx.db.get(inboxId))).toMatchObject({
+			outboundIntegrationId: integrationId,
+		});
+
+		const otherOrganizationId = await base.run(async (ctx) => {
+			const organization = await ctx.db
+				.query("organizations")
+				.withIndex("by_workos_organization_id", (index) =>
+					index.eq("workosOrganizationId", "org_other"),
+				)
+				.unique();
+			if (!organization) {
+				throw new Error("Expected the other organization");
+			}
+			return organization._id;
+		});
+		const otherIntegrationId = await createConnectedResendIntegration(
+			base,
+			otherOrganizationId,
+			"other-organization",
+		);
+		await expect(
+			actor.mutation(api.email.inboxes.setOutboundIntegration, {
+				inboxId,
+				integrationId: otherIntegrationId,
+			}),
+		).rejects.toThrow("could not be found");
+
+		await base.run(async (ctx) => {
+			await ctx.db.patch(integrationId, { status: "disconnected" });
+		});
+		await expect(
+			actor.mutation(api.email.inboxes.setOutboundIntegration, {
+				inboxId,
+				integrationId,
+			}),
+		).rejects.toThrow("Connect the email integration");
+		expect(await base.run(async (ctx) => ctx.db.get(inboxId))).toMatchObject({
+			outboundIntegrationId: integrationId,
+		});
+
+		await actor.mutation(api.email.inboxes.setOutboundIntegration, {
+			inboxId,
+			integrationId: null,
+		});
+		expect(
+			await base.run(async (ctx) => ctx.db.get(inboxId)),
+		).not.toHaveProperty("outboundIntegrationId");
 	});
 });

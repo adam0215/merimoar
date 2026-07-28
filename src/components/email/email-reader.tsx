@@ -299,7 +299,7 @@ export function ThreadList({
 										: "text-muted-foreground",
 								)}
 							>
-								{formatListDate(latestMessage.receivedAt)}
+								{formatListDate(latestMessage.sentAt)}
 							</time>
 						</Link>
 					);
@@ -342,7 +342,7 @@ export function ThreadList({
 									<ThreadMessageCount threadId={thread._id} />
 								</div>
 								<time className="shrink-0 text-xs text-muted-foreground">
-									{formatListDate(latestMessage.receivedAt)}
+									{formatListDate(latestMessage.sentAt)}
 								</time>
 							</div>
 							<p className="mt-0.5 truncate text-sm font-semibold">
@@ -499,32 +499,34 @@ export function ThreadView({
 													<p className="truncate text-sm font-medium">
 														{participantLabel(message.from)}
 													</p>
-													<Tooltip>
-														<TooltipTrigger
-															render={
-																<Button
-																	nativeButton={false}
-																	variant="ghost"
-																	size="icon-xs"
-																	className="text-muted-foreground"
-																	render={
-																		<Link
-																			to="/contacts"
-																			search={{
-																				contact: message.senderContactId,
-																			}}
-																			aria-label={`Open contact ${participantLabel(message.from)}`}
-																		/>
-																	}
-																/>
-															}
-														>
-															<IconAddressBook />
-														</TooltipTrigger>
-														<TooltipContent side="top">
-															Open contact
-														</TooltipContent>
-													</Tooltip>
+													{message.direction === "inbound" && (
+														<Tooltip>
+															<TooltipTrigger
+																render={
+																	<Button
+																		nativeButton={false}
+																		variant="ghost"
+																		size="icon-xs"
+																		className="text-muted-foreground"
+																		render={
+																			<Link
+																				to="/contacts"
+																				search={{
+																					contact: message.senderContactId,
+																				}}
+																				aria-label={`Open contact ${participantLabel(message.from)}`}
+																			/>
+																		}
+																	/>
+																}
+															>
+																<IconAddressBook />
+															</TooltipTrigger>
+															<TooltipContent side="top">
+																Open contact
+															</TooltipContent>
+														</Tooltip>
+													)}
 												</div>
 												<time className="shrink-0 text-xs text-muted-foreground">
 													{formatMessageDate(message.sentAt)}

@@ -197,7 +197,8 @@ export const get = query({
 						? await resolveMember(ctx, event.createdByMemberId)
 						: null,
 					emailMessage:
-						"type" in event && event.type === "inbound_email"
+						"type" in event &&
+						(event.type === "inbound_email" || event.type === "outbound_email")
 							? await ctx.db.get(event.emailMessageId)
 							: null,
 				})),
