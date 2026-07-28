@@ -6,7 +6,14 @@ import { mutation } from "../_generated/server";
 import { requireActor } from "../auth/access";
 import { syncGlobalSearchEntry } from "../globalSearch/model";
 import { requireCase, validateCaseOwner } from "./access";
-import { appendCaseEvent } from "./events";
+import {
+	linkEmailThreadToCase,
+	unlinkEmailThreadFromCase,
+} from "./emailRelations";
+import {
+	appendHumanNoteCaseEvent,
+	appendSystemChangeCaseEvent,
+} from "./events";
 import {
 	caseDetailsInputSchema,
 	caseEventBodySchema,
@@ -57,6 +64,7 @@ export const create = mutation({
 		contactIds: v.array(v.id("contacts")),
 		entityIds: v.array(v.id("entities")),
 		relatedCaseIds: v.array(v.id("cases")),
+		emailThreadId: v.optional(v.id("emailThreads")),
 	},
 	returns: v.id("cases"),
 	handler: async (ctx, args) => {
@@ -128,11 +136,25 @@ export const create = mutation({
 		if (initialEvent.output) {
 			await ctx.db.insert("caseEvents", {
 				caseId,
+				type: "human_note",
 				body: initialEvent.output,
 				occurredAt: now,
 				createdAt: now,
 				createdByMemberId: actor.member._id,
 			});
+		}
+		if (args.emailThreadId) {
+			const caseRecord = await ctx.db.get(caseId);
+			if (!caseRecord) {
+				throw new Error("Could not load the created case");
+			}
+			await linkEmailThreadToCase(
+				ctx,
+				actor.organization._id,
+				caseRecord,
+				args.emailThreadId,
+				actor.member._id,
+			);
 		}
 		return caseId;
 	},
@@ -190,7 +212,7 @@ export const update = mutation({
 			await ctx.db.patch("cases", caseRecord._id, { globalSearchEntryId });
 		}
 		if (statusChanged) {
-			await appendCaseEvent(
+			await appendSystemChangeCaseEvent(
 				ctx,
 				caseRecord,
 				details.output.status === "closed" ? "Case closed." : "Case reopened.",
@@ -222,12 +244,52 @@ export const addEvent = mutation({
 			actor.organization._id,
 			args.caseId,
 		);
-		return await appendCaseEvent(
+		return await appendHumanNoteCaseEvent(
 			ctx,
 			caseRecord,
 			body.output,
 			actor.member._id,
 		);
+	},
+});
+
+export const linkEmailThread = mutation({
+	args: {
+		caseId: v.id("cases"),
+		threadId: v.id("emailThreads"),
+	},
+	returns: v.id("caseEmailThreadRelations"),
+	handler: async (ctx, args) => {
+		const actor = await requireActor(ctx);
+		const caseRecord = await requireCase(
+			ctx,
+			actor.organization._id,
+			args.caseId,
+		);
+		return await linkEmailThreadToCase(
+			ctx,
+			actor.organization._id,
+			caseRecord,
+			args.threadId,
+			actor.member._id,
+		);
+	},
+});
+
+export const unlinkEmailThread = mutation({
+	args: {
+		relationId: v.id("caseEmailThreadRelations"),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const actor = await requireActor(ctx);
+		await unlinkEmailThreadFromCase(
+			ctx,
+			actor.organization._id,
+			args.relationId,
+			actor.member._id,
+		);
+		return null;
 	},
 });
 

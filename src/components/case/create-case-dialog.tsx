@@ -59,19 +59,49 @@ const INITIAL_FORM = {
 	dueDate: "",
 	initialEventBody: "",
 };
+const NO_INITIAL_CONTACTS: Id<"contacts">[] = [];
+const NO_INITIAL_CONTACT_DETAILS: InitialCaseContact[] = [];
+
+type InitialCaseContact = {
+	_id: Id<"contacts">;
+	address: string;
+	name?: string;
+};
 
 export function CreateCaseDialog({
 	options,
 	onCreated,
+	open: controlledOpen,
+	onOpenChange,
+	trigger,
+	initialTitle = "",
+	initialContactIds = NO_INITIAL_CONTACTS,
+	initialContacts = NO_INITIAL_CONTACT_DETAILS,
+	emailThreadId,
+	variant = "default",
 }: {
 	options: CaseCreateOptions | undefined;
 	onCreated: (caseId: Id<"cases">) => void;
+	open?: boolean;
+	onOpenChange?: (open: boolean) => void;
+	trigger?: React.ReactElement | null;
+	initialTitle?: string;
+	initialContactIds?: Id<"contacts">[];
+	initialContacts?: InitialCaseContact[];
+	emailThreadId?: Id<"emailThreads">;
+	variant?: "default" | "email";
 }) {
 	const createCase = useMutation(api.case.mutations.create);
-	const [open, setOpen] = useState(false);
-	const [form, setForm] = useState(INITIAL_FORM);
+	const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+	const open = controlledOpen ?? uncontrolledOpen;
+	const [form, setForm] = useState({
+		...INITIAL_FORM,
+		title: initialTitle,
+	});
 	const [ownerMemberId, setOwnerMemberId] = useState<string>("unassigned");
-	const [contactIds, setContactIds] = useState<Set<Id<"contacts">>>(new Set());
+	const [contactIds, setContactIds] = useState<Set<Id<"contacts">>>(
+		new Set(initialContactIds),
+	);
 	const [entityIds, setEntityIds] = useState<Set<Id<"entities">>>(new Set());
 	const [relatedCaseIds, setRelatedCaseIds] = useState<Set<Id<"cases">>>(
 		new Set(),
@@ -89,9 +119,9 @@ export function CreateCaseDialog({
 	}, [open, options, ownerMemberId]);
 
 	function reset() {
-		setForm(INITIAL_FORM);
+		setForm({ ...INITIAL_FORM, title: initialTitle });
 		setOwnerMemberId("unassigned");
-		setContactIds(new Set());
+		setContactIds(new Set(initialContactIds));
 		setEntityIds(new Set());
 		setRelatedCaseIds(new Set());
 		setShowValidation(false);
@@ -100,10 +130,11 @@ export function CreateCaseDialog({
 	}
 
 	function handleOpenChange(nextOpen: boolean) {
-		if (nextOpen) {
-			reset();
+		reset();
+		if (controlledOpen === undefined) {
+			setUncontrolledOpen(nextOpen);
 		}
-		setOpen(nextOpen);
+		onOpenChange?.(nextOpen);
 	}
 
 	function toggleContact(contactId: Id<"contacts">, checked: boolean) {
@@ -165,8 +196,9 @@ export function CreateCaseDialog({
 				contactIds: [...contactIds],
 				entityIds: [...entityIds],
 				relatedCaseIds: [...relatedCaseIds],
+				...(emailThreadId ? { emailThreadId } : {}),
 			});
-			setOpen(false);
+			handleOpenChange(false);
 			onCreated(caseId);
 		} catch (error) {
 			setSubmissionError(
@@ -182,26 +214,43 @@ export function CreateCaseDialog({
 			? validation.issues.find((issue) => issue.path?.[0]?.key === "title")
 					?.message
 			: undefined;
+	const emailContacts =
+		initialContacts.length > 0
+			? initialContacts
+			: (options?.contacts.filter((contact) =>
+					initialContactIds.includes(contact._id),
+				) ?? []);
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger
-				render={
-					<button
-						type="button"
-						className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50"
-						aria-label="Create case"
-						title="Create case"
-					/>
-				}
+			{trigger === null ? null : trigger ? (
+				<DialogTrigger render={trigger} />
+			) : (
+				<DialogTrigger
+					render={
+						<button
+							type="button"
+							className="flex size-10 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg outline-none transition-transform hover:scale-105 focus-visible:ring-3 focus-visible:ring-ring/50"
+							aria-label="Create case"
+							title="Create case"
+						/>
+					}
+				>
+					<IconPlus className="size-5" />
+				</DialogTrigger>
+			)}
+			<DialogContent
+				className={cn(
+					"max-h-[calc(100svh-2rem)] overflow-y-auto",
+					variant === "default" ? "sm:max-w-2xl" : "sm:max-w-lg",
+				)}
 			>
-				<IconPlus className="size-5" />
-			</DialogTrigger>
-			<DialogContent className="max-h-[calc(100svh-2rem)] overflow-y-auto sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>Create case</DialogTitle>
 					<DialogDescription>
-						Add the stable details, initial context, and relationships.
+						{variant === "email"
+							? "Start a case from this conversation."
+							: "Add the stable details, initial context, and relationships."}
 					</DialogDescription>
 				</DialogHeader>
 
@@ -225,7 +274,12 @@ export function CreateCaseDialog({
 							{titleError && <FieldError>{titleError}</FieldError>}
 						</Field>
 
-						<div className="grid gap-5 sm:grid-cols-2">
+						<div
+							className={cn(
+								"grid gap-5",
+								variant === "default" && "sm:grid-cols-2",
+							)}
+						>
 							<Field>
 								<FieldLabel>Owner</FieldLabel>
 								<Select
@@ -256,72 +310,33 @@ export function CreateCaseDialog({
 									</SelectContent>
 								</Select>
 							</Field>
-							<Field>
-								<FieldLabel htmlFor="case-due-date">Deadline</FieldLabel>
-								<div className="relative">
-									<IconCalendar className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-									<Input
-										id="case-due-date"
-										type="date"
-										value={form.dueDate}
-										onChange={(event) =>
-											setForm((current) => ({
-												...current,
-												dueDate: event.target.value,
-											}))
-										}
-										className="pl-9"
-									/>
-								</div>
-							</Field>
+							{variant === "default" && (
+								<Field>
+									<FieldLabel htmlFor="case-due-date">Deadline</FieldLabel>
+									<div className="relative">
+										<IconCalendar className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+										<Input
+											id="case-due-date"
+											type="date"
+											value={form.dueDate}
+											onChange={(event) =>
+												setForm((current) => ({
+													...current,
+													dueDate: event.target.value,
+												}))
+											}
+											className="pl-9"
+										/>
+									</div>
+								</Field>
+							)}
 						</div>
 
-						<Field>
-							<FieldLabel htmlFor="case-description">Description</FieldLabel>
-							<Textarea
-								id="case-description"
-								value={form.description}
-								onChange={(event) =>
-									setForm((current) => ({
-										...current,
-										description: event.target.value,
-									}))
-								}
-								placeholder="Add the context someone needs before working on this case."
-								className="min-h-24"
-							/>
-						</Field>
-
-						<Field>
-							<FieldLabel htmlFor="case-initial-event">First event</FieldLabel>
-							<Textarea
-								id="case-initial-event"
-								value={form.initialEventBody}
-								onChange={(event) =>
-									setForm((current) => ({
-										...current,
-										initialEventBody: event.target.value,
-									}))
-								}
-								placeholder="What has happened so far?"
-							/>
-						</Field>
-
-						<div className="space-y-4">
-							<div>
-								<p className="text-sm font-medium">Relationships</p>
-								<p className="mt-1 text-sm text-muted-foreground">
-									Choose the records connected to this case.
-								</p>
-							</div>
-
-							<div className="rounded-xl border">
-								<div className="flex items-center gap-2 border-b px-3 py-2.5">
-									<IconAddressBook className="size-4 text-muted-foreground" />
-									<p className="text-sm font-medium">Contacts</p>
-								</div>
-								<div className="grid max-h-36 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
-									{options?.contacts.map((contact) => (
+						{variant === "email" ? (
+							<div className="space-y-2">
+								<p className="text-sm font-medium">Contact</p>
+								<div className="rounded-xl border p-2">
+									{emailContacts.map((contact) => (
 										<RelationCheckbox
 											key={contact._id}
 											checked={contactIds.has(contact._id)}
@@ -332,71 +347,139 @@ export function CreateCaseDialog({
 											description={contact.name ? contact.address : undefined}
 										/>
 									))}
-									{options?.contacts.length === 0 && (
-										<p className="px-2 py-3 text-sm text-muted-foreground">
-											No contacts yet.
-										</p>
-									)}
 								</div>
 							</div>
+						) : (
+							<>
+								<Field>
+									<FieldLabel htmlFor="case-description">
+										Description
+									</FieldLabel>
+									<Textarea
+										id="case-description"
+										value={form.description}
+										onChange={(event) =>
+											setForm((current) => ({
+												...current,
+												description: event.target.value,
+											}))
+										}
+										placeholder="Add the context someone needs before working on this case."
+										className="min-h-24"
+									/>
+								</Field>
 
-							<div className="rounded-xl border">
-								<div className="flex items-center gap-2 border-b px-3 py-2.5">
-									<IconFolder className="size-4 text-muted-foreground" />
-									<p className="text-sm font-medium">Cases</p>
-								</div>
-								<div className="grid max-h-36 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
-									{options?.cases.map((relatedCase) => (
-										<RelationCheckbox
-											key={relatedCase._id}
-											checked={relatedCaseIds.has(relatedCase._id)}
-											onCheckedChange={(checked) =>
-												toggleRelatedCase(relatedCase._id, checked)
-											}
-											label={relatedCase.title}
-											description={relatedCase.reference}
-										/>
+								<Field>
+									<FieldLabel htmlFor="case-initial-event">
+										First event
+									</FieldLabel>
+									<Textarea
+										id="case-initial-event"
+										value={form.initialEventBody}
+										onChange={(event) =>
+											setForm((current) => ({
+												...current,
+												initialEventBody: event.target.value,
+											}))
+										}
+										placeholder="What has happened so far?"
+									/>
+								</Field>
+
+								<div className="space-y-4">
+									<div>
+										<p className="text-sm font-medium">Relationships</p>
+										<p className="mt-1 text-sm text-muted-foreground">
+											Choose the records connected to this case.
+										</p>
+									</div>
+
+									<div className="rounded-xl border">
+										<div className="flex items-center gap-2 border-b px-3 py-2.5">
+											<IconAddressBook className="size-4 text-muted-foreground" />
+											<p className="text-sm font-medium">Contacts</p>
+										</div>
+										<div className="grid max-h-36 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
+											{options?.contacts.map((contact) => (
+												<RelationCheckbox
+													key={contact._id}
+													checked={contactIds.has(contact._id)}
+													onCheckedChange={(checked) =>
+														toggleContact(contact._id, checked)
+													}
+													label={contact.name || contact.address}
+													description={
+														contact.name ? contact.address : undefined
+													}
+												/>
+											))}
+											{options?.contacts.length === 0 && (
+												<p className="px-2 py-3 text-sm text-muted-foreground">
+													No contacts yet.
+												</p>
+											)}
+										</div>
+									</div>
+
+									<div className="rounded-xl border">
+										<div className="flex items-center gap-2 border-b px-3 py-2.5">
+											<IconFolder className="size-4 text-muted-foreground" />
+											<p className="text-sm font-medium">Cases</p>
+										</div>
+										<div className="grid max-h-36 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
+											{options?.cases.map((relatedCase) => (
+												<RelationCheckbox
+													key={relatedCase._id}
+													checked={relatedCaseIds.has(relatedCase._id)}
+													onCheckedChange={(checked) =>
+														toggleRelatedCase(relatedCase._id, checked)
+													}
+													label={relatedCase.title}
+													description={relatedCase.reference}
+												/>
+											))}
+											{options?.cases.length === 0 && (
+												<p className="px-2 py-3 text-sm text-muted-foreground">
+													No other cases yet.
+												</p>
+											)}
+										</div>
+									</div>
+
+									{options?.entityTypes.map(({ entityType, entities }) => (
+										<div key={entityType._id} className="rounded-xl border">
+											<div className="flex items-center gap-2 border-b px-3 py-2.5">
+												<EntityIcon
+													icon={entityType.icon}
+													className="size-4 text-muted-foreground"
+												/>
+												<p className="text-sm font-medium">
+													{entityType.pluralName}
+												</p>
+											</div>
+											<div className="grid max-h-36 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
+												{entities.map((entity) => (
+													<RelationCheckbox
+														key={entity._id}
+														checked={entityIds.has(entity._id)}
+														onCheckedChange={(checked) =>
+															toggleEntity(entity._id, checked)
+														}
+														label={entity.displayName}
+														description={entity.identifier}
+													/>
+												))}
+												{entities.length === 0 && (
+													<p className="px-2 py-3 text-sm text-muted-foreground">
+														No {entityType.pluralName.toLowerCase()} yet.
+													</p>
+												)}
+											</div>
+										</div>
 									))}
-									{options?.cases.length === 0 && (
-										<p className="px-2 py-3 text-sm text-muted-foreground">
-											No other cases yet.
-										</p>
-									)}
 								</div>
-							</div>
-
-							{options?.entityTypes.map(({ entityType, entities }) => (
-								<div key={entityType._id} className="rounded-xl border">
-									<div className="flex items-center gap-2 border-b px-3 py-2.5">
-										<EntityIcon
-											icon={entityType.icon}
-											className="size-4 text-muted-foreground"
-										/>
-										<p className="text-sm font-medium">
-											{entityType.pluralName}
-										</p>
-									</div>
-									<div className="grid max-h-36 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
-										{entities.map((entity) => (
-											<RelationCheckbox
-												key={entity._id}
-												checked={entityIds.has(entity._id)}
-												onCheckedChange={(checked) =>
-													toggleEntity(entity._id, checked)
-												}
-												label={entity.displayName}
-												description={entity.identifier}
-											/>
-										))}
-										{entities.length === 0 && (
-											<p className="px-2 py-3 text-sm text-muted-foreground">
-												No {entityType.pluralName.toLowerCase()} yet.
-											</p>
-										)}
-									</div>
-								</div>
-							))}
-						</div>
+							</>
+						)}
 
 						{submissionError && (
 							<p className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -410,7 +493,7 @@ export function CreateCaseDialog({
 					<Button
 						type="button"
 						variant="ghost"
-						onClick={() => setOpen(false)}
+						onClick={() => handleOpenChange(false)}
 						disabled={isSubmitting}
 					>
 						Cancel
@@ -442,16 +525,11 @@ function RelationCheckbox({
 		<label
 			htmlFor={checkboxId}
 			className={cn(
-				"flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted",
-				checked && "bg-muted",
+				"flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-[background-color,box-shadow] duration-150 ease-out hover:bg-muted",
+				checked && "bg-muted ring-2 ring-primary ring-inset",
 			)}
 		>
-			<Checkbox
-				id={checkboxId}
-				checked={checked}
-				onCheckedChange={(value) => onCheckedChange(value === true)}
-			/>
-			<span className="min-w-0">
+			<span className="min-w-0 flex-1">
 				<span className="block truncate text-sm font-medium">{label}</span>
 				{description && (
 					<span className="block truncate text-xs text-muted-foreground">
@@ -459,6 +537,11 @@ function RelationCheckbox({
 					</span>
 				)}
 			</span>
+			<Checkbox
+				id={checkboxId}
+				checked={checked}
+				onCheckedChange={(value) => onCheckedChange(value === true)}
+			/>
 		</label>
 	);
 }

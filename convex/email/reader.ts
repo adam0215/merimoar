@@ -2,6 +2,7 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { requireActor } from "../auth/access";
+import { getActiveCaseRelationForEmailThread } from "../case/emailRelations";
 
 export const listInboxes = query({
 	args: {},
@@ -70,7 +71,7 @@ export const getThread = query({
 			return null;
 		}
 
-		const [inbox, messages] = await Promise.all([
+		const [inbox, messages, activeCaseRelation] = await Promise.all([
 			ctx.db.get(thread.inboxId),
 			ctx.db
 				.query("emailMessages")
@@ -79,16 +80,28 @@ export const getThread = query({
 				)
 				.order("asc")
 				.take(100),
+			getActiveCaseRelationForEmailThread(ctx, thread._id),
 		]);
 
 		if (!inbox) {
 			return null;
 		}
+		const activeCase = activeCaseRelation
+			? await ctx.db.get(activeCaseRelation.caseId)
+			: null;
 
 		return {
 			thread,
 			inbox,
 			messages,
+			activeCase:
+				activeCaseRelation &&
+				activeCase?.organizationId === workspace.organization._id
+					? {
+							...activeCase,
+							relationId: activeCaseRelation._id,
+						}
+					: null,
 		};
 	},
 });

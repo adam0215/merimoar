@@ -2,9 +2,12 @@ import {
 	IconAsterisk,
 	IconCheck,
 	IconLoader2,
+	IconMail,
 	IconPlus,
+	IconRefresh,
 	IconX,
 } from "@tabler/icons-react";
+import { Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import * as v from "valibot";
@@ -134,7 +137,7 @@ export function CaseEvents({
 			)}
 
 			<div className="relative mt-4">
-				{events.map(({ event, author }, index) => (
+				{events.map(({ event, author, emailMessage }, index) => (
 					<article
 						key={event._id}
 						className="relative flex gap-3 pb-6 last:pb-0"
@@ -146,17 +149,43 @@ export function CaseEvents({
 									aria-hidden="true"
 								/>
 							)}
-							<IconAsterisk
-								className="relative z-1 mt-1 size-4 text-accent"
-								stroke={2.25}
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							/>
+							{"type" in event && event.type === "inbound_email" ? (
+								<IconMail className="relative z-1 mt-1 size-4 text-accent" />
+							) : "type" in event && event.type === "system_change" ? (
+								<IconRefresh className="relative z-1 mt-1 size-4 text-muted-foreground" />
+							) : (
+								<IconAsterisk
+									className="relative z-1 mt-1 size-4 text-accent"
+									stroke={2.25}
+									strokeLinecap="round"
+									strokeLinejoin="round"
+								/>
+							)}
 						</div>
 						<div className="min-w-0">
-							<p className="max-w-3xl whitespace-pre-wrap text-sm leading-6">
-								{event.body}
-							</p>
+							{"type" in event && event.type === "inbound_email" ? (
+								<>
+									<p className="max-w-3xl text-sm leading-6">
+										Inbound email
+										{emailMessage
+											? ` from ${emailMessage.from.name || emailMessage.from.address}`
+											: ""}
+									</p>
+									{emailMessage && (
+										<Link
+											to="/email"
+											search={{ thread: emailMessage.threadId }}
+											className="mt-0.5 block max-w-3xl truncate text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+										>
+											{emailMessage.subject || "(No subject)"}
+										</Link>
+									)}
+								</>
+							) : (
+								<p className="max-w-3xl whitespace-pre-wrap text-sm leading-6">
+									{event.body}
+								</p>
+							)}
 							<p className="mt-1 text-xs text-muted-foreground">
 								{formatEventDate(event.occurredAt)}
 								{author ? ` · ${author.name}` : ""}

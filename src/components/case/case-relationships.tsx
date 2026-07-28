@@ -5,10 +5,9 @@ import {
 	IconFolder,
 	IconLoader2,
 	IconPlus,
-	IconSearch,
 	IconX,
 } from "@tabler/icons-react";
-import { useHotkeys, useKeyHold } from "@tanstack/react-hotkeys";
+import { useKeyHold } from "@tanstack/react-hotkeys";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -24,6 +23,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "#/components/ui/dialog.tsx";
+import { SearchCombobox } from "#/components/ui/search-combobox.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { EntityIcon } from "#/lib/entity-icons.tsx";
 import { api } from "../../../convex/_generated/api";
@@ -248,14 +248,13 @@ function AddRelationshipDialog({
 	const addEntity = useMutation(api.case.mutations.addEntityRelation);
 	const addCase = useMutation(api.case.mutations.addCaseRelation);
 	const dialogRef = useRef<HTMLDivElement>(null);
-	const inputRef = useRef<HTMLInputElement>(null);
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
 	const [debouncedQuery, setDebouncedQuery] = useState("");
 	const [selectedResult, setSelectedResult] =
 		useState<RelationshipSearchResult | null>(null);
-	const [resultsOpen, setResultsOpen] = useState(false);
-	const [highlightedIndex, setHighlightedIndex] = useState(-1);
+	const [recentRelationshipsRequested, setRecentRelationshipsRequested] =
+		useState(false);
 	const [isAdding, setIsAdding] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const isMetaHeld = useKeyHold("Meta");
@@ -264,29 +263,35 @@ function AddRelationshipDialog({
 		api.globalSearch.reader.search,
 		debouncedQuery ? { query: debouncedQuery } : "skip",
 	);
-	const results = useMemo(
-		() =>
-			searchResults?.map((result) => ({
-				...result,
-				unavailableReason: getUnavailableReason(result, {
-					caseId,
-					currentContactIds,
-					currentEntityIds,
-					currentRelatedCaseIds,
-				}),
-			})) ?? [],
-		[
-			caseId,
-			currentContactIds,
-			currentEntityIds,
-			currentRelatedCaseIds,
-			searchResults,
-		],
+	const recentRelationships = useQuery(
+		api.globalSearch.reader.listRecentRelationshipCandidates,
+		recentRelationshipsRequested && !normalizedQuery ? {} : "skip",
 	);
-	const isWaitingForResults =
-		normalizedQuery !== debouncedQuery || searchResults === undefined;
-	const highlightedResult =
-		highlightedIndex >= 0 ? results[highlightedIndex] : undefined;
+	const results = useMemo(() => {
+		const candidates: RelationshipSearchCandidate[] = debouncedQuery
+			? (searchResults ?? [])
+			: (recentRelationships ?? []);
+		return candidates.map((result) => ({
+			...result,
+			unavailableReason: getUnavailableReason(result, {
+				caseId,
+				currentContactIds,
+				currentEntityIds,
+				currentRelatedCaseIds,
+			}),
+		}));
+	}, [
+		caseId,
+		currentContactIds,
+		currentEntityIds,
+		currentRelatedCaseIds,
+		debouncedQuery,
+		recentRelationships,
+		searchResults,
+	]);
+	const isWaitingForResults = normalizedQuery
+		? normalizedQuery !== debouncedQuery || searchResults === undefined
+		: recentRelationshipsRequested && recentRelationships === undefined;
 
 	useEffect(() => {
 		const timeoutId = window.setTimeout(() => {
@@ -296,30 +301,11 @@ function AddRelationshipDialog({
 		return () => window.clearTimeout(timeoutId);
 	}, [normalizedQuery]);
 
-	useEffect(() => {
-		if (!resultsOpen || isWaitingForResults) {
-			setHighlightedIndex(-1);
-			return;
-		}
-
-		setHighlightedIndex((currentIndex) => {
-			if (
-				currentIndex >= 0 &&
-				currentIndex < results.length &&
-				!results[currentIndex]?.unavailableReason
-			) {
-				return currentIndex;
-			}
-			return results.findIndex((result) => !result.unavailableReason);
-		});
-	}, [isWaitingForResults, results, resultsOpen]);
-
 	function resetDialog() {
 		setQuery("");
 		setDebouncedQuery("");
 		setSelectedResult(null);
-		setResultsOpen(false);
-		setHighlightedIndex(-1);
+		setRecentRelationshipsRequested(false);
 		setIsAdding(false);
 		setError(null);
 	}
@@ -327,38 +313,6 @@ function AddRelationshipDialog({
 	function closeDialog() {
 		setOpen(false);
 		resetDialog();
-	}
-
-	function selectResult(result: RelationshipSearchResult) {
-		setSelectedResult(result);
-		setResultsOpen(false);
-		setError(null);
-		requestAnimationFrame(() => inputRef.current?.focus());
-	}
-
-	function clearSelection() {
-		setSelectedResult(null);
-		setResultsOpen(Boolean(normalizedQuery));
-		requestAnimationFrame(() => inputRef.current?.focus());
-	}
-
-	function moveHighlight(direction: 1 | -1) {
-		if (results.length === 0) {
-			return;
-		}
-
-		let nextIndex = highlightedIndex;
-		for (let offset = 0; offset < results.length; offset += 1) {
-			nextIndex = (nextIndex + direction + results.length) % results.length;
-			const nextResult = results[nextIndex];
-			if (nextResult && !nextResult.unavailableReason) {
-				setHighlightedIndex(nextIndex);
-				document
-					.getElementById(getResultOptionId(nextResult))
-					?.scrollIntoView({ block: "nearest" });
-				return;
-			}
-		}
 	}
 
 	async function addSelectedRelationship() {
@@ -396,88 +350,6 @@ function AddRelationshipDialog({
 		}
 	}
 
-	useHotkeys(
-		[
-			{
-				hotkey: "ArrowDown",
-				callback: () => moveHighlight(1),
-				options: {
-					enabled: open && resultsOpen && !isWaitingForResults,
-					meta: {
-						name: "Next relationship",
-						description: "Highlight the next search result",
-					},
-				},
-			},
-			{
-				hotkey: "ArrowUp",
-				callback: () => moveHighlight(-1),
-				options: {
-					enabled: open && resultsOpen && !isWaitingForResults,
-					meta: {
-						name: "Previous relationship",
-						description: "Highlight the previous search result",
-					},
-				},
-			},
-			{
-				hotkey: "Enter",
-				callback: () => {
-					const result = results[highlightedIndex];
-					if (result && !result.unavailableReason) {
-						selectResult(result);
-					}
-				},
-				options: {
-					enabled:
-						open &&
-						resultsOpen &&
-						highlightedIndex >= 0 &&
-						!isWaitingForResults,
-					meta: {
-						name: "Select relationship",
-						description: "Select the highlighted search result",
-					},
-				},
-			},
-			{
-				hotkey: "Escape",
-				callback: () => {
-					if (resultsOpen) {
-						setResultsOpen(false);
-					} else {
-						closeDialog();
-					}
-				},
-				options: {
-					enabled: open,
-					requireReset: true,
-					meta: {
-						name: "Close relationship search",
-						description: "Close results first, then the dialog",
-					},
-				},
-			},
-			{
-				hotkey: "Mod+Enter",
-				callback: () => void addSelectedRelationship(),
-				options: {
-					enabled: open && selectedResult !== null && !isAdding,
-					meta: {
-						name: "Add relationship",
-						description: "Add the selected relationship",
-					},
-				},
-			},
-		],
-		{
-			target: dialogRef,
-			ignoreInputs: false,
-			preventDefault: true,
-			stopPropagation: true,
-		},
-	);
-
 	return (
 		<Dialog
 			open={open}
@@ -496,114 +368,47 @@ function AddRelationshipDialog({
 				</DialogHeader>
 
 				<div className="space-y-3">
-					<div className="relative">
-						<div className="relative flex min-h-12 w-full items-center rounded-xl border border-input bg-input/30 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
-							<input
-								ref={inputRef}
-								value={query}
-								readOnly={selectedResult !== null}
-								onChange={(event) => {
-									const nextQuery = event.target.value;
-									setQuery(nextQuery);
-									setResultsOpen(Boolean(nextQuery.trim()));
-									setError(null);
-								}}
-								onFocus={() => {
-									if (!selectedResult && normalizedQuery) {
-										setResultsOpen(true);
-									}
-								}}
-								placeholder="Search relationships…"
-								autoComplete="off"
-								autoFocus
-								role="combobox"
-								aria-label={
-									selectedResult
-										? `Selected relationship: ${selectedResult.label}`
-										: undefined
-								}
-								aria-autocomplete="list"
-								aria-expanded={!selectedResult && resultsOpen}
-								aria-controls="relationship-search-results"
-								aria-activedescendant={
-									!selectedResult && highlightedResult
-										? getResultOptionId(highlightedResult)
-										: undefined
-								}
-								className={
-									selectedResult
-										? "absolute size-px opacity-0"
-										: "h-11 min-w-0 flex-1 bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
-								}
-							/>
-							{selectedResult ? (
-								<>
-									<div className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2">
-										<RelationshipResultContent result={selectedResult} />
-									</div>
-									<button
-										type="button"
-										onClick={clearSelection}
-										className="mr-2 flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[color,background-color,transform] hover:bg-muted hover:text-foreground active:scale-97"
-										aria-label="Clear selected relationship"
-									>
-										<IconX className="size-4" />
-									</button>
-								</>
-							) : (
-								<>
-									<IconSearch className="order-first ml-3 size-4 shrink-0 text-muted-foreground" />
-								</>
-							)}
-						</div>
-
-						{resultsOpen && (
-							<div
-								id="relationship-search-results"
-								role="listbox"
-								className="absolute top-full right-0 left-0 z-60 mt-2 max-h-72 overflow-y-auto rounded-2xl bg-popover p-1.5 text-popover-foreground shadow-2xl ring-1 ring-foreground/5"
-							>
-								{isWaitingForResults ? (
-									<div className="flex h-16 items-center justify-center text-muted-foreground">
-										<IconLoader2
-											className="size-4 animate-spin"
-											aria-label="Searching"
-										/>
-									</div>
-								) : results.length === 0 ? (
-									<p className="px-3 py-5 text-center text-sm text-muted-foreground">
-										No results
-									</p>
-								) : (
-									results.map((result, index) => (
-										<button
-											key={getResultKey(result)}
-											id={getResultOptionId(result)}
-											type="button"
-											role="option"
-											aria-selected={index === highlightedIndex}
-											disabled={Boolean(result.unavailableReason)}
-											onMouseMove={() => {
-												if (!result.unavailableReason) {
-													setHighlightedIndex(index);
-												}
-											}}
-											onClick={() => selectResult(result)}
-											className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted aria-selected:bg-muted disabled:cursor-default disabled:opacity-50"
-										>
-											<RelationshipResultContent result={result} />
-											{result.unavailableReason && (
-												<span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-													<IconCircleCheckFilled className="size-4 text-accent" />
-													{result.unavailableReason}
-												</span>
-											)}
-										</button>
-									))
-								)}
-							</div>
+					<SearchCombobox
+						open={open}
+						query={query}
+						results={results}
+						selectedResult={selectedResult}
+						isWaitingForResults={isWaitingForResults}
+						resultsId="relationship-search-results"
+						placeholder="Search relationships…"
+						emptyText="No results"
+						clearAriaLabel="Clear selected relationship"
+						hotkeyTargetRef={dialogRef}
+						getResultId={getResultOptionId}
+						getSelectedAriaLabel={(result) =>
+							`Selected relationship: ${result.label}`
+						}
+						isResultUnavailable={isRelationshipResultUnavailable}
+						onQueryChange={(nextQuery) => {
+							setQuery(nextQuery);
+							setError(null);
+						}}
+						onSelectResult={(result) => {
+							setSelectedResult(result);
+							setError(null);
+						}}
+						onClearSelection={() => setSelectedResult(null)}
+						onRequestEmptyResults={() => setRecentRelationshipsRequested(true)}
+						onClose={closeDialog}
+						onSubmit={() => void addSelectedRelationship()}
+						canSubmit={selectedResult !== null && !isAdding}
+						renderResult={(result) => (
+							<RelationshipResultContent result={result} />
 						)}
-					</div>
+						renderUnavailable={(result) =>
+							result.unavailableReason ? (
+								<span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+									<IconCircleCheckFilled className="size-4 text-accent" />
+									{result.unavailableReason}
+								</span>
+							) : null
+						}
+					/>
 
 					{error && (
 						<p
@@ -642,9 +447,18 @@ function AddRelationshipDialog({
 	);
 }
 
-type RelationshipSearchResult = FunctionReturnType<
+type GlobalSearchResult = FunctionReturnType<
 	typeof api.globalSearch.reader.search
 >[number];
+
+type RelationshipSearchCandidate = Pick<
+	GlobalSearchResult,
+	"target" | "identifier" | "label" | "descriptor" | "icon"
+>;
+
+type RelationshipSearchResult = RelationshipSearchCandidate & {
+	unavailableReason: string | null;
+};
 
 function getResultKey(result: RelationshipSearchResult) {
 	switch (result.target.kind) {
@@ -661,8 +475,12 @@ function getResultOptionId(result: RelationshipSearchResult) {
 	return `relationship-result-${getResultKey(result)}`;
 }
 
+function isRelationshipResultUnavailable(result: RelationshipSearchResult) {
+	return Boolean(result.unavailableReason);
+}
+
 function getUnavailableReason(
-	result: RelationshipSearchResult,
+	result: RelationshipSearchCandidate,
 	context: {
 		caseId: Id<"cases">;
 		currentContactIds: Set<Id<"contacts">>;

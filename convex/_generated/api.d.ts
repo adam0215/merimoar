@@ -11,6 +11,7 @@
 import type * as auth_access from "../auth/access.js";
 import type * as auth_members from "../auth/members.js";
 import type * as case_access from "../case/access.js";
+import type * as case_emailRelations from "../case/emailRelations.js";
 import type * as case_events from "../case/events.js";
 import type * as case_input from "../case/input.js";
 import type * as case_model from "../case/model.js";
@@ -45,6 +46,7 @@ import type * as entity_values from "../entity/values.js";
 import type * as globalSearch_model from "../globalSearch/model.js";
 import type * as globalSearch_reader from "../globalSearch/reader.js";
 import type * as http from "../http.js";
+import type * as migrations from "../migrations.js";
 import type * as workos from "../workos.js";
 
 import type {
@@ -57,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   "auth/access": typeof auth_access;
   "auth/members": typeof auth_members;
   "case/access": typeof case_access;
+  "case/emailRelations": typeof case_emailRelations;
   "case/events": typeof case_events;
   "case/input": typeof case_input;
   "case/model": typeof case_model;
@@ -91,6 +94,7 @@ declare const fullApi: ApiFromModules<{
   "globalSearch/model": typeof globalSearch_model;
   "globalSearch/reader": typeof globalSearch_reader;
   http: typeof http;
+  migrations: typeof migrations;
   workos: typeof workos;
 }>;
 

@@ -1,6 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { caseStatusValidator } from "./case/model";
+import { caseEventValidator, caseStatusValidator } from "./case/model";
 import {
 	emailIngestFailureKindValidator,
 	emailIngestStatusValidator,
@@ -175,6 +175,11 @@ export default defineSchema({
 			"entityTypeId",
 			"archivedAt",
 			"displayName",
+		])
+		.index("by_entity_type_id_and_archived_at_and_updated_at", [
+			"entityTypeId",
+			"archivedAt",
+			"updatedAt",
 		]),
 
 	entityTextFieldValues: defineTable({
@@ -252,13 +257,10 @@ export default defineSchema({
 		filterFields: ["organizationId"],
 	}),
 
-	caseEvents: defineTable({
-		caseId: v.id("cases"),
-		body: v.string(),
-		occurredAt: v.number(),
-		createdAt: v.number(),
-		createdByMemberId: v.union(v.id("organizationMembers"), v.null()),
-	}).index("by_case_id_and_occurred_at", ["caseId", "occurredAt"]),
+	caseEvents: defineTable(caseEventValidator)
+		.index("by_case_id_and_occurred_at", ["caseId", "occurredAt"])
+		.index("by_case_id_and_email_message_id", ["caseId", "emailMessageId"])
+		.index("by_type", ["type"]),
 
 	caseContactRelations: defineTable({
 		caseId: v.id("cases"),
@@ -305,6 +307,22 @@ export default defineSchema({
 		.index("by_case_id_and_related_case_id_and_ended_at", [
 			"caseId",
 			"relatedCaseId",
+			"endedAt",
+		]),
+
+	caseEmailThreadRelations: defineTable({
+		caseId: v.id("cases"),
+		threadId: v.id("emailThreads"),
+		startedAt: v.number(),
+		endedAt: v.union(v.number(), v.null()),
+		linkedByMemberId: v.union(v.id("organizationMembers"), v.null()),
+		unlinkedByMemberId: v.union(v.id("organizationMembers"), v.null()),
+	})
+		.index("by_case_id_and_ended_at", ["caseId", "endedAt"])
+		.index("by_thread_id_and_ended_at", ["threadId", "endedAt"])
+		.index("by_case_id_and_thread_id_and_ended_at", [
+			"caseId",
+			"threadId",
 			"endedAt",
 		]),
 

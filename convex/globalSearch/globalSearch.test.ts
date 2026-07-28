@@ -71,7 +71,7 @@ async function createFixture() {
 			replayCount: 0,
 			processingGeneration: 0,
 		});
-		return { ingestEventId };
+		return { ingestEventId, organizationId, otherOrganizationId };
 	});
 
 	return {
@@ -111,6 +111,92 @@ async function createEntity(
 }
 
 describe("global search", () => {
+	it("lists the five latest relation candidates across supported types", async () => {
+		const { actor, base, organizationId, otherOrganizationId } =
+			await createFixture();
+		await base.run(async (ctx) => {
+			const entityTypeId = await ctx.db.insert("entityTypes", {
+				organizationId,
+				key: "contract",
+				name: "Contract",
+				pluralName: "Contracts",
+				identifierLabel: "Contract ID",
+				description: "",
+				icon: "contract",
+				archivedAt: null,
+			});
+			await ctx.db.insert("contacts", {
+				organizationId,
+				address: "latest@example.com",
+				name: "Latest contact",
+				firstSeenAt: 100,
+				lastSeenAt: 6_000,
+			});
+			await ctx.db.insert("cases", {
+				organizationId,
+				reference: "CASE-RECENT",
+				title: "Recent case",
+				description: "",
+				ownerMemberId: null,
+				dueAt: null,
+				status: "open",
+				lastActivityAt: 5_000,
+				createdAt: 100,
+				updatedAt: 5_000,
+			});
+			await ctx.db.insert("entities", {
+				entityTypeId,
+				identifier: "CONTRACT-4",
+				normalizedIdentifier: "contract-4",
+				displayName: "Recent contract",
+				createdAt: 100,
+				updatedAt: 4_000,
+				archivedAt: null,
+			});
+			for (let index = 3; index >= 1; index -= 1) {
+				await ctx.db.insert("contacts", {
+					organizationId,
+					address: `contact-${index}@example.com`,
+					name: `Contact ${index}`,
+					firstSeenAt: 100,
+					lastSeenAt: index * 1_000,
+				});
+			}
+			await ctx.db.insert("cases", {
+				organizationId: otherOrganizationId,
+				reference: "CASE-SECRET",
+				title: "Other organization case",
+				description: "",
+				ownerMemberId: null,
+				dueAt: null,
+				status: "open",
+				lastActivityAt: 10_000,
+				createdAt: 100,
+				updatedAt: 10_000,
+			});
+		});
+
+		const candidates = await actor.query(
+			api.globalSearch.reader.listRecentRelationshipCandidates,
+			{},
+		);
+		expect(candidates).toHaveLength(5);
+		expect(candidates.map((candidate) => candidate.target.kind)).toEqual([
+			"contact",
+			"case",
+			"entity",
+			"contact",
+			"contact",
+		]);
+		expect(
+			candidates.some(
+				(candidate) =>
+					candidate.identifier === "CASE-SECRET" ||
+					candidate.label === "Other organization case",
+			),
+		).toBe(false);
+	});
+
 	it("searches relation-capable objects by their identifier", async () => {
 		const { actor, base, ingestEventId } = await createFixture();
 		await base.mutation(internal.email.ingest.storeInboundEmail, {

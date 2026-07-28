@@ -1,7 +1,7 @@
 import { ConvexError } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
-import { appendCaseEvent } from "./events";
+import { appendSystemChangeCaseEvent } from "./events";
 
 export const MAX_CASE_CONTACT_RELATIONS = 50;
 export const MAX_CASE_ENTITY_RELATIONS = 100;
@@ -233,7 +233,7 @@ export async function addContactCaseRelation(
 		addedByMemberId: actorMemberId,
 		removedByMemberId: null,
 	});
-	await appendCaseEvent(
+	await appendSystemChangeCaseEvent(
 		ctx,
 		caseRecord,
 		`Added ${contact.name || contact.address} as a contact.`,
@@ -266,7 +266,7 @@ export async function removeContactCaseRelation(
 		endedAt: now,
 		removedByMemberId: actorMemberId,
 	});
-	await appendCaseEvent(
+	await appendSystemChangeCaseEvent(
 		ctx,
 		caseRecord,
 		`Removed ${contact?.name || contact?.address || "a contact"} from the case.`,
@@ -318,7 +318,7 @@ export async function addEntityCaseRelation(
 		addedByMemberId: actorMemberId,
 		removedByMemberId: null,
 	});
-	await appendCaseEvent(
+	await appendSystemChangeCaseEvent(
 		ctx,
 		caseRecord,
 		`Added ${entity.displayName} as a related entity.`,
@@ -351,7 +351,7 @@ export async function removeEntityCaseRelation(
 		endedAt: now,
 		removedByMemberId: actorMemberId,
 	});
-	await appendCaseEvent(
+	await appendSystemChangeCaseEvent(
 		ctx,
 		caseRecord,
 		`Removed ${entity?.displayName || "an entity"} from the case.`,
@@ -409,14 +409,14 @@ export async function addRelatedCaseRelation(
 		addedByMemberId: actorMemberId,
 		removedByMemberId: null,
 	});
-	await appendCaseEvent(
+	await appendSystemChangeCaseEvent(
 		ctx,
 		caseRecord,
 		`Added ${relatedCase.reference}: ${relatedCase.title} as a related case.`,
 		actorMemberId,
 		now,
 	);
-	await appendCaseEvent(
+	await appendSystemChangeCaseEvent(
 		ctx,
 		relatedCase,
 		`Added ${caseRecord.reference}: ${caseRecord.title} as a related case.`,
@@ -457,14 +457,14 @@ export async function removeRelatedCaseRelation(
 		endedAt: now,
 		removedByMemberId: actorMemberId,
 	});
-	await appendCaseEvent(
+	await appendSystemChangeCaseEvent(
 		ctx,
 		firstCase,
 		`Removed ${secondCase.reference}: ${secondCase.title} from the case.`,
 		actorMemberId,
 		now,
 	);
-	await appendCaseEvent(
+	await appendSystemChangeCaseEvent(
 		ctx,
 		secondCase,
 		`Removed ${firstCase.reference}: ${firstCase.title} from the case.`,

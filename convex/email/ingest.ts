@@ -3,6 +3,8 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
+import { getActiveCaseRelationForEmailThread } from "../case/emailRelations";
+import { appendInboundEmailCaseEvent } from "../case/events";
 import { upsertSenderContact } from "../contact/model";
 import { emailIngestPool } from "./ingestQueue";
 import { updateIngestRecipientStatuses } from "./ingestState";
@@ -340,6 +342,23 @@ export const storeInboundEmail = internalMutation({
 				latestMessageId: messageId,
 				lastActivityAt: args.email.receivedAt,
 			});
+		}
+
+		const activeCaseRelation = await getActiveCaseRelationForEmailThread(
+			ctx,
+			thread._id,
+		);
+		if (activeCaseRelation) {
+			const caseRecord = await ctx.db.get(activeCaseRelation.caseId);
+			if (!caseRecord || caseRecord.organizationId !== thread.organizationId) {
+				throw new Error("Email thread has an invalid active case relation");
+			}
+			await appendInboundEmailCaseEvent(
+				ctx,
+				caseRecord,
+				messageId,
+				args.email.receivedAt,
+			);
 		}
 
 		await ctx.db.patch(event._id, {

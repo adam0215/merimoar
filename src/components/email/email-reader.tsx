@@ -9,6 +9,7 @@ import {
 import { Link } from "@tanstack/react-router";
 import type { FunctionReturnType } from "convex/server";
 import { useQuery } from "convex-helpers/react/cache";
+import type { CaseCreateOptions } from "#/components/case/types.ts";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -25,6 +26,7 @@ import {
 } from "#/components/ui/tooltip.tsx";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
+import { EmailCaseActions } from "./email-case-actions.tsx";
 import { parseEmailReply } from "./parse-email-reply";
 
 type ThreadListItem = FunctionReturnType<
@@ -279,9 +281,11 @@ export function ThreadList({
 export function ThreadView({
 	thread,
 	isLoading,
+	createOptions,
 }: {
 	thread: ThreadDetails | null | undefined;
 	isLoading: boolean;
+	createOptions: CaseCreateOptions | undefined;
 }) {
 	if (isLoading) {
 		return (
@@ -308,121 +312,124 @@ export function ThreadView({
 	}
 
 	return (
-		<ScrollArea
-			className="h-full"
-			viewportProps={{ className: "overscroll-none" }}
-		>
-			<div className="w-full px-5 pt-5 pb-7 md:px-8 md:pt-7 md:pb-9">
-				<div className="divide-y">
-					{thread.messages.map((message) => {
-						const repliedToMessage = findRepliedToMessage(
-							message,
-							thread.messages,
-						);
-						const { authoredText, quotedText } = parseEmailReply(
-							message.textBody,
-						);
+		<div className="relative h-full">
+			<ScrollArea
+				className="h-full"
+				viewportProps={{ className: "overscroll-none" }}
+			>
+				<div className="w-full px-5 pt-5 pb-28 md:px-8 md:pt-7 md:pb-32">
+					<div className="divide-y">
+						{thread.messages.map((message) => {
+							const repliedToMessage = findRepliedToMessage(
+								message,
+								thread.messages,
+							);
+							const { authoredText, quotedText } = parseEmailReply(
+								message.textBody,
+							);
 
-						return (
-							<article
-								key={message._id}
-								id={`email-message-${message._id}`}
-								className="scroll-mt-6 py-8 first:pt-0 last:pb-0"
-							>
-								<header className="min-w-0">
-									<div className="min-w-0">
-										<div className="flex min-w-0 items-center justify-between gap-4">
-											<div className="flex min-w-0 items-center">
-												<p className="truncate text-sm font-medium">
-													{participantLabel(message.from)}
-												</p>
-												<Tooltip>
-													<TooltipTrigger
-														render={
-															<Button
-																nativeButton={false}
-																variant="ghost"
-																size="icon-xs"
-																className="text-muted-foreground"
-																render={
-																	<Link
-																		to="/contacts"
-																		search={{
-																			contact: message.senderContactId,
-																		}}
-																		aria-label={`Open contact ${participantLabel(message.from)}`}
-																	/>
-																}
-															/>
-														}
-													>
-														<IconAddressBook />
-													</TooltipTrigger>
-													<TooltipContent side="top">
-														Open contact
-													</TooltipContent>
-												</Tooltip>
-											</div>
-											<time className="shrink-0 text-xs text-muted-foreground">
-												{formatMessageDate(message.sentAt)}
-											</time>
-										</div>
-										<p className="truncate text-xs text-muted-foreground">
-											{message.from.address}
-										</p>
-										<p className="text-xs">
-											<span className="text-foreground">To: </span>
-											<span className="break-all text-muted-foreground">
-												{message.to.map(participantLabel).join(", ")}
-												{message.cc.length > 0 &&
-													`, cc ${message.cc.map(participantLabel).join(", ")}`}
-											</span>
-										</p>
-									</div>
-								</header>
-								<h1 className="mt-5 text-balance text-xl font-semibold tracking-tight">
-									{message.subject || "(No subject)"}
-								</h1>
-								{repliedToMessage && (
-									<a
-										href={`#email-message-${repliedToMessage._id}`}
-										className="mt-1 inline-block text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-									>
-										Reply to {participantLabel(repliedToMessage.from)} at{" "}
-										{formatMessageDate(repliedToMessage.sentAt)}
-									</a>
-								)}
-								<div className="mt-6 text-sm leading-7 text-foreground/90">
-									{authoredText && (
-										<div className="whitespace-pre-wrap">{authoredText}</div>
-									)}
-									{quotedText && (
-										<Collapsible>
-											<CollapsibleTrigger
-												type="button"
-												className="group mt-4 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-											>
-												<IconChevronDown className="size-3.5 transition-transform group-data-panel-open:rotate-180" />
-												<span className="group-data-panel-open:hidden">
-													Show quoted text
-												</span>
-												<span className="hidden group-data-panel-open:inline">
-													Hide quoted text
-												</span>
-											</CollapsibleTrigger>
-											<CollapsibleContent>
-												<div className="mt-3 whitespace-pre-wrap border-l pl-4 text-xs leading-6 text-muted-foreground">
-													{quotedText}
+							return (
+								<article
+									key={message._id}
+									id={`email-message-${message._id}`}
+									className="scroll-mt-6 py-8 first:pt-0 last:pb-0"
+								>
+									<header className="min-w-0">
+										<div className="min-w-0">
+											<div className="flex min-w-0 items-center justify-between gap-4">
+												<div className="flex min-w-0 items-center">
+													<p className="truncate text-sm font-medium">
+														{participantLabel(message.from)}
+													</p>
+													<Tooltip>
+														<TooltipTrigger
+															render={
+																<Button
+																	nativeButton={false}
+																	variant="ghost"
+																	size="icon-xs"
+																	className="text-muted-foreground"
+																	render={
+																		<Link
+																			to="/contacts"
+																			search={{
+																				contact: message.senderContactId,
+																			}}
+																			aria-label={`Open contact ${participantLabel(message.from)}`}
+																		/>
+																	}
+																/>
+															}
+														>
+															<IconAddressBook />
+														</TooltipTrigger>
+														<TooltipContent side="top">
+															Open contact
+														</TooltipContent>
+													</Tooltip>
 												</div>
-											</CollapsibleContent>
-										</Collapsible>
+												<time className="shrink-0 text-xs text-muted-foreground">
+													{formatMessageDate(message.sentAt)}
+												</time>
+											</div>
+											<p className="truncate text-xs text-muted-foreground">
+												{message.from.address}
+											</p>
+											<p className="text-xs">
+												<span className="text-foreground">To: </span>
+												<span className="break-all text-muted-foreground">
+													{message.to.map(participantLabel).join(", ")}
+													{message.cc.length > 0 &&
+														`, cc ${message.cc.map(participantLabel).join(", ")}`}
+												</span>
+											</p>
+										</div>
+									</header>
+									<h1 className="mt-5 text-balance text-xl font-semibold tracking-tight">
+										{message.subject || "(No subject)"}
+									</h1>
+									{repliedToMessage && (
+										<a
+											href={`#email-message-${repliedToMessage._id}`}
+											className="mt-1 inline-block text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+										>
+											Reply to {participantLabel(repliedToMessage.from)} at{" "}
+											{formatMessageDate(repliedToMessage.sentAt)}
+										</a>
 									)}
-								</div>
-							</article>
-						);
-					})}
+									<div className="mt-6 text-sm leading-7 text-foreground/90">
+										{authoredText && (
+											<div className="whitespace-pre-wrap">{authoredText}</div>
+										)}
+										{quotedText && (
+											<Collapsible>
+												<CollapsibleTrigger
+													type="button"
+													className="group mt-4 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+												>
+													<IconChevronDown className="size-3.5 transition-transform group-data-panel-open:rotate-180" />
+													<span className="group-data-panel-open:hidden">
+														Show quoted text
+													</span>
+													<span className="hidden group-data-panel-open:inline">
+														Hide quoted text
+													</span>
+												</CollapsibleTrigger>
+												<CollapsibleContent>
+													<div className="mt-3 whitespace-pre-wrap border-l pl-4 text-xs leading-6 text-muted-foreground">
+														{quotedText}
+													</div>
+												</CollapsibleContent>
+											</Collapsible>
+										)}
+									</div>
+								</article>
+							);
+						})}
+					</div>
 				</div>
-			</div>
-		</ScrollArea>
+			</ScrollArea>
+			<EmailCaseActions thread={thread} createOptions={createOptions} />
+		</div>
 	);
 }

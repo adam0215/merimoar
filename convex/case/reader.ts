@@ -10,6 +10,10 @@ import {
 } from "../entity/constants";
 import { getWorkosUser } from "../workos";
 import {
+	listActiveEmailThreadRelationsForCase,
+	MAX_EMAIL_THREADS_PER_CASE,
+} from "./emailRelations";
+import {
 	listActiveCaseRelations,
 	MAX_CASE_CONTACT_RELATIONS,
 	MAX_CASE_ENTITY_RELATIONS,
@@ -19,6 +23,7 @@ const MAX_CASE_EVENTS = 100;
 const MAX_ORGANIZATION_MEMBERS = 50;
 const MAX_CONTACT_OPTIONS = 50;
 const MAX_CASE_OPTIONS = 100;
+const RECENT_CASES_LIMIT = 5;
 
 function getUserName(
 	user: NonNullable<Awaited<ReturnType<typeof getWorkosUser>>>,
@@ -89,6 +94,20 @@ export const list = query({
 	},
 });
 
+export const listRecent = query({
+	args: {},
+	handler: async (ctx) => {
+		const workspace = await requireActor(ctx);
+		return await ctx.db
+			.query("cases")
+			.withIndex("by_organization_id_and_last_activity_at", (index) =>
+				index.eq("organizationId", workspace.organization._id),
+			)
+			.order("desc")
+			.take(RECENT_CASES_LIMIT);
+	},
+});
+
 export const get = query({
 	args: {
 		caseId: v.string(),
@@ -110,31 +129,37 @@ export const get = query({
 
 		const caseRelationsPromise = listActiveCaseRelations(ctx, caseRecord._id);
 
-		const [owner, events, contactRelations, entityRelations] =
-			await Promise.all([
-				caseRecord.ownerMemberId
-					? resolveMember(ctx, caseRecord.ownerMemberId)
-					: null,
-				ctx.db
-					.query("caseEvents")
-					.withIndex("by_case_id_and_occurred_at", (index) =>
-						index.eq("caseId", caseRecord._id),
-					)
-					.order("desc")
-					.take(MAX_CASE_EVENTS),
-				ctx.db
-					.query("caseContactRelations")
-					.withIndex("by_case_id_and_ended_at", (index) =>
-						index.eq("caseId", caseRecord._id).eq("endedAt", null),
-					)
-					.take(MAX_CASE_CONTACT_RELATIONS),
-				ctx.db
-					.query("caseEntityRelations")
-					.withIndex("by_case_id_and_ended_at", (index) =>
-						index.eq("caseId", caseRecord._id).eq("endedAt", null),
-					)
-					.take(MAX_CASE_ENTITY_RELATIONS),
-			]);
+		const [
+			owner,
+			events,
+			contactRelations,
+			entityRelations,
+			emailThreadRelations,
+		] = await Promise.all([
+			caseRecord.ownerMemberId
+				? resolveMember(ctx, caseRecord.ownerMemberId)
+				: null,
+			ctx.db
+				.query("caseEvents")
+				.withIndex("by_case_id_and_occurred_at", (index) =>
+					index.eq("caseId", caseRecord._id),
+				)
+				.order("desc")
+				.take(MAX_CASE_EVENTS),
+			ctx.db
+				.query("caseContactRelations")
+				.withIndex("by_case_id_and_ended_at", (index) =>
+					index.eq("caseId", caseRecord._id).eq("endedAt", null),
+				)
+				.take(MAX_CASE_CONTACT_RELATIONS),
+			ctx.db
+				.query("caseEntityRelations")
+				.withIndex("by_case_id_and_ended_at", (index) =>
+					index.eq("caseId", caseRecord._id).eq("endedAt", null),
+				)
+				.take(MAX_CASE_ENTITY_RELATIONS),
+			listActiveEmailThreadRelationsForCase(ctx, caseRecord._id),
+		]);
 		const caseRelations = await caseRelationsPromise;
 		const relatedCasesPromise = Promise.all(
 			caseRelations.map(async (relation) => ({
@@ -146,6 +171,23 @@ export const get = query({
 				),
 			})),
 		);
+		const emailThreadsPromise = Promise.all(
+			emailThreadRelations
+				.slice(0, MAX_EMAIL_THREADS_PER_CASE)
+				.map(async (relation) => {
+					const thread = await ctx.db.get(relation.threadId);
+					if (!thread || thread.organizationId !== workspace.organization._id) {
+						return { relation, thread: null, latestMessage: null };
+					}
+					return {
+						relation,
+						thread,
+						latestMessage: thread?.latestMessageId
+							? await ctx.db.get(thread.latestMessageId)
+							: null,
+					};
+				}),
+		);
 
 		const [resolvedEvents, contacts, entities] = await Promise.all([
 			Promise.all(
@@ -154,6 +196,10 @@ export const get = query({
 					author: event.createdByMemberId
 						? await resolveMember(ctx, event.createdByMemberId)
 						: null,
+					emailMessage:
+						"type" in event && event.type === "inbound_email"
+							? await ctx.db.get(event.emailMessageId)
+							: null,
 				})),
 			),
 			Promise.all(
@@ -172,7 +218,10 @@ export const get = query({
 				}),
 			),
 		]);
-		const relatedCases = await relatedCasesPromise;
+		const [relatedCases, emailThreads] = await Promise.all([
+			relatedCasesPromise,
+			emailThreadsPromise,
+		]);
 
 		return {
 			case: caseRecord,
@@ -183,6 +232,7 @@ export const get = query({
 				(item) => item.entity !== null && item.entityType !== null,
 			),
 			relatedCases: relatedCases.filter((item) => item.relatedCase !== null),
+			emailThreads: emailThreads.filter((item) => item.thread !== null),
 		};
 	},
 });

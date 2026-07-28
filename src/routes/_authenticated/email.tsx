@@ -22,7 +22,7 @@ const preloadInitialEmailPage = createServerFn({ method: "GET" })
 	.validator((input: { selectedThreadId?: string }) => input)
 	.handler(async ({ data }) => {
 		const client = await createAuthenticatedConvexHttpClient();
-		const [threads, selectedThread] = await Promise.all([
+		const [threads, selectedThread, createOptions] = await Promise.all([
 			client.query(api.email.reader.listThreads, {
 				paginationOpts: {
 					cursor: null,
@@ -34,9 +34,11 @@ const preloadInitialEmailPage = createServerFn({ method: "GET" })
 						threadId: data.selectedThreadId,
 					})
 				: null,
+			client.query(api.case.reader.getCreateOptions, {}),
 		]);
 
 		return {
+			createOptions,
 			selectedThread,
 			selectedThreadId: data.selectedThreadId,
 			threads,
@@ -75,6 +77,8 @@ function EmailPage() {
 	const selectedThread = canUsePrefetchedSelectedThread
 		? prefetched.selectedThread
 		: liveSelectedThread;
+	const liveCreateOptions = useQuery(api.case.reader.getCreateOptions, {});
+	const createOptions = liveCreateOptions ?? prefetched.createOptions;
 	const prefetchedThreads =
 		liveThreadStatus === "LoadingFirstPage" ? prefetched.threads : null;
 	const threads = prefetchedThreads ? prefetchedThreads.page : liveThreads;
@@ -156,6 +160,7 @@ function EmailPage() {
 					<div className="min-h-0 flex-1">
 						<ThreadView
 							thread={selectedThread}
+							createOptions={createOptions}
 							isLoading={Boolean(
 								selectedThreadId && selectedThread === undefined,
 							)}

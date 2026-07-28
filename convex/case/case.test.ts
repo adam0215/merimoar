@@ -141,6 +141,40 @@ async function createFixture() {
 }
 
 describe("cases", () => {
+	it("lists the five most recently active cases inside the organization", async () => {
+		const { actor, base, organizationId } = await createFixture();
+		await base.run(async (ctx) => {
+			for (let index = 1; index <= 6; index += 1) {
+				await ctx.db.insert("cases", {
+					organizationId,
+					reference: `CASE-RECENT-${index}`,
+					title: `Recent case ${index}`,
+					description: "",
+					ownerMemberId: null,
+					dueAt: null,
+					status: "open",
+					lastActivityAt: index * 1_000,
+					createdAt: 100,
+					updatedAt: index * 1_000,
+				});
+			}
+		});
+
+		const recentCases = await actor.query(api.case.reader.listRecent, {});
+		expect(recentCases.map((caseRecord) => caseRecord.reference)).toEqual([
+			"CASE-RECENT-6",
+			"CASE-RECENT-5",
+			"CASE-RECENT-4",
+			"CASE-RECENT-3",
+			"CASE-RECENT-2",
+		]);
+		expect(
+			recentCases.every(
+				(caseRecord) => caseRecord.organizationId === organizationId,
+			),
+		).toBe(true);
+	});
+
 	it("derives tenant and audit actor from WorkOS identity", async () => {
 		const {
 			actor,
@@ -256,8 +290,14 @@ describe("cases", () => {
 			]);
 		expect(caseDetail?.relatedCases).toHaveLength(0);
 		expect(relatedCaseDetail?.relatedCases).toHaveLength(0);
-		expect(caseDetail?.events[0]?.event.body).toContain("Removed CASE-RELATED");
-		expect(relatedCaseDetail?.events[0]?.event.body).toContain("Removed CASE-");
+		expect(caseDetail?.events[0]?.event).toHaveProperty(
+			"body",
+			expect.stringContaining("Removed CASE-RELATED"),
+		);
+		expect(relatedCaseDetail?.events[0]?.event).toHaveProperty(
+			"body",
+			expect.stringContaining("Removed CASE-"),
+		);
 		expect(historicalRelation).toMatchObject({
 			endedAt: expect.any(Number),
 			removedByMemberId: actorMemberId,
@@ -292,7 +332,10 @@ describe("cases", () => {
 			ctx.db.get(relationId),
 		);
 		expect(after?.contacts).toHaveLength(0);
-		expect(after?.events[0]?.event.body).toContain("Removed Elin Andersson");
+		expect(after?.events[0]?.event).toHaveProperty(
+			"body",
+			expect.stringContaining("Removed Elin Andersson"),
+		);
 		expect(after?.events[0]?.event.createdByMemberId).toBe(actorMemberId);
 		expect(historicalRelation).toMatchObject({
 			endedAt: expect.any(Number),

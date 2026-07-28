@@ -1,5 +1,6 @@
 import { IconFolder } from "@tabler/icons-react";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
+import { CaseEmailThreads } from "./case-email-threads.tsx";
 import { CaseEvents } from "./case-events.tsx";
 import { CaseHeader } from "./case-header.tsx";
 import { CaseRelationships } from "./case-relationships.tsx";
@@ -39,6 +40,7 @@ export function CaseView({
 			<div className="mx-auto w-full max-w-6xl px-5 py-6 md:px-8 md:py-8">
 				<CaseHeader detail={detail} members={createOptions?.members ?? []} />
 				<CaseRelationships detail={detail} />
+				<CaseEmailThreads detail={detail} />
 				<CaseEvents caseId={detail.case._id} events={detail.events} />
 			</div>
 		</div>
