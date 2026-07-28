@@ -6,3 +6,6 @@ contacts, and organization-specific entities.
 
 Built with TanStack Start, React, Convex, WorkOS, Resend, Tailwind CSS, and
 shadcn/ui.
+
+Resend accounts are connected through
+[WorkOS Pipes](docs/resend-pipes.md).
