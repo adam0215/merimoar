@@ -19,7 +19,8 @@ import type * as case_reader from "../case/reader.js";
 import type * as case_relations from "../case/relations.js";
 import type * as contact_model from "../contact/model.js";
 import type * as contact_reader from "../contact/reader.js";
-import type * as email_connections from "../email/connections.js";
+import type * as crons from "../crons.js";
+import type * as email_inboxes from "../email/inboxes.js";
 import type * as email_ingest from "../email/ingest.js";
 import type * as email_ingestErrors from "../email/ingestErrors.js";
 import type * as email_ingestOperations from "../email/ingestOperations.js";
@@ -27,10 +28,14 @@ import type * as email_ingestQueue from "../email/ingestQueue.js";
 import type * as email_ingestRecipients from "../email/ingestRecipients.js";
 import type * as email_ingestState from "../email/ingestState.js";
 import type * as email_input from "../email/input.js";
+import type * as email_integrationActions from "../email/integrationActions.js";
+import type * as email_integrations from "../email/integrations.js";
 import type * as email_model from "../email/model.js";
 import type * as email_normalize from "../email/normalize.js";
 import type * as email_reader from "../email/reader.js";
 import type * as email_resend from "../email/resend.js";
+import type * as email_resendAccess from "../email/resendAccess.js";
+import type * as email_router from "../email/router.js";
 import type * as entity_constants from "../entity/constants.js";
 import type * as entity_input from "../entity/input.js";
 import type * as entity_model from "../entity/model.js";
@@ -40,7 +45,6 @@ import type * as entity_values from "../entity/values.js";
 import type * as globalSearch_model from "../globalSearch/model.js";
 import type * as globalSearch_reader from "../globalSearch/reader.js";
 import type * as http from "../http.js";
-import type * as migrations from "../migrations.js";
 import type * as workos from "../workos.js";
 
 import type {
@@ -61,7 +65,8 @@ declare const fullApi: ApiFromModules<{
   "case/relations": typeof case_relations;
   "contact/model": typeof contact_model;
   "contact/reader": typeof contact_reader;
-  "email/connections": typeof email_connections;
+  crons: typeof crons;
+  "email/inboxes": typeof email_inboxes;
   "email/ingest": typeof email_ingest;
   "email/ingestErrors": typeof email_ingestErrors;
   "email/ingestOperations": typeof email_ingestOperations;
@@ -69,10 +74,14 @@ declare const fullApi: ApiFromModules<{
   "email/ingestRecipients": typeof email_ingestRecipients;
   "email/ingestState": typeof email_ingestState;
   "email/input": typeof email_input;
+  "email/integrationActions": typeof email_integrationActions;
+  "email/integrations": typeof email_integrations;
   "email/model": typeof email_model;
   "email/normalize": typeof email_normalize;
   "email/reader": typeof email_reader;
   "email/resend": typeof email_resend;
+  "email/resendAccess": typeof email_resendAccess;
+  "email/router": typeof email_router;
   "entity/constants": typeof entity_constants;
   "entity/input": typeof entity_input;
   "entity/model": typeof entity_model;
@@ -82,7 +91,6 @@ declare const fullApi: ApiFromModules<{
   "globalSearch/model": typeof globalSearch_model;
   "globalSearch/reader": typeof globalSearch_reader;
   http: typeof http;
-  migrations: typeof migrations;
   workos: typeof workos;
 }>;
 

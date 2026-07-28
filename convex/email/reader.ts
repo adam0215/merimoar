@@ -3,16 +3,25 @@ import { v } from "convex/values";
 import { query } from "../_generated/server";
 import { requireActor } from "../auth/access";
 
-export const listConnections = query({
+export const listInboxes = query({
 	args: {},
 	handler: async (ctx) => {
 		const workspace = await requireActor(ctx);
-		return await ctx.db
-			.query("emailConnections")
-			.withIndex("by_organization_id", (query) =>
-				query.eq("organizationId", workspace.organization._id),
+		const inboxes = await ctx.db
+			.query("emailInboxes")
+			.withIndex("by_organization_id_and_status", (query) =>
+				query
+					.eq("organizationId", workspace.organization._id)
+					.eq("status", "active"),
 			)
-			.take(50);
+			.take(100);
+		return inboxes.map((inbox) => ({
+			_id: inbox._id,
+			_creationTime: inbox._creationTime,
+			displayName: inbox.displayName,
+			address: inbox.address,
+			status: "active" as const,
+		}));
 	},
 });
 
@@ -61,8 +70,8 @@ export const getThread = query({
 			return null;
 		}
 
-		const [connection, messages] = await Promise.all([
-			ctx.db.get(thread.connectionId),
+		const [inbox, messages] = await Promise.all([
+			ctx.db.get(thread.inboxId),
 			ctx.db
 				.query("emailMessages")
 				.withIndex("by_thread_id_and_received_at", (query) =>
@@ -72,13 +81,13 @@ export const getThread = query({
 				.take(100),
 		]);
 
-		if (!connection) {
+		if (!inbox) {
 			return null;
 		}
 
 		return {
 			thread,
-			connection,
+			inbox,
 			messages,
 		};
 	},

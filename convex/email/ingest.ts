@@ -5,76 +5,69 @@ import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
 import { upsertSenderContact } from "../contact/model";
 import { emailIngestPool } from "./ingestQueue";
-import { selectIngestRecipientAddresses } from "./ingestRecipients";
 import { updateIngestRecipientStatuses } from "./ingestState";
 import {
 	emailIngestFailureKindValidator,
 	normalizedInboundEmailValidator,
 } from "./model";
-
-async function findConnection(ctx: MutationCtx, recipientAddresses: string[]) {
-	for (const recipientAddress of recipientAddresses) {
-		const connection = await ctx.db
-			.query("emailConnections")
-			.withIndex("by_address", (query) => query.eq("address", recipientAddress))
-			.unique();
-
-		if (connection?.status === "active") {
-			return connection;
-		}
-	}
-
-	return null;
-}
+import { routeEmailToOrganizationInbox } from "./router";
 
 async function findThreadByInternetMessageId(
 	ctx: MutationCtx,
-	connectionId: Id<"emailConnections">,
+	inboxId: Id<"emailInboxes">,
 	internetMessageId: string,
 ) {
 	const message = await ctx.db
 		.query("emailMessages")
-		.withIndex("by_connection_id_and_internet_message_id", (query) =>
-			query
-				.eq("connectionId", connectionId)
-				.eq("internetMessageId", internetMessageId),
+		.withIndex("by_inbox_id_and_internet_message_id", (query) =>
+			query.eq("inboxId", inboxId).eq("internetMessageId", internetMessageId),
 		)
-		.unique();
+		.first();
 	return message ? await ctx.db.get(message.threadId) : null;
 }
 
 async function findThreadByExternalThreadId(
 	ctx: MutationCtx,
-	connectionId: Id<"emailConnections">,
+	inboxId: Id<"emailInboxes">,
+	integrationId: Id<"emailIntegrations">,
 	externalThreadId: string,
 ) {
-	return await ctx.db
-		.query("emailThreads")
-		.withIndex("by_connection_id_and_external_thread_id", (query) =>
-			query
-				.eq("connectionId", connectionId)
-				.eq("externalThreadId", externalThreadId),
+	const reference = await ctx.db
+		.query("emailThreadExternalReferences")
+		.withIndex(
+			"by_inbox_id_and_integration_id_and_external_thread_id",
+			(query) =>
+				query
+					.eq("inboxId", inboxId)
+					.eq("integrationId", integrationId)
+					.eq("externalThreadId", externalThreadId),
 		)
 		.unique();
+	return reference ? await ctx.db.get(reference.threadId) : null;
 }
 
 async function findExistingMessage(
 	ctx: MutationCtx,
-	connectionId: Id<"emailConnections">,
+	inboxId: Id<"emailInboxes">,
+	integrationId: Id<"emailIntegrations">,
 	externalMessageId: string,
 ) {
 	return await ctx.db
 		.query("emailMessages")
-		.withIndex("by_connection_id_and_external_message_id", (query) =>
-			query
-				.eq("connectionId", connectionId)
-				.eq("externalMessageId", externalMessageId),
+		.withIndex(
+			"by_inbox_id_and_integration_id_and_external_message_id",
+			(query) =>
+				query
+					.eq("inboxId", inboxId)
+					.eq("integrationId", integrationId)
+					.eq("externalMessageId", externalMessageId),
 		)
 		.unique();
 }
 
-export const recordResendEvent = internalMutation({
+export const routeResendEvent = internalMutation({
 	args: {
+		integrationId: v.id("emailIntegrations"),
 		externalEventId: v.string(),
 		externalMessageId: v.string(),
 		eventType: v.string(),
@@ -86,8 +79,10 @@ export const recordResendEvent = internalMutation({
 	handler: async (ctx, args) => {
 		const existing = await ctx.db
 			.query("emailIngestEvents")
-			.withIndex("by_external_event_id", (query) =>
-				query.eq("externalEventId", args.externalEventId),
+			.withIndex("by_integration_id_and_external_event_id", (query) =>
+				query
+					.eq("integrationId", args.integrationId)
+					.eq("externalEventId", args.externalEventId),
 			)
 			.unique();
 
@@ -95,20 +90,29 @@ export const recordResendEvent = internalMutation({
 			return { status: "duplicate" as const, eventId: existing._id };
 		}
 
-		const recipientAddresses = selectIngestRecipientAddresses(args);
-		const connection = await findConnection(ctx, recipientAddresses);
+		const integration = await ctx.db.get(args.integrationId);
+		if (!integration || integration.status !== "connected") {
+			return { status: "ignored" as const };
+		}
+		const { inbox, recipientAddresses } = await routeEmailToOrganizationInbox(
+			ctx,
+			integration.organizationId,
+			args,
+		);
+		const canRoute = inbox !== undefined;
 		const eventId = await ctx.db.insert("emailIngestEvents", {
-			connectionId: connection?._id,
+			inboxId: inbox?._id,
+			integrationId: integration._id,
 			externalEventId: args.externalEventId,
 			externalMessageId: args.externalMessageId,
 			eventType: args.eventType,
-			status: connection ? "queued" : "unroutable",
+			status: canRoute ? "queued" : "unroutable",
 			rawPayload: args.rawPayload,
 			receivedAt: args.receivedAt,
-			error: connection
+			error: canRoute
 				? undefined
-				: "No active connection matched the recipient",
-			failureKind: connection ? undefined : "unroutable",
+				: "No active inbox matched the email recipients",
+			failureKind: canRoute ? undefined : "unroutable",
 			attempts: 0,
 			replayCount: 0,
 			processingGeneration: 0,
@@ -118,13 +122,13 @@ export const recordResendEvent = internalMutation({
 				ctx.db.insert("emailIngestRecipients", {
 					eventId,
 					address,
-					status: connection ? "queued" : "unroutable",
+					status: canRoute ? "queued" : "unroutable",
 					receivedAt: args.receivedAt,
 				}),
 			),
 		);
 
-		if (!connection) {
+		if (!canRoute) {
 			return { status: "unroutable" as const, eventId };
 		}
 
@@ -153,19 +157,28 @@ export const prepareProcessingAttempt = internalMutation({
 	handler: async (ctx, args) => {
 		const event = await ctx.db.get(args.eventId);
 		if (
-			!event?.connectionId ||
+			!event?.inboxId ||
+			!event.integrationId ||
 			event.status !== "queued" ||
 			(event.processingGeneration ?? 0) !== args.processingGeneration
 		) {
 			return null;
 		}
 
-		const connection = await ctx.db.get(event.connectionId);
-		if (!connection || connection.status !== "active") {
+		const [inbox, integration] = await Promise.all([
+			ctx.db.get(event.inboxId),
+			ctx.db.get(event.integrationId),
+		]);
+		if (
+			!inbox ||
+			inbox.status !== "active" ||
+			!integration ||
+			integration.status !== "connected"
+		) {
 			await ctx.db.patch(event._id, {
 				status: "failed",
-				error: "The email connection is not active",
-				failureKind: "connection",
+				error: "The email inbox or integration is not active",
+				failureKind: "route_inactive",
 			});
 			await updateIngestRecipientStatuses(ctx, event._id, "failed");
 			return null;
@@ -174,7 +187,7 @@ export const prepareProcessingAttempt = internalMutation({
 		await ctx.db.patch(event._id, {
 			attempts: event.attempts + 1,
 		});
-		return { event, connection };
+		return { event, inbox, integration };
 	},
 });
 
@@ -186,13 +199,14 @@ export const storeInboundEmail = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		const event = await ctx.db.get(args.eventId);
-		if (!event?.connectionId) {
+		if (!event?.inboxId || !event.integrationId) {
 			throw new Error("Ingest event is not connected to an inbox");
 		}
 		if (event.status === "processed") {
 			return await findExistingMessage(
 				ctx,
-				event.connectionId,
+				event.inboxId,
+				event.integrationId,
 				args.email.externalMessageId,
 			).then((message) => message?._id ?? null);
 		}
@@ -203,14 +217,15 @@ export const storeInboundEmail = internalMutation({
 			return null;
 		}
 
-		const connection = await ctx.db.get(event.connectionId);
-		if (!connection) {
-			throw new Error("Email connection not found");
+		const inbox = await ctx.db.get(event.inboxId);
+		if (!inbox) {
+			throw new Error("Email inbox not found");
 		}
 
 		const existingMessage = await findExistingMessage(
 			ctx,
-			event.connectionId,
+			event.inboxId,
+			event.integrationId,
 			args.email.externalMessageId,
 		);
 		if (existingMessage) {
@@ -226,7 +241,7 @@ export const storeInboundEmail = internalMutation({
 
 		const senderContactId = await upsertSenderContact(
 			ctx,
-			connection.organizationId,
+			inbox.organizationId,
 			args.email.from,
 			args.email.receivedAt,
 		);
@@ -234,7 +249,8 @@ export const storeInboundEmail = internalMutation({
 		let thread = args.email.externalThreadId
 			? await findThreadByExternalThreadId(
 					ctx,
-					event.connectionId,
+					event.inboxId,
+					event.integrationId,
 					args.email.externalThreadId,
 				)
 			: null;
@@ -248,7 +264,7 @@ export const storeInboundEmail = internalMutation({
 			for (const internetMessageId of replyCandidates) {
 				thread = await findThreadByInternetMessageId(
 					ctx,
-					event.connectionId,
+					event.inboxId,
 					internetMessageId,
 				);
 				if (thread) {
@@ -259,9 +275,8 @@ export const storeInboundEmail = internalMutation({
 
 		if (!thread) {
 			const threadId = await ctx.db.insert("emailThreads", {
-				organizationId: connection.organizationId,
-				connectionId: event.connectionId,
-				externalThreadId: args.email.externalThreadId,
+				organizationId: inbox.organizationId,
+				inboxId: event.inboxId,
 				lastActivityAt: args.email.receivedAt,
 			});
 			thread = await ctx.db.get(threadId);
@@ -271,8 +286,34 @@ export const storeInboundEmail = internalMutation({
 			throw new Error("Could not create email thread");
 		}
 
+		if (args.email.externalThreadId) {
+			const externalThreadId = args.email.externalThreadId;
+			const inboxId = event.inboxId;
+			const integrationId = event.integrationId;
+			const existingReference = await ctx.db
+				.query("emailThreadExternalReferences")
+				.withIndex(
+					"by_inbox_id_and_integration_id_and_external_thread_id",
+					(query) =>
+						query
+							.eq("inboxId", inboxId)
+							.eq("integrationId", integrationId)
+							.eq("externalThreadId", externalThreadId),
+				)
+				.unique();
+			if (!existingReference) {
+				await ctx.db.insert("emailThreadExternalReferences", {
+					threadId: thread._id,
+					inboxId,
+					integrationId,
+					externalThreadId,
+				});
+			}
+		}
+
 		const messageId = await ctx.db.insert("emailMessages", {
-			connectionId: event.connectionId,
+			inboxId: event.inboxId,
+			integrationId: event.integrationId,
 			threadId: thread._id,
 			senderContactId,
 			externalMessageId: args.email.externalMessageId,

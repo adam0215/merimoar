@@ -170,8 +170,7 @@ export function ThreadList({
 				<IconInbox className="mb-4 size-6 text-muted-foreground/50" />
 				<h2 className="font-medium">No inbound email yet</h2>
 				<p className="mt-1 max-w-64 text-sm text-muted-foreground">
-					New messages will appear here as soon as they reach an active
-					connection.
+					New messages will appear here as soon as they reach an inbox.
 				</p>
 			</div>
 		);

@@ -60,16 +60,16 @@ export const listMessages = query({
 
 		const page = await Promise.all(
 			result.page.map(async (message) => {
-				const connection = await ctx.db.get(message.connectionId);
-				if (!connection) {
-					throw new Error("Email connection not found");
+				const inbox = await ctx.db.get(message.inboxId);
+				if (!inbox) {
+					throw new Error("Email inbox not found");
 				}
 
 				return {
 					message,
-					connection: {
-						displayName: connection.displayName,
-						address: connection.address,
+					inbox: {
+						displayName: inbox.displayName,
+						address: inbox.address,
 					},
 				};
 			}),

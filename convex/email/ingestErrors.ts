@@ -5,6 +5,12 @@ const TERMINAL_ERROR_PREFIX = "email-ingest-terminal:";
 
 type FailureKind = NonNullable<Doc<"emailIngestEvents">["failureKind"]>;
 
+export function isResendAuthorizationError(error: {
+	statusCode: number | null;
+}) {
+	return error.statusCode === 401 || error.statusCode === 403;
+}
+
 export function classifyResendRetrievalError(error: {
 	statusCode: number | null;
 }) {
@@ -15,7 +21,7 @@ export function classifyResendRetrievalError(error: {
 	) {
 		return { retryable: true as const, failureKind: "provider" as const };
 	}
-	if (error.statusCode === 401 || error.statusCode === 403) {
+	if (isResendAuthorizationError(error)) {
 		return {
 			retryable: false as const,
 			failureKind: "configuration" as const,
@@ -59,7 +65,7 @@ function isFailureKind(value: string): value is FailureKind {
 		"unroutable",
 		"provider",
 		"configuration",
-		"connection",
+		"route_inactive",
 		"unknown",
 	].includes(value);
 }

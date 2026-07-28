@@ -301,7 +301,7 @@ export function ContactView({
 							))}
 
 						{messageStatus !== "LoadingFirstPage" &&
-							messages.map(({ message, connection }) => {
+							messages.map(({ message, inbox }) => {
 								const preview = message.textBody.replace(/\s+/g, " ").trim();
 
 								return (
@@ -312,7 +312,7 @@ export function ContactView({
 										className="grid grid-cols-[max-content_minmax(0,1fr)_auto] items-center gap-x-2 rounded-lg px-3 py-2 text-xs text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
 									>
 										<p className="max-w-28 truncate font-medium text-muted-foreground">
-											{connection.displayName}
+											{inbox.displayName}
 										</p>
 										<p className="min-w-0 truncate">
 											<span className="font-semibold">

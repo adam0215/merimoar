@@ -25,33 +25,45 @@ const firstEmail = {
 describe("inbound email ingestion", () => {
 	it("keeps replies in one thread and handles duplicate provider messages", async () => {
 		const t = convexTest(schema, modules);
-		const { connectionId, firstEventId } = await t.run(async (ctx) => {
-			const organizationId = await ctx.db.insert("organizations", {
-				name: "Merimoar",
-				workosOrganizationId: "org_merimoar",
-				active: true,
-			});
-			const connectionId = await ctx.db.insert("emailConnections", {
-				organizationId,
-				provider: "resend",
-				displayName: "Support",
-				address: "inbox@merimoar.test",
-				status: "active",
-			});
-			const firstEventId = await ctx.db.insert("emailIngestEvents", {
-				connectionId,
-				externalEventId: "event-1",
-				externalMessageId: firstEmail.externalMessageId,
-				eventType: "email.received",
-				status: "queued",
-				rawPayload: "{}",
-				receivedAt: 1_100,
-				attempts: 0,
-				replayCount: 0,
-				processingGeneration: 0,
-			});
-			return { connectionId, firstEventId };
-		});
+		const { inboxId, integrationId, firstEventId } = await t.run(
+			async (ctx) => {
+				const organizationId = await ctx.db.insert("organizations", {
+					name: "Merimoar",
+					workosOrganizationId: "org_merimoar",
+					active: true,
+				});
+				const integrationId = await ctx.db.insert("emailIntegrations", {
+					organizationId,
+					provider: "resend",
+					status: "connected",
+					workosOrganizationId: "org_merimoar",
+					workosUserId: "user_adam",
+					workosDataIntegrationId: "data_integration_resend",
+					workosConnectedAccountId: "connected_account_resend",
+					workosConnectedAccountUpdatedAt: 1_000,
+				});
+				const inboxId = await ctx.db.insert("emailInboxes", {
+					organizationId,
+					displayName: "Support",
+					address: "inbox@merimoar.test",
+					status: "active",
+				});
+				const firstEventId = await ctx.db.insert("emailIngestEvents", {
+					inboxId,
+					integrationId,
+					externalEventId: "event-1",
+					externalMessageId: firstEmail.externalMessageId,
+					eventType: "email.received",
+					status: "queued",
+					rawPayload: "{}",
+					receivedAt: 1_100,
+					attempts: 0,
+					replayCount: 0,
+					processingGeneration: 0,
+				});
+				return { inboxId, integrationId, firstEventId };
+			},
+		);
 
 		const firstMessageId = await t.mutation(
 			internal.email.ingest.storeInboundEmail,
@@ -64,7 +76,8 @@ describe("inbound email ingestion", () => {
 
 		const secondEventId = await t.run(async (ctx) =>
 			ctx.db.insert("emailIngestEvents", {
-				connectionId,
+				inboxId,
+				integrationId,
 				externalEventId: "event-2",
 				externalMessageId: "resend-message-2",
 				eventType: "email.received",
@@ -97,7 +110,8 @@ describe("inbound email ingestion", () => {
 
 		const duplicateEventId = await t.run(async (ctx) =>
 			ctx.db.insert("emailIngestEvents", {
-				connectionId,
+				inboxId,
+				integrationId,
 				externalEventId: "event-3",
 				externalMessageId: "resend-message-2",
 				eventType: "email.received",
@@ -153,13 +167,23 @@ describe("inbound email ingestion", () => {
 		expect(state.duplicateEvent?.status).toBe("processed");
 	});
 
-	it("deduplicates a provider message within its connection without a cross-inbox scan limit", async () => {
+	it("deduplicates a provider message within its inbox without a cross-inbox scan limit", async () => {
 		const t = convexTest(schema, modules);
 		const { eventId, existingMessageId } = await t.run(async (ctx) => {
 			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
 				workosOrganizationId: "org_merimoar",
 				active: true,
+			});
+			const integrationId = await ctx.db.insert("emailIntegrations", {
+				organizationId,
+				provider: "resend",
+				status: "connected",
+				workosOrganizationId: "org_merimoar",
+				workosUserId: "user_adam",
+				workosDataIntegrationId: "data_integration_resend",
+				workosConnectedAccountId: "connected_account_resend",
+				workosConnectedAccountUpdatedAt: 1_000,
 			});
 			const senderContactId = await ctx.db.insert("contacts", {
 				organizationId,
@@ -169,39 +193,40 @@ describe("inbound email ingestion", () => {
 				lastSeenAt: firstEmail.receivedAt,
 			});
 
-			let lastConnectionId: Id<"emailConnections"> | undefined;
+			let lastInboxId: Id<"emailInboxes"> | undefined;
 			let existingMessageId: Id<"emailMessages"> | undefined;
 
 			for (let index = 0; index < 21; index += 1) {
-				const connectionId = await ctx.db.insert("emailConnections", {
+				const inboxId = await ctx.db.insert("emailInboxes", {
 					organizationId,
-					provider: "resend",
 					displayName: `Inbox ${index}`,
 					address: `inbox-${index}@merimoar.test`,
 					status: "active",
 				});
 				const threadId = await ctx.db.insert("emailThreads", {
 					organizationId,
-					connectionId,
+					inboxId,
 					lastActivityAt: firstEmail.receivedAt,
 				});
 				const messageId = await ctx.db.insert("emailMessages", {
-					connectionId,
+					inboxId,
+					integrationId,
 					threadId,
 					senderContactId,
 					...firstEmail,
 					direction: "inbound",
 				});
 				await ctx.db.patch(threadId, { latestMessageId: messageId });
-				lastConnectionId = connectionId;
+				lastInboxId = inboxId;
 				existingMessageId = messageId;
 			}
 
-			if (!lastConnectionId || !existingMessageId) {
+			if (!lastInboxId || !existingMessageId) {
 				throw new Error("Expected an inbox fixture");
 			}
 			const eventId = await ctx.db.insert("emailIngestEvents", {
-				connectionId: lastConnectionId,
+				inboxId: lastInboxId,
+				integrationId,
 				externalEventId: "duplicate-event",
 				externalMessageId: firstEmail.externalMessageId,
 				eventType: "email.received",
@@ -240,23 +265,40 @@ describe("inbound email ingestion", () => {
 				workosOrganizationId: "org_other",
 				active: true,
 			});
-			const firstConnectionId = await ctx.db.insert("emailConnections", {
+			const firstIntegrationId = await ctx.db.insert("emailIntegrations", {
 				organizationId: firstOrganizationId,
 				provider: "resend",
+				status: "connected",
+				workosOrganizationId: "org_merimoar",
+				workosUserId: "user_adam",
+				workosDataIntegrationId: "data_integration_resend",
+				workosConnectedAccountId: "connected_account_resend",
+				workosConnectedAccountUpdatedAt: 1_000,
+			});
+			const secondIntegrationId = await ctx.db.insert("emailIntegrations", {
+				organizationId: secondOrganizationId,
+				provider: "resend",
+				status: "connected",
+				workosOrganizationId: "org_other",
+				workosUserId: "user_other",
+				workosDataIntegrationId: "data_integration_other",
+				workosConnectedAccountId: "connected_account_other",
+				workosConnectedAccountUpdatedAt: 1_000,
+			});
+			const firstInboxId = await ctx.db.insert("emailInboxes", {
+				organizationId: firstOrganizationId,
 				displayName: "Support",
 				address: "support@merimoar.test",
 				status: "active",
 			});
-			const secondConnectionId = await ctx.db.insert("emailConnections", {
+			const secondInboxId = await ctx.db.insert("emailInboxes", {
 				organizationId: firstOrganizationId,
-				provider: "resend",
 				displayName: "Sales",
 				address: "sales@merimoar.test",
 				status: "active",
 			});
-			const otherConnectionId = await ctx.db.insert("emailConnections", {
+			const otherInboxId = await ctx.db.insert("emailInboxes", {
 				organizationId: secondOrganizationId,
-				provider: "resend",
 				displayName: "Other",
 				address: "inbox@other.test",
 				status: "active",
@@ -265,19 +307,22 @@ describe("inbound email ingestion", () => {
 			const eventIds = await Promise.all(
 				[
 					{
-						connectionId: firstConnectionId,
+						inboxId: firstInboxId,
+						integrationId: firstIntegrationId,
 						externalEventId: "contact-event-new",
 						externalMessageId: "contact-message-new",
 						receivedAt: 3_000,
 					},
 					{
-						connectionId: secondConnectionId,
+						inboxId: secondInboxId,
+						integrationId: firstIntegrationId,
 						externalEventId: "contact-event-old",
 						externalMessageId: "contact-message-old",
 						receivedAt: 1_000,
 					},
 					{
-						connectionId: otherConnectionId,
+						inboxId: otherInboxId,
+						integrationId: secondIntegrationId,
 						externalEventId: "contact-event-other",
 						externalMessageId: "contact-message-other",
 						receivedAt: 2_000,
@@ -363,26 +408,52 @@ describe("inbound email ingestion", () => {
 		});
 	});
 
-	it("uses a provider thread ID before RFC reply headers when available", async () => {
+	it("scopes provider thread IDs to their integration before RFC reply headers", async () => {
 		const t = convexTest(schema, modules);
-		const { connectionId, eventIds } = await t.run(async (ctx) => {
+		const { eventIds } = await t.run(async (ctx) => {
 			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
 				workosOrganizationId: "org_merimoar",
 				active: true,
 			});
-			const connectionId = await ctx.db.insert("emailConnections", {
+			const integrationId = await ctx.db.insert("emailIntegrations", {
 				organizationId,
-				provider: "future-provider",
+				provider: "resend",
+				status: "connected",
+				workosOrganizationId: "org_merimoar",
+				workosUserId: "user_adam",
+				workosDataIntegrationId: "data_integration_resend",
+				workosConnectedAccountId: "connected_account_resend",
+				workosConnectedAccountUpdatedAt: 1_000,
+			});
+			const secondIntegrationId = await ctx.db.insert("emailIntegrations", {
+				organizationId,
+				provider: "resend",
+				status: "connected",
+				workosOrganizationId: "org_merimoar",
+				workosUserId: "user_alex",
+				workosDataIntegrationId: "data_integration_resend_second",
+				workosConnectedAccountId: "connected_account_resend_second",
+				workosConnectedAccountUpdatedAt: 1_000,
+			});
+			const inboxId = await ctx.db.insert("emailInboxes", {
+				organizationId,
 				displayName: "Operations",
 				address: "operations@merimoar.test",
 				status: "active",
 			});
 			const eventIds = await Promise.all(
-				["provider-event-1", "provider-event-2"].map((externalEventId, index) =>
+				[
+					{ externalEventId: "provider-event-1", integrationId },
+					{ externalEventId: "provider-event-2", integrationId },
+					{
+						externalEventId: "provider-event-3",
+						integrationId: secondIntegrationId,
+					},
+				].map((event, index) =>
 					ctx.db.insert("emailIngestEvents", {
-						connectionId,
-						externalEventId,
+						inboxId,
+						...event,
 						externalMessageId: `provider-message-${index + 1}`,
 						eventType: "email.received",
 						status: "queued",
@@ -394,7 +465,7 @@ describe("inbound email ingestion", () => {
 					}),
 				),
 			);
-			return { connectionId, eventIds };
+			return { eventIds };
 		});
 
 		for (const [index, eventId] of eventIds.entries()) {
@@ -412,17 +483,16 @@ describe("inbound email ingestion", () => {
 			});
 		}
 
-		const threads = await t.run(async (ctx) =>
-			ctx.db
-				.query("emailThreads")
-				.withIndex("by_connection_id_and_external_thread_id", (query) =>
-					query
-						.eq("connectionId", connectionId)
-						.eq("externalThreadId", "provider-thread-1"),
-				)
-				.collect(),
-		);
+		const state = await t.run(async (ctx) => {
+			return {
+				references: await ctx.db
+					.query("emailThreadExternalReferences")
+					.collect(),
+				threads: await ctx.db.query("emailThreads").collect(),
+			};
+		});
 
-		expect(threads).toHaveLength(1);
+		expect(state.references).toHaveLength(2);
+		expect(state.threads).toHaveLength(2);
 	});
 });

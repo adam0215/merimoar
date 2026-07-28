@@ -16,16 +16,16 @@ import { Input } from "#/components/ui/input.tsx";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
-export function RemoveEmailConnectionDialog({
-	connectionId,
+export function RemoveEmailInboxDialog({
+	inboxId,
 	displayName,
 	address,
 }: {
-	connectionId: Id<"emailConnections">;
+	inboxId: Id<"emailInboxes">;
 	displayName: string;
 	address: string;
 }) {
-	const removeConnection = useMutation(api.email.connections.remove);
+	const removeInbox = useMutation(api.email.inboxes.remove);
 	const [open, setOpen] = useState(false);
 	const [confirmation, setConfirmation] = useState("");
 	const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -49,15 +49,14 @@ export function RemoveEmailConnectionDialog({
 
 		setIsSubmitting(true);
 		setSubmissionError(null);
-
 		try {
-			await removeConnection({ connectionId });
+			await removeInbox({ inboxId });
 			setOpen(false);
 		} catch (error) {
 			setSubmissionError(
 				error instanceof Error
 					? error.message
-					: "The connection could not be removed. Try again.",
+					: "The inbox could not be removed.",
 			);
 		} finally {
 			setIsSubmitting(false);
@@ -80,23 +79,23 @@ export function RemoveEmailConnectionDialog({
 			</DialogTrigger>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
-					<DialogTitle>Remove connection</DialogTitle>
+					<DialogTitle>Remove inbox</DialogTitle>
 					<DialogDescription>
-						This stops new email from reaching {displayName}. Previously
-						received email is preserved.
+						New email will no longer be routed to {displayName}. Existing email
+						is preserved.
 					</DialogDescription>
 				</DialogHeader>
 
-				<form id="remove-email-connection" onSubmit={submit}>
+				<form id="remove-email-inbox" onSubmit={submit}>
 					<label
-						htmlFor="remove-email-connection-confirmation"
+						htmlFor="remove-email-inbox-confirmation"
 						className="text-sm font-medium"
 					>
 						Type <span className="break-all text-foreground">{address}</span> to
 						confirm
 					</label>
 					<Input
-						id="remove-email-connection-confirmation"
+						id="remove-email-inbox-confirmation"
 						className="mt-2"
 						value={confirmation}
 						onChange={(event) => {
@@ -119,12 +118,12 @@ export function RemoveEmailConnectionDialog({
 					</DialogClose>
 					<Button
 						type="submit"
-						form="remove-email-connection"
+						form="remove-email-inbox"
 						variant="destructive"
 						disabled={!canSubmit || isSubmitting}
 					>
 						{isSubmitting && <IconLoader2 className="animate-spin" />}
-						Remove connection
+						Remove inbox
 					</Button>
 				</DialogFooter>
 			</DialogContent>

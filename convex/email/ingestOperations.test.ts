@@ -1,7 +1,13 @@
 import type { WorkId } from "@convex-dev/workpool";
 import { describe, expect, it } from "vitest";
 import { api, internal } from "../_generated/api";
-import { createTest, syncWorkosUser } from "../test.setup";
+import type { Id } from "../_generated/dataModel";
+import {
+	createActiveEmailInbox,
+	createConnectedResendIntegration,
+	createTest,
+	syncWorkosUser,
+} from "../test.setup";
 
 const ISSUER = "https://api.workos.com/";
 
@@ -19,28 +25,31 @@ async function createFixture() {
 			email: "other@example.com",
 		}),
 	]);
-	await base.run(async (ctx) => {
-		const organizationId = await ctx.db.insert("organizations", {
-			name: "Merimoar",
-			workosOrganizationId: "org_merimoar",
-			active: true,
-		});
-		const otherOrganizationId = await ctx.db.insert("organizations", {
-			name: "Other",
-			workosOrganizationId: "org_other",
-			active: true,
-		});
-		await ctx.db.insert("organizationMembers", {
-			organizationId,
-			workosUserId: "user_adam",
-			active: true,
-		});
-		await ctx.db.insert("organizationMembers", {
-			organizationId: otherOrganizationId,
-			workosUserId: "user_other",
-			active: true,
-		});
-	});
+	const { organizationId, otherOrganizationId } = await base.run(
+		async (ctx) => {
+			const organizationId = await ctx.db.insert("organizations", {
+				name: "Merimoar",
+				workosOrganizationId: "org_merimoar",
+				active: true,
+			});
+			const otherOrganizationId = await ctx.db.insert("organizations", {
+				name: "Other",
+				workosOrganizationId: "org_other",
+				active: true,
+			});
+			await ctx.db.insert("organizationMembers", {
+				organizationId,
+				workosUserId: "user_adam",
+				active: true,
+			});
+			await ctx.db.insert("organizationMembers", {
+				organizationId: otherOrganizationId,
+				workosUserId: "user_other",
+				active: true,
+			});
+			return { organizationId, otherOrganizationId };
+		},
+	);
 
 	return {
 		base,
@@ -54,18 +63,22 @@ async function createFixture() {
 			subject: "user_other",
 			org_id: "org_other",
 		}),
+		organizationId,
+		otherOrganizationId,
 	};
 }
 
-async function recordEvent(
+async function routeEvent(
 	base: Awaited<ReturnType<typeof createFixture>>["base"],
+	integrationId: Id<"emailIntegrations">,
 	overrides: {
 		externalEventId?: string;
 		receivedForAddresses?: string[];
 		toAddresses?: string[];
 	} = {},
 ) {
-	return await base.mutation(internal.email.ingest.recordResendEvent, {
+	return await base.mutation(internal.email.ingest.routeResendEvent, {
+		integrationId,
 		externalEventId: overrides.externalEventId ?? "event-1",
 		externalMessageId: "message-1",
 		eventType: "email.received",
@@ -80,156 +93,89 @@ async function recordEvent(
 }
 
 describe("failed email ingest operations", () => {
-	it("lists and replays only through the exact owned matching connection", async () => {
-		const { actor, base, otherActor } = await createFixture();
-		const receipt = await recordEvent(base);
-		const connectionId = await actor.mutation(api.email.connections.create, {
-			provider: "resend",
+	it("lists and replays only through the exact owned inbox", async () => {
+		const { actor, base, organizationId, otherActor, otherOrganizationId } =
+			await createFixture();
+		const inboxId = await createActiveEmailInbox(actor, {
 			displayName: "Operations",
 			address: "inbox@merimoar.test",
 		});
-		const wrongConnectionId = await actor.mutation(
-			api.email.connections.create,
-			{
-				provider: "resend",
-				displayName: "Wrong inbox",
-				address: "wrong@merimoar.test",
-			},
+		const otherInboxId = await createActiveEmailInbox(otherActor, {
+			displayName: "Other",
+			address: "other@example.test",
+		});
+		const integrationId = await createConnectedResendIntegration(
+			base,
+			organizationId,
 		);
-		const otherConnectionId = await otherActor.mutation(
-			api.email.connections.create,
-			{
-				provider: "resend",
-				displayName: "Other",
-				address: "other@example.test",
-			},
-		);
+		await createConnectedResendIntegration(base, otherOrganizationId, "other");
+		const receipt = await routeEvent(base, integrationId);
+		const eventId = receipt.eventId;
+		if (!eventId) {
+			throw new Error("Expected a routed event");
+		}
+		await base.mutation(internal.email.ingest.recordTerminalProcessingFailure, {
+			eventId,
+			error: "Provider rejected the request",
+			failureKind: "provider",
+			processingGeneration: 0,
+		});
 
 		const failures = await actor.query(
 			api.email.ingestOperations.listFailedEvents,
-			{ connectionId },
+			{ inboxId },
 		);
 		expect(failures).toEqual([
 			expect.objectContaining({
-				eventId: receipt.eventId,
-				connectionId,
-				status: "unroutable",
+				eventId,
+				inboxId,
+				status: "failed",
 				replayCount: 0,
-				reason: "No connection matched this recipient.",
+				reason: "Resend could not load this email.",
 			}),
 		]);
 		expect(failures[0]).not.toHaveProperty("rawPayload");
 		expect(failures[0]).not.toHaveProperty("externalEventId");
-		expect(failures[0]).not.toHaveProperty("externalMessageId");
-		expect(failures[0]).not.toHaveProperty("error");
-		expect(
-			await actor.query(api.email.ingestOperations.listFailedEvents, {
-				connectionId: wrongConnectionId,
-			}),
-		).toEqual([]);
 		await expect(
-			base.query(api.email.ingestOperations.listFailedEvents, {
-				connectionId,
-			}),
+			base.query(api.email.ingestOperations.listFailedEvents, { inboxId }),
 		).rejects.toThrow("Sign in");
 		await expect(
 			actor.query(api.email.ingestOperations.listFailedEvents, {
-				connectionId: otherConnectionId,
+				inboxId: otherInboxId,
 			}),
 		).rejects.toThrow("could not be found");
 		await expect(
 			otherActor.mutation(api.email.ingestOperations.replayFailedEvent, {
-				connectionId,
-				eventId: receipt.eventId,
-			}),
-		).rejects.toThrow("could not be found");
-		await expect(
-			actor.mutation(api.email.ingestOperations.replayFailedEvent, {
-				connectionId: wrongConnectionId,
-				eventId: receipt.eventId,
+				inboxId,
+				eventId,
 			}),
 		).rejects.toThrow("could not be found");
 
 		expect(
 			await actor.mutation(api.email.ingestOperations.replayFailedEvent, {
-				connectionId,
-				eventId: receipt.eventId,
+				inboxId,
+				eventId,
 			}),
 		).toEqual({ status: "queued" });
 		expect(
 			await actor.mutation(api.email.ingestOperations.replayFailedEvent, {
-				connectionId,
-				eventId: receipt.eventId,
+				inboxId,
+				eventId,
 			}),
 		).toEqual({ status: "already_queued" });
-		expect(
-			await base.run(async (ctx) => ctx.db.get(receipt.eventId)),
-		).toMatchObject({
-			connectionId,
-			status: "queued",
-			replayCount: 1,
-			processingGeneration: 1,
-		});
 	});
 
-	it("rejects an address row that conflicts with the event connection", async () => {
-		const { actor, base } = await createFixture();
-		const connectionId = await actor.mutation(api.email.connections.create, {
-			provider: "resend",
-			displayName: "Operations",
-			address: "inbox@merimoar.test",
-		});
-		const wrongConnectionId = await actor.mutation(
-			api.email.connections.create,
-			{
-				provider: "resend",
-				displayName: "Wrong inbox",
-				address: "wrong@merimoar.test",
-			},
-		);
-		const receipt = await recordEvent(base, {
-			externalEventId: "event-conflicting-route",
-			toAddresses: ["inbox@merimoar.test"],
-		});
-		await base.run(async (ctx) => {
-			await ctx.db.patch(receipt.eventId, {
-				status: "failed",
-				failureKind: "unknown",
-			});
-			await ctx.db.insert("emailIngestRecipients", {
-				eventId: receipt.eventId,
-				address: "wrong@merimoar.test",
-				status: "failed",
-				receivedAt: 1_000,
-			});
-		});
-
-		expect(
-			await actor.query(api.email.ingestOperations.listFailedEvents, {
-				connectionId: wrongConnectionId,
-			}),
-		).toEqual([]);
-		await expect(
-			actor.mutation(api.email.ingestOperations.replayFailedEvent, {
-				connectionId: wrongConnectionId,
-				eventId: receipt.eventId,
-			}),
-		).rejects.toThrow("could not be found");
-		expect(
-			await actor.query(api.email.ingestOperations.listFailedEvents, {
-				connectionId,
-			}),
-		).toHaveLength(0);
-	});
-
-	it("routes an authoritative received_for BCC recipient before the to cap", async () => {
-		const { actor, base } = await createFixture();
-		const connectionId = await actor.mutation(api.email.connections.create, {
-			provider: "resend",
+	it("routes an authoritative received_for recipient through the organization router", async () => {
+		const { actor, base, organizationId } = await createFixture();
+		const inboxId = await createActiveEmailInbox(actor, {
 			displayName: "BCC inbox",
 			address: "bcc@merimoar.test",
 		});
-		const receipt = await recordEvent(base, {
+		const integrationId = await createConnectedResendIntegration(
+			base,
+			organizationId,
+		);
+		const receipt = await routeEvent(base, integrationId, {
 			externalEventId: "event-bcc",
 			receivedForAddresses: [" BCC@Merimoar.Test "],
 			toAddresses: Array.from(
@@ -237,38 +183,72 @@ describe("failed email ingest operations", () => {
 				(_, index) => `recipient-${index}@example.test`,
 			),
 		});
+		const eventId = receipt.eventId;
+		if (!eventId) {
+			throw new Error("Expected a routed event");
+		}
 		expect(receipt.status).toBe("accepted");
 
 		const state = await base.run(async (ctx) => ({
-			event: await ctx.db.get(receipt.eventId),
+			event: await ctx.db.get(eventId),
 			recipients: await ctx.db
 				.query("emailIngestRecipients")
 				.withIndex("by_event_id_and_address", (index) =>
-					index.eq("eventId", receipt.eventId),
+					index.eq("eventId", eventId),
 				)
 				.collect(),
 		}));
-		expect(state.event?.connectionId).toBe(connectionId);
+		expect(state.event).toMatchObject({ inboxId, integrationId });
 		expect(state.recipients).toHaveLength(100);
 		expect(state.recipients.map((recipient) => recipient.address)).toContain(
 			"bcc@merimoar.test",
 		);
 	});
 
+	it("does not route an integration into another organization", async () => {
+		const { base, organizationId, otherActor } = await createFixture();
+		await createActiveEmailInbox(otherActor, {
+			displayName: "Other",
+			address: "shared@example.test",
+		});
+		const integrationId = await createConnectedResendIntegration(
+			base,
+			organizationId,
+		);
+		const receipt = await routeEvent(base, integrationId, {
+			externalEventId: "event-cross-organization",
+			toAddresses: ["shared@example.test"],
+		});
+
+		expect(receipt.status).toBe("unroutable");
+		const eventId = receipt.eventId;
+		if (!eventId) {
+			throw new Error("Expected an unroutable event");
+		}
+		const event = await base.run(async (ctx) => ctx.db.get(eventId));
+		expect(event).toMatchObject({ integrationId });
+		expect(event).not.toHaveProperty("inboxId");
+	});
+
 	it("tracks attempts and ignores stale Workpool generations", async () => {
-		const { actor, base } = await createFixture();
-		const connectionId = await actor.mutation(api.email.connections.create, {
-			provider: "resend",
+		const { actor, base, organizationId } = await createFixture();
+		const inboxId = await createActiveEmailInbox(actor, {
 			displayName: "Operations",
 			address: "inbox@merimoar.test",
 		});
-		const receipt = await recordEvent(base, {
+		const integrationId = await createConnectedResendIntegration(
+			base,
+			organizationId,
+		);
+		const receipt = await routeEvent(base, integrationId, {
 			externalEventId: "event-state-machine",
 			toAddresses: ["inbox@merimoar.test"],
 		});
-		const initialEvent = await base.run(async (ctx) =>
-			ctx.db.get(receipt.eventId),
-		);
+		const eventId = receipt.eventId;
+		if (!eventId) {
+			throw new Error("Expected a routed event");
+		}
+		const initialEvent = await base.run(async (ctx) => ctx.db.get(eventId));
 		if (!initialEvent?.workId) {
 			throw new Error("Expected Workpool work");
 		}
@@ -277,29 +257,27 @@ describe("failed email ingest operations", () => {
 		expect(
 			(
 				await base.mutation(internal.email.ingest.prepareProcessingAttempt, {
-					eventId: receipt.eventId,
+					eventId,
 					processingGeneration: 0,
 				})
-			)?.connection._id,
-		).toBe(connectionId);
+			)?.inbox._id,
+		).toBe(inboxId);
 		await base.mutation(internal.email.ingestQueue.completeEmailIngestWork, {
 			workId: initialWorkId,
-			context: { eventId: receipt.eventId, processingGeneration: 0 },
+			context: { eventId, processingGeneration: 0 },
 			result: { kind: "failed", error: "Provider unavailable" },
 		});
 		await actor.mutation(api.email.ingestOperations.replayFailedEvent, {
-			connectionId,
-			eventId: receipt.eventId,
+			inboxId,
+			eventId,
 		});
 		await base.mutation(internal.email.ingestQueue.completeEmailIngestWork, {
 			workId: initialWorkId,
-			context: { eventId: receipt.eventId, processingGeneration: 0 },
+			context: { eventId, processingGeneration: 0 },
 			result: { kind: "failed", error: "Stale completion" },
 		});
 
-		expect(
-			await base.run(async (ctx) => ctx.db.get(receipt.eventId)),
-		).toMatchObject({
+		expect(await base.run(async (ctx) => ctx.db.get(eventId))).toMatchObject({
 			status: "queued",
 			attempts: 1,
 			replayCount: 1,
@@ -307,40 +285,47 @@ describe("failed email ingest operations", () => {
 		});
 	});
 
-	it("shows but does not replay a failure through a disabled connection", async () => {
-		const { actor, base } = await createFixture();
-		const connectionId = await actor.mutation(api.email.connections.create, {
-			provider: "resend",
+	it("shows but does not replay a failure through a disabled inbox", async () => {
+		const { actor, base, organizationId } = await createFixture();
+		const inboxId = await createActiveEmailInbox(actor, {
 			displayName: "Operations",
 			address: "inbox@merimoar.test",
 		});
-		const receipt = await recordEvent(base, {
+		const integrationId = await createConnectedResendIntegration(
+			base,
+			organizationId,
+		);
+		const receipt = await routeEvent(base, integrationId, {
 			externalEventId: "event-disabled",
 			toAddresses: ["inbox@merimoar.test"],
 		});
+		const eventId = receipt.eventId;
+		if (!eventId) {
+			throw new Error("Expected a routed event");
+		}
 		await base.mutation(internal.email.ingest.recordTerminalProcessingFailure, {
-			eventId: receipt.eventId,
+			eventId,
 			error: "Permanent provider failure",
 			failureKind: "provider",
 			processingGeneration: 0,
 		});
-		await actor.mutation(api.email.connections.remove, { connectionId });
+		await actor.mutation(api.email.inboxes.remove, { inboxId });
 
 		expect(
 			await actor.query(api.email.ingestOperations.listFailedEvents, {
-				connectionId,
+				inboxId,
 			}),
 		).toEqual([
 			expect.objectContaining({
-				eventId: receipt.eventId,
+				eventId,
 				canReplay: false,
 			}),
 		]);
 		await expect(
 			actor.mutation(api.email.ingestOperations.replayFailedEvent, {
-				connectionId,
-				eventId: receipt.eventId,
+				inboxId,
+				eventId,
 			}),
-		).rejects.toThrow("Reactivate");
+		).rejects.toThrow("inbox and integration");
 	});
 });

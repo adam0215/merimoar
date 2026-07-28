@@ -40,20 +40,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const pathname = useRouterState({
 		select: (state) => state.location.pathname,
 	});
-	const connections = useQuery(api.email.reader.listConnections, {});
-	const connectionAddresses =
-		connections
-			?.filter((connection) => connection.status === "active")
-			.map((connection) => connection.address) ?? [];
+	const inboxes = useQuery(api.email.reader.listInboxes, {});
+	const inboxAddresses = inboxes?.map((inbox) => inbox.address) ?? [];
 
 	return (
 		<SidebarProvider className="app-shell-enter pt-14">
 			<AppNotificationCenter />
 			<AppSidebar />
-			<AppHeader
-				pathname={pathname}
-				connectionAddresses={connectionAddresses}
-			/>
+			<AppHeader pathname={pathname} inboxAddresses={inboxAddresses} />
 			<SidebarInset className="h-[calc(100svh-3.5rem)] min-h-0 overflow-hidden">
 				{children}
 			</SidebarInset>
@@ -63,10 +57,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function AppHeader({
 	pathname,
-	connectionAddresses,
+	inboxAddresses,
 }: {
 	pathname: string;
-	connectionAddresses: string[];
+	inboxAddresses: string[];
 }) {
 	const { state } = useSidebar();
 
@@ -97,7 +91,7 @@ function AppHeader({
 				<div className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
 					<p className="text-sm font-medium">{getPageTitle(pathname)}</p>
 					{pathname === "/email" && (
-						<ConnectionAddressSummary addresses={connectionAddresses} />
+						<InboxAddressSummary addresses={inboxAddresses} />
 					)}
 				</div>
 			</div>
@@ -105,7 +99,7 @@ function AppHeader({
 	);
 }
 
-function ConnectionAddressSummary({ addresses }: { addresses: string[] }) {
+function InboxAddressSummary({ addresses }: { addresses: string[] }) {
 	const firstAddress = addresses[0];
 	if (!firstAddress) {
 		return null;
@@ -126,7 +120,7 @@ function ConnectionAddressSummary({ addresses }: { addresses: string[] }) {
 					<button
 						type="button"
 						className="max-w-full truncate text-left text-xs text-muted-foreground"
-						aria-label={`Active email connections: ${addresses.join(", ")}`}
+						aria-label={`Email inboxes: ${addresses.join(", ")}`}
 					/>
 				}
 			>

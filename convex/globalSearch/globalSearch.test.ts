@@ -42,15 +42,25 @@ async function createFixture() {
 			workosUserId: "user_other",
 			active: true,
 		});
-		const connectionId = await ctx.db.insert("emailConnections", {
+		const inboxId = await ctx.db.insert("emailInboxes", {
 			organizationId,
-			provider: "resend",
 			displayName: "Support",
 			address: "inbox@merimoar.test",
 			status: "active",
 		});
+		const integrationId = await ctx.db.insert("emailIntegrations", {
+			organizationId,
+			provider: "resend",
+			status: "connected",
+			workosOrganizationId: "org_merimoar",
+			workosUserId: "user_adam",
+			workosDataIntegrationId: "data_integration_resend",
+			workosConnectedAccountId: "connected_account_resend",
+			workosConnectedAccountUpdatedAt: 1_000,
+		});
 		const ingestEventId = await ctx.db.insert("emailIngestEvents", {
-			connectionId,
+			inboxId,
+			integrationId,
 			externalEventId: "contact-event",
 			externalMessageId: "contact-message",
 			eventType: "email.received",

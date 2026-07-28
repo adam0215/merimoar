@@ -13,43 +13,58 @@ const MAX_VISIBLE_FAILURES = 50;
 function describeFailure(event: Doc<"emailIngestEvents">) {
 	switch (event.failureKind) {
 		case "unroutable":
-			return "No connection matched this recipient.";
+			return "No inbox matched this recipient.";
 		case "provider":
 			return "Resend could not load this email.";
 		case "configuration":
 			return "Email ingest is not configured.";
-		case "connection":
-			return "The email connection is inactive.";
+		case "route_inactive":
+			return "The email inbox or integration is inactive.";
 		default:
 			return "Email processing failed.";
 	}
 }
 
-async function requireOwnedConnection(
+async function requireOwnedInbox(
 	ctx: QueryCtx | MutationCtx,
-	connectionId: Doc<"emailConnections">["_id"],
+	inboxId: Doc<"emailInboxes">["_id"],
 ) {
 	const actor = await requireActor(ctx);
-	const connection = await ctx.db.get(connectionId);
-	if (connection?.organizationId !== actor.organization._id) {
+	const inbox = await ctx.db.get(inboxId);
+	if (inbox?.organizationId !== actor.organization._id) {
 		throwFailedEventNotFound();
 	}
-	return connection;
+	return inbox;
+}
+
+async function inboxCanProcessEvent(
+	ctx: QueryCtx | MutationCtx,
+	inbox: Doc<"emailInboxes">,
+	event: Doc<"emailIngestEvents">,
+) {
+	if (inbox.status !== "active" || !event.integrationId) {
+		return false;
+	}
+	const integration = await ctx.db.get(event.integrationId);
+	return (
+		integration?.organizationId === inbox.organizationId &&
+		integration.status === "connected"
+	);
 }
 
 export const listFailedEvents = query({
 	args: {
-		connectionId: v.id("emailConnections"),
+		inboxId: v.id("emailInboxes"),
 	},
 	handler: async (ctx, args) => {
-		const connection = await requireOwnedConnection(ctx, args.connectionId);
+		const inbox = await requireOwnedInbox(ctx, args.inboxId);
 		const recipientRows = (
 			await Promise.all(
 				(["failed", "unroutable"] as const).map((status) =>
 					ctx.db
 						.query("emailIngestRecipients")
 						.withIndex("by_address_and_status_and_received_at", (index) =>
-							index.eq("address", connection.address).eq("status", status),
+							index.eq("address", inbox.address).eq("status", status),
 						)
 						.order("desc")
 						.take(MAX_EVENTS_PER_STATUS),
@@ -63,25 +78,24 @@ export const listFailedEvents = query({
 				if (
 					!event ||
 					(event.status !== "failed" && event.status !== "unroutable") ||
-					(event.connectionId !== undefined &&
-						event.connectionId !== connection._id)
+					(event.inboxId !== undefined && event.inboxId !== inbox._id)
 				) {
 					return null;
 				}
 
 				return {
 					eventId: event._id,
-					connectionId: connection._id,
+					inboxId: inbox._id,
 					status: event.status,
 					receivedAt: event.receivedAt,
 					attempts: event.attempts,
 					replayCount: event.replayCount ?? 0,
 					reason: describeFailure(event),
-					canReplay: connection.status === "active",
-					connection: {
-						displayName: connection.displayName,
-						address: connection.address,
-						status: connection.status,
+					canReplay: await inboxCanProcessEvent(ctx, inbox, event),
+					inbox: {
+						displayName: inbox.displayName,
+						address: inbox.address,
+						status: inbox.status,
 					},
 				};
 			}),
@@ -96,7 +110,7 @@ export const listFailedEvents = query({
 
 export const replayFailedEvent = mutation({
 	args: {
-		connectionId: v.id("emailConnections"),
+		inboxId: v.id("emailInboxes"),
 		eventId: v.id("emailIngestEvents"),
 	},
 	returns: v.union(
@@ -105,19 +119,18 @@ export const replayFailedEvent = mutation({
 		v.object({ status: v.literal("already_processed") }),
 	),
 	handler: async (ctx, args) => {
-		const connection = await requireOwnedConnection(ctx, args.connectionId);
+		const inbox = await requireOwnedInbox(ctx, args.inboxId);
 		const event = await ctx.db.get(args.eventId);
 		const matchingRecipient = await ctx.db
 			.query("emailIngestRecipients")
 			.withIndex("by_event_id_and_address", (index) =>
-				index.eq("eventId", args.eventId).eq("address", connection.address),
+				index.eq("eventId", args.eventId).eq("address", inbox.address),
 			)
 			.first();
 		if (
 			!event ||
 			!matchingRecipient ||
-			(event.connectionId !== undefined &&
-				event.connectionId !== connection._id)
+			(event.inboxId !== undefined && event.inboxId !== inbox._id)
 		) {
 			throwFailedEventNotFound();
 		}
@@ -130,16 +143,16 @@ export const replayFailedEvent = mutation({
 		if (event.status !== "failed" && event.status !== "unroutable") {
 			throwFailedEventNotFound();
 		}
-		if (connection.status !== "active") {
+		if (!(await inboxCanProcessEvent(ctx, inbox, event))) {
 			throw new ConvexError({
-				code: "EMAIL_CONNECTION_INACTIVE",
-				message: "Reactivate this email connection before retrying.",
+				code: "EMAIL_ROUTE_INACTIVE",
+				message: "Activate the inbox and integration before retrying.",
 			});
 		}
 
 		const processingGeneration = (event.processingGeneration ?? 0) + 1;
 		await ctx.db.patch(event._id, {
-			connectionId: connection._id,
+			inboxId: inbox._id,
 			status: "queued",
 			error: undefined,
 			failureKind: undefined,

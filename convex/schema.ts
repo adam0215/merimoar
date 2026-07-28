@@ -16,29 +16,82 @@ export default defineSchema({
 		active: v.boolean(),
 	}).index("by_workos_organization_id", ["workosOrganizationId"]),
 
-	emailConnections: defineTable({
+	emailIntegrations: defineTable({
 		organizationId: v.id("organizations"),
-		provider: v.string(),
+		provider: v.literal("resend"),
+		status: v.union(
+			v.literal("connected"),
+			v.literal("needs_reauthorization"),
+			v.literal("disconnected"),
+		),
+		workosUserId: v.string(),
+		workosOrganizationId: v.string(),
+		workosDataIntegrationId: v.string(),
+		workosConnectedAccountId: v.string(),
+		workosConnectedAccountUpdatedAt: v.number(),
+		webhookId: v.optional(v.string()),
+		webhookSecret: v.optional(v.string()),
+		webhookProvisionedAt: v.optional(v.number()),
+	})
+		.index("by_organization_id_and_provider", ["organizationId", "provider"])
+		.index("by_workos_connected_account_id", ["workosConnectedAccountId"]),
+
+	emailIntegrationWebhookCleanupTasks: defineTable({
+		integrationId: v.id("emailIntegrations"),
+		webhookId: v.string(),
+		workosOrganizationId: v.string(),
+		workosUserId: v.string(),
+		attempts: v.number(),
+		nextAttemptAt: v.number(),
+		completedAt: v.optional(v.number()),
+	})
+		.index("by_integration_id_and_webhook_id", ["integrationId", "webhookId"])
+		.index("by_completed_at_and_next_attempt_at", [
+			"completedAt",
+			"nextAttemptAt",
+		]),
+
+	emailInboxes: defineTable({
+		organizationId: v.id("organizations"),
 		displayName: v.string(),
 		address: v.string(),
 		status: v.union(v.literal("active"), v.literal("disabled")),
 	})
 		.index("by_organization_id", ["organizationId"])
-		.index("by_address", ["address"]),
+		.index("by_organization_id_and_address", ["organizationId", "address"])
+		.index("by_organization_id_and_status", ["organizationId", "status"]),
+
+	emailIntegrationSyncEvents: defineTable({
+		source: v.literal("workos_pipes"),
+		sourceEventId: v.string(),
+		eventType: v.union(
+			v.literal("pipes.connected_account.connected"),
+			v.literal("pipes.connected_account.disconnected"),
+			v.literal("pipes.connected_account.reauthorization_needed"),
+		),
+		processedAt: v.number(),
+	}).index("by_source_and_source_event_id", ["source", "sourceEventId"]),
 
 	emailThreads: defineTable({
 		organizationId: v.id("organizations"),
-		connectionId: v.id("emailConnections"),
-		externalThreadId: v.optional(v.string()),
+		inboxId: v.id("emailInboxes"),
 		latestMessageId: v.optional(v.id("emailMessages")),
 		lastActivityAt: v.number(),
+	}).index("by_organization_id_and_last_activity_at", [
+		"organizationId",
+		"lastActivityAt",
+	]),
+
+	emailThreadExternalReferences: defineTable({
+		threadId: v.id("emailThreads"),
+		inboxId: v.id("emailInboxes"),
+		integrationId: v.id("emailIntegrations"),
+		externalThreadId: v.string(),
 	})
-		.index("by_organization_id_and_last_activity_at", [
-			"organizationId",
-			"lastActivityAt",
-		])
-		.index("by_connection_id_and_external_thread_id", [
-			"connectionId",
+		.index("by_thread_id", ["threadId"])
+		.index("by_inbox_id_and_integration_id_and_external_thread_id", [
+			"inboxId",
+			"integrationId",
 			"externalThreadId",
 		]),
 
@@ -256,7 +309,8 @@ export default defineSchema({
 		]),
 
 	emailMessages: defineTable({
-		connectionId: v.id("emailConnections"),
+		inboxId: v.id("emailInboxes"),
+		integrationId: v.id("emailIntegrations"),
 		threadId: v.id("emailThreads"),
 		senderContactId: v.id("contacts"),
 		externalMessageId: v.string(),
@@ -279,17 +333,19 @@ export default defineSchema({
 			"senderContactId",
 			"receivedAt",
 		])
-		.index("by_connection_id_and_external_message_id", [
-			"connectionId",
+		.index("by_inbox_id_and_integration_id_and_external_message_id", [
+			"inboxId",
+			"integrationId",
 			"externalMessageId",
 		])
-		.index("by_connection_id_and_internet_message_id", [
-			"connectionId",
+		.index("by_inbox_id_and_internet_message_id", [
+			"inboxId",
 			"internetMessageId",
 		]),
 
 	emailIngestEvents: defineTable({
-		connectionId: v.optional(v.id("emailConnections")),
+		inboxId: v.optional(v.id("emailInboxes")),
+		integrationId: v.id("emailIntegrations"),
 		externalEventId: v.string(),
 		externalMessageId: v.string(),
 		eventType: v.string(),
@@ -303,12 +359,10 @@ export default defineSchema({
 		replayCount: v.optional(v.number()),
 		processingGeneration: v.optional(v.number()),
 		workId: v.optional(v.string()),
-	})
-		.index("by_external_event_id", ["externalEventId"])
-		.index("by_connection_id_and_external_message_id", [
-			"connectionId",
-			"externalMessageId",
-		]),
+	}).index("by_integration_id_and_external_event_id", [
+		"integrationId",
+		"externalEventId",
+	]),
 
 	emailIngestRecipients: defineTable({
 		eventId: v.id("emailIngestEvents"),

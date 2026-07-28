@@ -1,14 +1,13 @@
 import { isNonRetryableError, type WorkId } from "@convex-dev/workpool";
 import { describe, expect, it } from "vitest";
-import { api, internal } from "../_generated/api";
-import { createTest, syncWorkosUser } from "../test.setup";
+import { internal } from "../_generated/api";
+import { createTest } from "../test.setup";
 import {
 	classifyResendRetrievalError,
 	createNonRetryableIngestError,
+	isResendAuthorizationError,
 	parseNonRetryableIngestError,
 } from "./ingestErrors";
-
-const ISSUER = "https://api.workos.com/";
 
 describe("email ingest retry classification", () => {
 	it("retries only network-like, rate-limit, and server retrieval failures", () => {
@@ -26,6 +25,15 @@ describe("email ingest retry classification", () => {
 			retryable: false,
 			failureKind: "unknown",
 		});
+	});
+
+	it("requires reauthorization only when Resend rejects authorization", () => {
+		for (const statusCode of [401, 403]) {
+			expect(isResendAuthorizationError({ statusCode })).toBe(true);
+		}
+		for (const statusCode of [null, 400, 404, 429, 500]) {
+			expect(isResendAuthorizationError({ statusCode })).toBe(false);
+		}
 	});
 
 	it("marks deterministic normalization and storage failures non-retryable", () => {
@@ -46,79 +54,26 @@ describe("email ingest retry classification", () => {
 		);
 	});
 
-	it("terminates configuration failures without retry and stores a sanitized state", async () => {
+	it("sanitizes exhausted transient failures and preserves terminal classification", async () => {
 		const test = createTest();
-		await syncWorkosUser(test, {
-			id: "user_adam",
-			name: "Adam",
-			email: "adam@merimoar.com",
-		});
-		const actor = test.withIdentity({
-			issuer: ISSUER,
-			subject: "user_adam",
-			org_id: "org_merimoar",
-		});
-		await test.run(async (ctx) => {
+		const { eventId, integrationId, workId } = await test.run(async (ctx) => {
 			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
 				workosOrganizationId: "org_merimoar",
 				active: true,
 			});
-			await ctx.db.insert("organizationMembers", {
+			const integrationId = await ctx.db.insert("emailIntegrations", {
 				organizationId,
+				provider: "resend",
+				status: "connected",
+				workosOrganizationId: "org_merimoar",
 				workosUserId: "user_adam",
-				active: true,
+				workosDataIntegrationId: "data_integration_resend",
+				workosConnectedAccountId: "connected_account_resend",
+				workosConnectedAccountUpdatedAt: 1_000,
 			});
-		});
-		const connectionId = await actor.mutation(api.email.connections.create, {
-			provider: "resend",
-			displayName: "Operations",
-			address: "inbox@merimoar.test",
-		});
-		const eventId = await test.run(async (ctx) => {
 			const eventId = await ctx.db.insert("emailIngestEvents", {
-				connectionId,
-				externalEventId: "event-no-api-key",
-				externalMessageId: "message-no-api-key",
-				eventType: "email.received",
-				status: "queued",
-				rawPayload: '{"secret":"not public"}',
-				receivedAt: 1_000,
-				attempts: 0,
-				replayCount: 0,
-				processingGeneration: 0,
-			});
-			await ctx.db.insert("emailIngestRecipients", {
-				eventId,
-				address: "inbox@merimoar.test",
-				status: "queued",
-				receivedAt: 1_000,
-			});
-			return eventId;
-		});
-
-		let thrown: unknown;
-		try {
-			await test.action(internal.email.resend.processInboundEmail, {
-				eventId,
-				processingGeneration: 0,
-			});
-		} catch (error) {
-			thrown = error;
-		}
-		expect(isNonRetryableError(thrown)).toBe(true);
-		expect(await test.run(async (ctx) => ctx.db.get(eventId))).toMatchObject({
-			status: "failed",
-			attempts: 1,
-			failureKind: "configuration",
-			error: "Email ingest is not configured",
-		});
-	});
-
-	it("sanitizes exhausted transient failures and preserves terminal classification", async () => {
-		const test = createTest();
-		const { eventId, workId } = await test.run(async (ctx) => {
-			const eventId = await ctx.db.insert("emailIngestEvents", {
+				integrationId,
 				externalEventId: "event-completion",
 				externalMessageId: "message-completion",
 				eventType: "email.received",
@@ -130,7 +85,7 @@ describe("email ingest retry classification", () => {
 				processingGeneration: 0,
 				workId: "work-id",
 			});
-			return { eventId, workId: "work-id" as WorkId };
+			return { eventId, integrationId, workId: "work-id" as WorkId };
 		});
 		await test.mutation(internal.email.ingestQueue.completeEmailIngestWork, {
 			workId,
@@ -148,6 +103,7 @@ describe("email ingest retry classification", () => {
 
 		const terminalEventId = await test.run(async (ctx) =>
 			ctx.db.insert("emailIngestEvents", {
+				integrationId,
 				externalEventId: "event-terminal-completion",
 				externalMessageId: "message-terminal-completion",
 				eventType: "email.received",

@@ -24,8 +24,6 @@ export const normalizedInboundEmailValidator = v.object({
 });
 
 export const emailIngestStatusValidator = v.union(
-	v.literal("pending"),
-	v.literal("ignored"),
 	v.literal("unroutable"),
 	v.literal("queued"),
 	v.literal("processed"),
@@ -36,7 +34,7 @@ export const emailIngestFailureKindValidator = v.union(
 	v.literal("unroutable"),
 	v.literal("provider"),
 	v.literal("configuration"),
-	v.literal("connection"),
+	v.literal("route_inactive"),
 	v.literal("unknown"),
 );
 

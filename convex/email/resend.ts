@@ -6,12 +6,14 @@ import { Resend } from "resend";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
-import { env, internalAction } from "../_generated/server";
+import { internalAction } from "../_generated/server";
 import {
 	classifyResendRetrievalError,
 	createNonRetryableIngestError,
+	isResendAuthorizationError,
 } from "./ingestErrors";
 import { normalizeResendEmail } from "./normalize";
+import { fetchResendAccess } from "./resendAccess";
 
 async function failPermanently(
 	ctx: ActionCtx,
@@ -61,15 +63,30 @@ export const processInboundEmail = internalAction({
 			return null;
 		}
 
-		if (!env.RESEND_API_KEY) {
+		const access = await fetchResendAccess(ingestContext.integration);
+		if (!access.active) {
+			await ctx.runMutation(
+				internal.email.integrations.markNeedsReauthorization,
+				{
+					integrationId: ingestContext.integration._id,
+					expectedConnectedAccountUpdatedAt:
+						ingestContext.integration.workosConnectedAccountUpdatedAt,
+				},
+			);
 			return await failPermanently(ctx, {
 				...args,
-				failureKind: "configuration",
-				message: "Email ingest is not configured",
+				failureKind:
+					access.error === "missing_required_scope"
+						? "configuration"
+						: "route_inactive",
+				message:
+					access.error === "missing_required_scope"
+						? "Resend must grant the full_access scope"
+						: "The Resend account must be reauthorized",
 			});
 		}
 
-		const resend = new Resend(env.RESEND_API_KEY);
+		const resend = new Resend(access.token);
 		const { data, error } = await resend.emails.receiving.get(
 			ingestContext.event.externalMessageId,
 		);
@@ -77,6 +94,16 @@ export const processInboundEmail = internalAction({
 			const classification = classifyResendRetrievalError(error);
 			if (classification.retryable) {
 				throw new Error("Resend is temporarily unavailable");
+			}
+			if (isResendAuthorizationError(error)) {
+				await ctx.runMutation(
+					internal.email.integrations.markNeedsReauthorization,
+					{
+						integrationId: ingestContext.integration._id,
+						expectedConnectedAccountUpdatedAt:
+							ingestContext.integration.workosConnectedAccountUpdatedAt,
+					},
+				);
 			}
 			return await failPermanently(ctx, {
 				...args,

@@ -62,20 +62,30 @@ describe("contact reader", () => {
 					firstSeenAt: 4_000,
 					lastSeenAt: 4_000,
 				});
-				const connectionId = await ctx.db.insert("emailConnections", {
+				const inboxId = await ctx.db.insert("emailInboxes", {
 					organizationId,
-					provider: "resend",
 					displayName: "Support",
 					address: "support@merimoar.test",
 					status: "active",
 				});
+				const integrationId = await ctx.db.insert("emailIntegrations", {
+					organizationId,
+					provider: "resend",
+					status: "connected",
+					workosOrganizationId: "org_merimoar",
+					workosUserId: "user_adam",
+					workosDataIntegrationId: "data_integration_resend",
+					workosConnectedAccountId: "connected_account_resend",
+					workosConnectedAccountUpdatedAt: 1_000,
+				});
 				const threadId = await ctx.db.insert("emailThreads", {
 					organizationId,
-					connectionId,
+					inboxId,
 					lastActivityAt: 3_000,
 				});
 				const messageId = await ctx.db.insert("emailMessages", {
-					connectionId,
+					inboxId,
+					integrationId,
 					threadId,
 					senderContactId: newestContactId,
 					externalMessageId: "message-1",
@@ -185,7 +195,7 @@ describe("contact reader", () => {
 				threadId,
 				subject: "A question",
 			},
-			connection: {
+			inbox: {
 				displayName: "Support",
 				address: "support@merimoar.test",
 			},
