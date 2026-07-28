@@ -15,11 +15,18 @@ import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
 
 type EmailSearch = {
+	inbox?: string;
 	thread?: string;
 };
 
+function getThreadListQueryArgs(inboxId?: string) {
+	return inboxId ? { inboxId } : {};
+}
+
 const preloadInitialEmailPage = createServerFn({ method: "GET" })
-	.validator((input: { selectedThreadId?: string }) => input)
+	.validator(
+		(input: { selectedInboxId?: string; selectedThreadId?: string }) => input,
+	)
 	.handler(async ({ data }) => {
 		const client = await createAuthenticatedConvexHttpClient();
 		const [threads, selectedThread, createOptions] = await Promise.all([
@@ -28,6 +35,7 @@ const preloadInitialEmailPage = createServerFn({ method: "GET" })
 					cursor: null,
 					numItems: 30,
 				},
+				...getThreadListQueryArgs(data.selectedInboxId),
 			}),
 			data.selectedThreadId
 				? client.query(api.email.reader.getThread, {
@@ -47,16 +55,21 @@ const preloadInitialEmailPage = createServerFn({ method: "GET" })
 
 export const Route = createFileRoute("/_authenticated/email")({
 	validateSearch: (search: Record<string, unknown>): EmailSearch => ({
+		inbox: typeof search.inbox === "string" ? search.inbox : undefined,
 		thread: typeof search.thread === "string" ? search.thread : undefined,
 	}),
-	loaderDeps: ({ search }) => ({ selectedThreadId: search.thread }),
+	loaderDeps: ({ search }) => ({
+		selectedInboxId: search.inbox,
+		selectedThreadId: search.thread,
+	}),
 	loader: ({ deps }) => preloadInitialEmailPage({ data: deps }),
 	component: EmailPage,
 });
 
 function EmailPage() {
 	const prefetched = Route.useLoaderData();
-	const { thread: selectedThreadId } = Route.useSearch();
+	const { inbox: selectedInboxId, thread: selectedThreadId } =
+		Route.useSearch();
 	const [isCompact, setIsCompact] = useState(false);
 	const {
 		results: liveThreads,
@@ -64,7 +77,7 @@ function EmailPage() {
 		loadMore,
 	} = usePaginatedQuery(
 		api.email.reader.listThreads,
-		{},
+		getThreadListQueryArgs(selectedInboxId),
 		{ initialNumItems: 30 },
 	);
 	const liveSelectedThread = useQuery(
@@ -103,6 +116,7 @@ function EmailPage() {
 					>
 						<ThreadList
 							items={threads}
+							selectedInboxId={selectedInboxId}
 							selectedThreadId={selectedThreadId}
 							status={threadStatus}
 							loadMore={() => {
@@ -151,7 +165,12 @@ function EmailPage() {
 							nativeButton={false}
 							variant="ghost"
 							size="sm"
-							render={<Link to="/email" search={{}} />}
+							render={
+								<Link
+									to="/email"
+									search={selectedInboxId ? { inbox: selectedInboxId } : {}}
+								/>
+							}
 						>
 							<IconArrowLeft />
 							Back to inbox

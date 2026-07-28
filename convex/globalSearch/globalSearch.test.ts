@@ -47,6 +47,7 @@ async function createFixture() {
 			displayName: "Support",
 			address: "inbox@merimoar.test",
 			status: "active",
+			unreadThreadCount: 0,
 		});
 		const integrationId = await ctx.db.insert("emailIntegrations", {
 			organizationId,

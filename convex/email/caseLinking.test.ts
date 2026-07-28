@@ -47,12 +47,14 @@ async function createCaseLinkingFixture() {
 			displayName: "Support",
 			address: "support@merimoar.test",
 			status: "active",
+			unreadThreadCount: 0,
 		});
 		const otherInboxId = await ctx.db.insert("emailInboxes", {
 			organizationId: otherOrganizationId,
 			displayName: "Other",
 			address: "support@other.test",
 			status: "active",
+			unreadThreadCount: 0,
 		});
 		const integrationId = await ctx.db.insert("emailIntegrations", {
 			organizationId,

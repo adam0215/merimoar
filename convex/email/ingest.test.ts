@@ -47,6 +47,7 @@ describe("inbound email ingestion", () => {
 					displayName: "Support",
 					address: "inbox@merimoar.test",
 					status: "active",
+					unreadThreadCount: 0,
 				});
 				const firstEventId = await ctx.db.insert("emailIngestEvents", {
 					inboxId,
@@ -82,6 +83,7 @@ describe("inbound email ingestion", () => {
 				throw new Error("Expected the first email to exist");
 			}
 			await ctx.db.patch(firstMessage.threadId, { isUnread: false });
+			await ctx.db.patch(inboxId, { unreadThreadCount: 0 });
 		});
 
 		const secondEventId = await t.run(async (ctx) =>
@@ -154,6 +156,7 @@ describe("inbound email ingestion", () => {
 			messages: await ctx.db.query("emailMessages").collect(),
 			contacts: await ctx.db.query("contacts").collect(),
 			duplicateEvent: await ctx.db.get(duplicateEventId),
+			inbox: await ctx.db.get(inboxId),
 		}));
 
 		expect(firstMessageId).not.toBeNull();
@@ -175,6 +178,7 @@ describe("inbound email ingestion", () => {
 		).toBe(true);
 		expect(state.threads[0]?.latestMessageId).toBe(secondMessageId);
 		expect(state.threads[0]?.isUnread).toBe(true);
+		expect(state.inbox?.unreadThreadCount).toBe(1);
 		expect(state.duplicateEvent?.status).toBe("processed");
 	});
 
@@ -213,6 +217,7 @@ describe("inbound email ingestion", () => {
 					displayName: `Inbox ${index}`,
 					address: `inbox-${index}@merimoar.test`,
 					status: "active",
+					unreadThreadCount: 0,
 				});
 				const threadId = await ctx.db.insert("emailThreads", {
 					organizationId,
@@ -301,18 +306,21 @@ describe("inbound email ingestion", () => {
 				displayName: "Support",
 				address: "support@merimoar.test",
 				status: "active",
+				unreadThreadCount: 0,
 			});
 			const secondInboxId = await ctx.db.insert("emailInboxes", {
 				organizationId: firstOrganizationId,
 				displayName: "Sales",
 				address: "sales@merimoar.test",
 				status: "active",
+				unreadThreadCount: 0,
 			});
 			const otherInboxId = await ctx.db.insert("emailInboxes", {
 				organizationId: secondOrganizationId,
 				displayName: "Other",
 				address: "inbox@other.test",
 				status: "active",
+				unreadThreadCount: 0,
 			});
 
 			const eventIds = await Promise.all(
@@ -452,6 +460,7 @@ describe("inbound email ingestion", () => {
 				displayName: "Operations",
 				address: "operations@merimoar.test",
 				status: "active",
+				unreadThreadCount: 0,
 			});
 			const eventIds = await Promise.all(
 				[

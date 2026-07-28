@@ -13,6 +13,7 @@ import {
 	normalizedInboundEmailValidator,
 } from "./model";
 import { routeEmailToOrganizationInbox } from "./router";
+import { updateInboxUnreadThreadCount } from "./unreadCounts";
 
 async function findThreadByInternetMessageId(
 	ctx: MutationCtx,
@@ -275,6 +276,7 @@ export const storeInboundEmail = internalMutation({
 			}
 		}
 
+		const threadWasUnread = thread?.isUnread === true;
 		if (!thread) {
 			const threadId = await ctx.db.insert("emailThreads", {
 				organizationId: inbox.organizationId,
@@ -346,6 +348,9 @@ export const storeInboundEmail = internalMutation({
 					}
 				: {}),
 		});
+		if (!threadWasUnread) {
+			await updateInboxUnreadThreadCount(ctx, thread.inboxId, 1);
+		}
 
 		const activeCaseRelation = await getActiveCaseRelationForEmailThread(
 			ctx,

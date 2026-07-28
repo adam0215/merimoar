@@ -51,6 +51,7 @@ export const create = mutation({
 			displayName: result.output.displayName,
 			address,
 			status: "active",
+			unreadThreadCount: 0,
 		});
 	},
 });

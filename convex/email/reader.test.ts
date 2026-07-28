@@ -23,6 +23,7 @@ describe("email reader authorization", () => {
 		]);
 		const {
 			firstInboxId,
+			otherInboxId,
 			secondInboxId,
 			firstThreadId,
 			secondThreadId,
@@ -53,36 +54,43 @@ describe("email reader authorization", () => {
 				displayName: "Support",
 				address: "support@merimoar.test",
 				status: "active",
+				unreadThreadCount: 1,
 			});
 			const secondInboxId = await ctx.db.insert("emailInboxes", {
 				organizationId,
 				displayName: "Operations",
 				address: "operations@merimoar.test",
 				status: "active",
+				unreadThreadCount: 0,
 			});
 			const otherInboxId = await ctx.db.insert("emailInboxes", {
 				organizationId: otherOrganizationId,
 				displayName: "Other",
 				address: "inbox@other.test",
 				status: "active",
+				unreadThreadCount: 1,
 			});
 			const firstThreadId = await ctx.db.insert("emailThreads", {
 				organizationId,
 				inboxId: firstInboxId,
 				lastActivityAt: 1_000,
+				isUnread: true,
 			});
 			const secondThreadId = await ctx.db.insert("emailThreads", {
 				organizationId,
 				inboxId: secondInboxId,
 				lastActivityAt: 3_000,
+				isUnread: false,
 			});
 			const otherThreadId = await ctx.db.insert("emailThreads", {
 				organizationId: otherOrganizationId,
 				inboxId: otherInboxId,
 				lastActivityAt: 2_000,
+				isUnread: true,
 			});
 			return {
 				firstInboxId,
+				otherInboxId,
 				secondInboxId,
 				firstThreadId,
 				secondThreadId,
@@ -100,6 +108,7 @@ describe("email reader authorization", () => {
 			firstInboxId,
 			secondInboxId,
 		]);
+		expect(inboxes.map((inbox) => inbox.unreadCount)).toEqual([1, 0]);
 		const threads = await actor.query(api.email.reader.listThreads, {
 			paginationOpts: { numItems: 10, cursor: null },
 		});
@@ -107,6 +116,19 @@ describe("email reader authorization", () => {
 			secondThreadId,
 			firstThreadId,
 		]);
+		const firstInboxThreads = await actor.query(api.email.reader.listThreads, {
+			inboxId: firstInboxId,
+			paginationOpts: { numItems: 10, cursor: null },
+		});
+		expect(firstInboxThreads.page.map(({ thread }) => thread._id)).toEqual([
+			firstThreadId,
+		]);
+		await expect(
+			actor.query(api.email.reader.listThreads, {
+				inboxId: otherInboxId,
+				paginationOpts: { numItems: 10, cursor: null },
+			}),
+		).rejects.toThrow("could not be found");
 		expect(
 			await actor.query(api.email.reader.getThread, {
 				threadId: otherThreadId,
@@ -119,15 +141,6 @@ describe("email reader authorization", () => {
 		).toBeNull();
 		await actor.mutation(api.email.reader.setUnread, {
 			threadId: firstThreadId,
-			isUnread: true,
-		});
-		expect(
-			await actor.query(api.email.reader.getThread, {
-				threadId: firstThreadId,
-			}),
-		).toMatchObject({ thread: { isUnread: true } });
-		await actor.mutation(api.email.reader.setUnread, {
-			threadId: firstThreadId,
 			isUnread: false,
 		});
 		expect(
@@ -135,6 +148,28 @@ describe("email reader authorization", () => {
 				threadId: firstThreadId,
 			}),
 		).toMatchObject({ thread: { isUnread: false } });
+		expect(
+			(await actor.query(api.email.reader.listInboxes, {}))[0],
+		).toMatchObject({ _id: firstInboxId, unreadCount: 0 });
+		await actor.mutation(api.email.reader.setUnread, {
+			threadId: firstThreadId,
+			isUnread: true,
+		});
+		expect(
+			await actor.query(api.email.reader.getThread, {
+				threadId: firstThreadId,
+			}),
+		).toMatchObject({ thread: { isUnread: true } });
+		expect(
+			(await actor.query(api.email.reader.listInboxes, {}))[0],
+		).toMatchObject({ _id: firstInboxId, unreadCount: 1 });
+		await actor.mutation(api.email.reader.setUnread, {
+			threadId: firstThreadId,
+			isUnread: true,
+		});
+		expect(
+			(await actor.query(api.email.reader.listInboxes, {}))[0],
+		).toMatchObject({ _id: firstInboxId, unreadCount: 1 });
 		await expect(
 			actor.mutation(api.email.reader.setUnread, {
 				threadId: otherThreadId,
