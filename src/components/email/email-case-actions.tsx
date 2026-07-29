@@ -31,6 +31,7 @@ import {
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
+import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 
@@ -48,9 +49,11 @@ type CaseOption = {
 export function EmailCaseActions({
 	thread,
 	createOptions,
+	className,
 }: {
 	thread: ThreadDetails;
 	createOptions: CaseCreateOptions | undefined;
+	className?: string;
 }) {
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
 	const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -80,7 +83,12 @@ export function EmailCaseActions({
 
 	return (
 		<>
-			<div className="pointer-events-none absolute right-4 bottom-4 z-30 flex max-w-[calc(100%-2rem)] flex-col items-end gap-2 sm:right-6 sm:bottom-6">
+			<div
+				className={cn(
+					"pointer-events-none flex max-w-full flex-col items-end gap-2",
+					className,
+				)}
+			>
 				{thread.activeCase && (
 					<div className="group/case-pill pointer-events-auto relative min-w-0 max-w-66 rounded-full border bg-background/90 shadow-lg backdrop-blur-xl">
 						<Link

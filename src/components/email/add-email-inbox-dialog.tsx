@@ -2,10 +2,12 @@ import {
 	IconCheck,
 	IconInbox,
 	IconLoader2,
+	IconPencil,
 	IconPlus,
 } from "@tabler/icons-react";
-import { useMutation } from "convex/react";
-import { useMemo, useState } from "react";
+import { useAction, useMutation } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+import { useEffect, useMemo, useState } from "react";
 import * as v from "valibot";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -26,42 +28,180 @@ import {
 	FieldLabel,
 } from "#/components/ui/field.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import {
+	InputGroup,
+	InputGroupAddon,
+	InputGroupInput,
+	InputGroupText,
+} from "#/components/ui/input-group.tsx";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "#/components/ui/select.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import {
 	emailInboxAddressSchema,
 	emailInboxDetailsSchema,
 	emailInboxNameSchema,
 } from "../../../convex/email/input";
 
-type FieldName = keyof v.InferInput<typeof emailInboxDetailsSchema>;
-
-const initialForm = {
-	displayName: "",
-	address: "",
+type OutboundIntegrations = FunctionReturnType<
+	typeof api.email.reader.listOutboundIntegrations
+>;
+type Inbox = FunctionReturnType<typeof api.email.reader.listInboxes>[number];
+type FieldName =
+	| keyof v.InferInput<typeof emailInboxDetailsSchema>
+	| "outboundAddress";
+type FormState = {
+	displayName: string;
+	address: string;
+	outboundIntegrationId: string;
+	outboundPrefix: string;
+	outboundDomain: string;
 };
+type EmailInboxDialogProps =
+	| {
+			mode: "create";
+			outboundIntegrations: OutboundIntegrations;
+	  }
+	| {
+			mode: "edit";
+			inbox: Inbox;
+			outboundIntegrations: OutboundIntegrations;
+	  };
 
-export function AddEmailInboxDialog() {
+function providerLabel(provider: OutboundIntegrations[number]["provider"]) {
+	const labels = {
+		resend: "Resend",
+	} satisfies Record<OutboundIntegrations[number]["provider"], string>;
+	return labels[provider];
+}
+
+function splitEmailAddress(address?: string) {
+	if (!address) {
+		return { prefix: "", domain: "" };
+	}
+	const separatorIndex = address.lastIndexOf("@");
+	return separatorIndex > 0
+		? {
+				prefix: address.slice(0, separatorIndex),
+				domain: address.slice(separatorIndex + 1),
+			}
+		: { prefix: address, domain: "" };
+}
+
+function getInitialForm(props: EmailInboxDialogProps): FormState {
+	if (props.mode === "create") {
+		const defaultIntegration = props.outboundIntegrations.find(
+			(integration) => integration.status === "connected",
+		);
+		return {
+			displayName: "",
+			address: "",
+			outboundIntegrationId: defaultIntegration?.integrationId ?? "none",
+			outboundPrefix: "",
+			outboundDomain: "",
+		};
+	}
+
+	const outboundAddress = splitEmailAddress(
+		props.inbox.outboundIntegration?.address,
+	);
+	return {
+		displayName: props.inbox.displayName,
+		address: props.inbox.address,
+		outboundIntegrationId:
+			props.inbox.outboundIntegration?.integrationId ?? "none",
+		outboundPrefix: outboundAddress.prefix,
+		outboundDomain: outboundAddress.domain,
+	};
+}
+
+function EmailInboxDialog(props: EmailInboxDialogProps) {
 	const createInbox = useMutation(api.email.inboxes.create);
+	const updateInbox = useMutation(api.email.inboxes.update);
+	const listVerifiedDomains = useAction(api.email.outboundDomains.listVerified);
 	const [open, setOpen] = useState(false);
 	const [createdAddress, setCreatedAddress] = useState<string>();
-	const [form, setForm] = useState(initialForm);
+	const [form, setForm] = useState<FormState>(() => getInitialForm(props));
+	const [verifiedDomains, setVerifiedDomains] = useState<string[]>([]);
+	const [domainState, setDomainState] = useState<
+		"idle" | "loading" | "ready" | "error"
+	>("idle");
 	const [dirtyFields, setDirtyFields] = useState<Set<FieldName>>(new Set());
 	const [submissionError, setSubmissionError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const isCreate = props.mode === "create";
+	const outboundAddress =
+		form.outboundIntegrationId === "none"
+			? null
+			: `${form.outboundPrefix}@${form.outboundDomain}`;
 
 	const validation = useMemo(
 		() => ({
 			displayName: v.safeParse(emailInboxNameSchema, form.displayName),
 			address: v.safeParse(emailInboxAddressSchema, form.address),
 			form: v.safeParse(emailInboxDetailsSchema, form),
+			outboundAddress:
+				outboundAddress === null
+					? null
+					: v.safeParse(emailInboxAddressSchema, outboundAddress),
 		}),
-		[form],
+		[form, outboundAddress],
 	);
+
+	useEffect(() => {
+		if (!open || form.outboundIntegrationId === "none") {
+			setVerifiedDomains([]);
+			setDomainState("idle");
+			return;
+		}
+
+		let canceled = false;
+		const integrationId = form.outboundIntegrationId as Id<"emailIntegrations">;
+		setDomainState("loading");
+		void listVerifiedDomains({ integrationId })
+			.then((domains) => {
+				if (canceled) {
+					return;
+				}
+				setVerifiedDomains(domains);
+				setDomainState("ready");
+				setForm((current) => {
+					if (
+						current.outboundIntegrationId !== integrationId ||
+						domains.includes(current.outboundDomain)
+					) {
+						return current;
+					}
+					return {
+						...current,
+						outboundDomain: domains[0] ?? "",
+					};
+				});
+			})
+			.catch(() => {
+				if (!canceled) {
+					setVerifiedDomains([]);
+					setDomainState("error");
+				}
+			});
+
+		return () => {
+			canceled = true;
+		};
+	}, [form.outboundIntegrationId, listVerifiedDomains, open]);
 
 	function reset() {
 		setCreatedAddress(undefined);
-		setForm(initialForm);
+		setForm(getInitialForm(props));
+		setVerifiedDomains([]);
+		setDomainState("idle");
 		setDirtyFields(new Set());
 		setSubmissionError(null);
 		setIsSubmitting(false);
@@ -74,27 +214,64 @@ export function AddEmailInboxDialog() {
 		setOpen(nextOpen);
 	}
 
-	function updateField(field: FieldName, value: string) {
-		setForm((current) => ({ ...current, [field]: value }));
+	function markFieldDirty(field: FieldName) {
 		setDirtyFields((current) => new Set(current).add(field));
 		setSubmissionError(null);
 	}
 
+	function updateFormField(
+		field: keyof FormState,
+		value: string,
+		dirtyField: FieldName,
+	) {
+		setForm((current) => ({ ...current, [field]: value }));
+		markFieldDirty(dirtyField);
+	}
+
 	async function submit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		setDirtyFields(new Set(["displayName", "address"]));
-		if (!validation.form.success) {
+		setDirtyFields(new Set(["displayName", "address", "outboundAddress"]));
+		if (
+			!validation.form.success ||
+			(validation.outboundAddress !== null &&
+				!validation.outboundAddress.success)
+		) {
 			return;
 		}
 
 		setIsSubmitting(true);
 		setSubmissionError(null);
+		const outbound =
+			form.outboundIntegrationId === "none"
+				? null
+				: {
+						integrationId:
+							form.outboundIntegrationId as Id<"emailIntegrations">,
+						address: outboundAddress ?? "",
+					};
 		try {
-			await createInbox(validation.form.output);
-			setCreatedAddress(validation.form.output.address);
+			if (props.mode === "create") {
+				await createInbox({
+					...validation.form.output,
+					outbound,
+				});
+				setCreatedAddress(validation.form.output.address);
+			} else {
+				await updateInbox({
+					inboxId: props.inbox._id,
+					...validation.form.output,
+					outbound,
+				});
+				setOpen(false);
+			}
 		} catch (error) {
 			setSubmissionError(
-				getConvexErrorMessage(error, "The inbox could not be created."),
+				getConvexErrorMessage(
+					error,
+					isCreate
+						? "The inbox could not be created."
+						: "The inbox could not be updated.",
+				),
 			);
 		} finally {
 			setIsSubmitting(false);
@@ -102,14 +279,47 @@ export function AddEmailInboxDialog() {
 	}
 
 	function fieldIsInvalid(field: FieldName) {
-		return dirtyFields.has(field) && !validation[field].success;
+		const result = validation[field];
+		return dirtyFields.has(field) && result !== null && !result.success;
 	}
+
+	const formId =
+		props.mode === "create"
+			? "add-email-inbox"
+			: `edit-email-inbox-${props.inbox._id}`;
+	const integrationItems = [
+		{ value: "none", label: "No outbound integration" },
+		...props.outboundIntegrations.map((integration) => ({
+			value: integration.integrationId,
+			label:
+				integration.status === "connected"
+					? providerLabel(integration.provider)
+					: `${providerLabel(integration.provider)} · Reconnect required`,
+		})),
+	];
+	const domainItems = verifiedDomains.map((domain) => ({
+		value: domain,
+		label: domain,
+	}));
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger render={<Button />}>
-				<IconPlus />
-				Add inbox
+			<DialogTrigger
+				render={
+					isCreate ? (
+						<Button />
+					) : (
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							className="text-muted-foreground"
+							aria-label={`Edit ${props.inbox.displayName}`}
+						/>
+					)
+				}
+			>
+				{isCreate ? <IconPlus /> : <IconPencil />}
+				{isCreate && "Add inbox"}
 			</DialogTrigger>
 			<DialogContent className="sm:max-w-lg">
 				{createdAddress ? (
@@ -129,24 +339,30 @@ export function AddEmailInboxDialog() {
 							<div className="mb-2 flex size-10 items-center justify-center rounded-full bg-muted">
 								<IconInbox className="size-5" />
 							</div>
-							<DialogTitle>Add inbox</DialogTitle>
+							<DialogTitle>{isCreate ? "Add inbox" : "Edit inbox"}</DialogTitle>
 							<DialogDescription>
-								Create a destination for incoming email.
+								{isCreate
+									? "Create a destination for incoming email."
+									: "Update email routing and outbound delivery."}
 							</DialogDescription>
 						</DialogHeader>
 
-						<form id="add-email-inbox" onSubmit={submit} noValidate>
+						<form id={formId} onSubmit={submit} noValidate>
 							<FieldGroup>
 								<Field
 									data-invalid={fieldIsInvalid("displayName") || undefined}
 								>
-									<FieldLabel htmlFor="inbox-name">Inbox name</FieldLabel>
+									<FieldLabel htmlFor={`${formId}-name`}>Inbox name</FieldLabel>
 									<Input
-										id="inbox-name"
+										id={`${formId}-name`}
 										value={form.displayName}
 										placeholder="Support"
 										onChange={(event) =>
-											updateField("displayName", event.target.value)
+											updateFormField(
+												"displayName",
+												event.target.value,
+												"displayName",
+											)
 										}
 										aria-invalid={fieldIsInvalid("displayName") || undefined}
 										autoComplete="off"
@@ -160,24 +376,171 @@ export function AddEmailInboxDialog() {
 								</Field>
 
 								<Field data-invalid={fieldIsInvalid("address") || undefined}>
-									<FieldLabel htmlFor="inbox-address">Email address</FieldLabel>
+									<FieldLabel htmlFor={`${formId}-address`}>
+										Inbound address
+									</FieldLabel>
 									<Input
-										id="inbox-address"
+										id={`${formId}-address`}
 										type="email"
 										placeholder="support@your-domain.com"
 										value={form.address}
 										onChange={(event) =>
-											updateField("address", event.target.value)
+											updateFormField("address", event.target.value, "address")
 										}
 										aria-invalid={fieldIsInvalid("address") || undefined}
 										autoComplete="email"
 									/>
 									<FieldDescription>
-										Matching incoming email is routed to this inbox.
+										Incoming email to this address is sent to this inbox.
 									</FieldDescription>
 									{fieldIsInvalid("address") && (
 										<FieldError>
 											{validation.address.issues?.[0]?.message}
+										</FieldError>
+									)}
+								</Field>
+
+								<Field
+									data-invalid={fieldIsInvalid("outboundAddress") || undefined}
+								>
+									<FieldLabel htmlFor={`${formId}-outbound-integration`}>
+										Outbound integration and address
+									</FieldLabel>
+									<div className="flex flex-col gap-2">
+										<Select
+											items={integrationItems}
+											value={form.outboundIntegrationId}
+											onValueChange={(value) => {
+												if (value !== null) {
+													setForm((current) => ({
+														...current,
+														outboundIntegrationId: value,
+														outboundDomain:
+															value === current.outboundIntegrationId
+																? current.outboundDomain
+																: "",
+													}));
+													markFieldDirty("outboundAddress");
+												}
+											}}
+										>
+											<SelectTrigger
+												id={`${formId}-outbound-integration`}
+												className="w-full"
+											>
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="none">
+													No outbound integration
+												</SelectItem>
+												{props.outboundIntegrations.map((integration) => (
+													<SelectItem
+														key={integration.integrationId}
+														value={integration.integrationId}
+														disabled={integration.status !== "connected"}
+													>
+														<span>{providerLabel(integration.provider)}</span>
+														{integration.status !== "connected" && (
+															<span className="text-xs text-muted-foreground">
+																Reconnect required
+															</span>
+														)}
+													</SelectItem>
+												))}
+											</SelectContent>
+										</Select>
+
+										{form.outboundIntegrationId !== "none" && (
+											<InputGroup>
+												<InputGroupInput
+													id={`${formId}-outbound-prefix`}
+													value={form.outboundPrefix}
+													placeholder="support"
+													onChange={(event) =>
+														updateFormField(
+															"outboundPrefix",
+															event.target.value,
+															"outboundAddress",
+														)
+													}
+													aria-invalid={
+														fieldIsInvalid("outboundAddress") || undefined
+													}
+													autoComplete="off"
+												/>
+												<InputGroupAddon
+													align="inline-end"
+													className="min-w-0 flex-1 border-l border-input"
+												>
+													<InputGroupText className="pl-3">@</InputGroupText>
+													<Select
+														items={domainItems}
+														value={form.outboundDomain || null}
+														onValueChange={(value) => {
+															if (value !== null) {
+																updateFormField(
+																	"outboundDomain",
+																	value,
+																	"outboundAddress",
+																);
+															}
+														}}
+														disabled={
+															domainState !== "ready" ||
+															verifiedDomains.length === 0
+														}
+													>
+														<SelectTrigger
+															id={`${formId}-outbound-domain`}
+															data-slot="input-group-control"
+															className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-2 focus-visible:ring-0 dark:bg-transparent"
+															aria-invalid={
+																fieldIsInvalid("outboundAddress") || undefined
+															}
+														>
+															<SelectValue
+																placeholder={
+																	domainState === "loading"
+																		? "Loading domains…"
+																		: "Select domain"
+																}
+															/>
+														</SelectTrigger>
+														<SelectContent>
+															{domainItems.map((domain) => (
+																<SelectItem
+																	key={domain.value}
+																	value={domain.value}
+																>
+																	{domain.label}
+																</SelectItem>
+															))}
+														</SelectContent>
+													</Select>
+												</InputGroupAddon>
+											</InputGroup>
+										)}
+									</div>
+									<FieldDescription>
+										Replies from this inbox use this connection and sender
+										address.
+									</FieldDescription>
+									{domainState === "ready" &&
+										form.outboundIntegrationId !== "none" &&
+										verifiedDomains.length === 0 && (
+											<FieldError>
+												This Resend account has no verified domains.
+											</FieldError>
+										)}
+									{domainState === "error" && (
+										<FieldError>
+											The verified domains could not be loaded.
+										</FieldError>
+									)}
+									{fieldIsInvalid("outboundAddress") && (
+										<FieldError>
+											{validation.outboundAddress?.issues?.[0]?.message}
 										</FieldError>
 									)}
 								</Field>
@@ -196,22 +559,49 @@ export function AddEmailInboxDialog() {
 							>
 								Cancel
 							</DialogClose>
-							<Button
-								type="submit"
-								form="add-email-inbox"
-								disabled={isSubmitting}
-							>
+							<Button type="submit" form={formId} disabled={isSubmitting}>
 								{isSubmitting ? (
 									<IconLoader2 className="animate-spin" />
-								) : (
+								) : isCreate ? (
 									<IconPlus />
+								) : (
+									<IconCheck />
 								)}
-								Add inbox
+								{isCreate ? "Add inbox" : "Save changes"}
 							</Button>
 						</DialogFooter>
 					</>
 				)}
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+export function AddEmailInboxDialog({
+	outboundIntegrations,
+}: {
+	outboundIntegrations: OutboundIntegrations;
+}) {
+	return (
+		<EmailInboxDialog
+			mode="create"
+			outboundIntegrations={outboundIntegrations}
+		/>
+	);
+}
+
+export function EditEmailInboxDialog({
+	inbox,
+	outboundIntegrations,
+}: {
+	inbox: Inbox;
+	outboundIntegrations: OutboundIntegrations;
+}) {
+	return (
+		<EmailInboxDialog
+			mode="edit"
+			inbox={inbox}
+			outboundIntegrations={outboundIntegrations}
+		/>
 	);
 }

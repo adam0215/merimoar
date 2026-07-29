@@ -109,6 +109,10 @@ export const emailIngestFailureKindValidator = v.union(
 
 export type EmailParticipant = Infer<typeof emailParticipantValidator>;
 export type EmailSendFailure = Infer<typeof emailSendFailureValidator>;
+export const ambiguousProviderOutcomeFailure = {
+	kind: "ambiguous",
+	message: "The provider outcome is unknown; the email will not be sent again.",
+} as const satisfies EmailSendFailure;
 export type NormalizedInboundEmail = Infer<
 	typeof normalizedInboundEmailValidator
 >;

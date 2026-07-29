@@ -3,6 +3,11 @@ import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import { internalQuery } from "./_generated/server";
+import {
+	createOutboundConfigurationPatch,
+	getOutboundConfiguration,
+} from "./email/inboxModel";
+import { countInboxUnreadThreads } from "./email/unreadCounts";
 
 const migrations = new Migrations<DataModel>(components.migrations);
 
@@ -51,6 +56,45 @@ export const validateInboundMessagesForOutboundUnion = migrations.define({
 		) {
 			throw new Error("Inbound email message is missing required identity");
 		}
+	},
+});
+
+export const backfillEmailInboxState = migrations.define({
+	table: "emailInboxes",
+	migrateOne: async (ctx, inbox) => {
+		const unreadThreadCount =
+			inbox.unreadThreadCount ??
+			(await countInboxUnreadThreads(ctx, inbox._id));
+		await ctx.db.patch("emailInboxes", inbox._id, {
+			...createOutboundConfigurationPatch(getOutboundConfiguration(inbox)),
+			unreadThreadCount,
+		});
+	},
+});
+
+export const verifyEmailInboxState = internalQuery({
+	args: {},
+	returns: v.object({
+		complete: v.boolean(),
+		sampleIncompleteInboxIds: v.array(v.id("emailInboxes")),
+	}),
+	handler: async (ctx) => {
+		const incompleteInboxes = await ctx.db
+			.query("emailInboxes")
+			.filter((query) =>
+				query.or(
+					query.eq(query.field("unreadThreadCount"), undefined),
+					query.and(
+						query.neq(query.field("outboundIntegrationId"), undefined),
+						query.eq(query.field("outbound"), undefined),
+					),
+				),
+			)
+			.take(10);
+		return {
+			complete: incompleteInboxes.length === 0,
+			sampleIncompleteInboxIds: incompleteInboxes.map((inbox) => inbox._id),
+		};
 	},
 });
 

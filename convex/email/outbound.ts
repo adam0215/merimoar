@@ -1,20 +1,31 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internalMutation, mutation } from "../_generated/server";
 import { requireActor } from "../auth/access";
 import { getActiveCaseRelationForEmailThread } from "../case/emailRelations";
 import { appendOutboundEmailCaseEvent } from "../case/events";
-import { emailSendFailureValidator } from "./model";
+import { getOutboundConfiguration } from "./inboxModel";
+import { type EmailSendFailure, emailSendFailureValidator } from "./model";
 import {
 	createReplySubject,
 	createReplyThreading,
 	selectReplyRecipient,
 } from "./outboundModel";
 import { emailOutboundPool } from "./outboundQueue";
+import { setThreadUnread } from "./unreadCounts";
 
 const PROVIDER_IDEMPOTENCY_WINDOW_MS = 23 * 60 * 60 * 1_000;
+
+function getProviderIdempotencyExpiry(
+	send: Doc<"emailSends">,
+	failure: EmailSendFailure,
+) {
+	return failure.kind === "provider_rejected" && failure.reason === "transient"
+		? (send.idempotencyExpiresAt ?? Date.now() + PROVIDER_IDEMPOTENCY_WINDOW_MS)
+		: send.idempotencyExpiresAt;
+}
 
 function throwDomainError(code: string, message: string): never {
 	throw new ConvexError({ code, message });
@@ -57,7 +68,7 @@ async function enqueueSendWork(
 ) {
 	const workId = await emailOutboundPool.enqueueAction(
 		ctx,
-		internal.email.outboundResend.processOutboundEmail,
+		internal.email.outboundWorker.processOutboundEmail,
 		{ sendId, messageId, generation },
 		{
 			onComplete: internal.email.outboundQueue.completeOutboundWork,
@@ -182,13 +193,14 @@ export const queueReply = mutation({
 				"The email inbox is not active.",
 			);
 		}
-		if (!inbox.outboundIntegrationId) {
+		const outbound = getOutboundConfiguration(inbox);
+		if (!outbound) {
 			throwDomainError(
 				"EMAIL_OUTBOUND_NOT_CONFIGURED",
-				"Choose an outbound email integration for this inbox.",
+				"Choose an outbound email integration and address for this inbox.",
 			);
 		}
-		const integration = await ctx.db.get(inbox.outboundIntegrationId);
+		const integration = await ctx.db.get(outbound.integrationId);
 		if (
 			!integration ||
 			integration.organizationId !== workspace.organization._id
@@ -251,7 +263,7 @@ export const queueReply = mutation({
 			threadId: thread._id,
 			direction: "outbound",
 			authoredByMemberId: workspace.member._id,
-			from: { address: inbox.address, name: inbox.displayName },
+			from: { address: outbound.address, name: inbox.displayName },
 			to: [recipient],
 			cc: [],
 			bcc: [],
@@ -273,8 +285,8 @@ export const queueReply = mutation({
 		await ctx.db.patch(thread._id, {
 			latestMessageId: messageId,
 			lastActivityAt: queuedAt,
-			isUnread: false,
 		});
+		await setThreadUnread(ctx, thread, false);
 		await enqueueSendWork(ctx, sendId, messageId, 0);
 		return { messageId, sendId, deduplicated: false };
 	},
@@ -294,13 +306,10 @@ export const retryFailedSend = mutation({
 			.query("emailSends")
 			.withIndex("by_message_id", (index) => index.eq("messageId", message._id))
 			.unique();
-		if (!send || send.status !== "failed" || !send.failure) {
-			throwDomainError(
-				"EMAIL_SEND_NOT_RETRYABLE",
-				"This email cannot be retried safely.",
-			);
-		}
 		if (
+			!send ||
+			send.status !== "failed" ||
+			!send.failure ||
 			send.failure.kind === "ambiguous" ||
 			send.failure.kind === "permanent"
 		) {
@@ -410,7 +419,7 @@ export const prepareSendAttempt = internalMutation({
 			failure: undefined,
 			providerCallGeneration: undefined,
 		});
-		return { send, message, thread, inbox, integration };
+		return { message, integration };
 	},
 });
 
@@ -465,16 +474,10 @@ export const recordKnownRetryableFailure = internalMutation({
 		) {
 			return false;
 		}
-		const idempotencyExpiresAt =
-			args.failure.kind === "provider_rejected" &&
-			args.failure.reason === "transient"
-				? (send.idempotencyExpiresAt ??
-					Date.now() + PROVIDER_IDEMPOTENCY_WINDOW_MS)
-				: send.idempotencyExpiresAt;
 		await ctx.db.patch(send._id, {
 			status: "queued",
 			failure: args.failure,
-			idempotencyExpiresAt,
+			idempotencyExpiresAt: getProviderIdempotencyExpiry(send, args.failure),
 		});
 		return true;
 	},
@@ -490,16 +493,10 @@ export const recordTerminalFailure = internalMutation({
 	handler: async (ctx, args) => {
 		const send = await ctx.db.get(args.sendId);
 		if (send && send.generation === args.generation && send.status !== "sent") {
-			const idempotencyExpiresAt =
-				args.failure.kind === "provider_rejected" &&
-				args.failure.reason === "transient"
-					? (send.idempotencyExpiresAt ??
-						Date.now() + PROVIDER_IDEMPOTENCY_WINDOW_MS)
-					: send.idempotencyExpiresAt;
 			await ctx.db.patch(send._id, {
 				status: "failed",
 				failure: args.failure,
-				idempotencyExpiresAt,
+				idempotencyExpiresAt: getProviderIdempotencyExpiry(send, args.failure),
 			});
 		}
 		return null;

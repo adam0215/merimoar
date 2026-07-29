@@ -1,11 +1,13 @@
 import {
 	IconAddressBook,
+	IconAlertCircle,
 	IconChevronDown,
 	IconInbox,
 	IconLoader2,
 	IconMail,
 	IconMailOpened,
 	IconMessages,
+	IconRefresh,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import type { OptimisticLocalStore } from "convex/browser";
@@ -15,7 +17,7 @@ import {
 } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useQuery } from "convex-helpers/react/cache";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CaseCreateOptions } from "#/components/case/types.ts";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -36,7 +38,9 @@ import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import { getOutboundConfiguration } from "../../../convex/email/inboxModel";
 import { EmailCaseActions } from "./email-case-actions.tsx";
+import { EmailComposer } from "./email-composer.tsx";
 import { parseEmailReply } from "./parse-email-reply";
 import { ThreadUnreadDot } from "./thread-unread-dot.tsx";
 
@@ -48,6 +52,7 @@ type ThreadDetails = NonNullable<
 >;
 type Message = ThreadDetails["messages"][number];
 type Participant = Message["from"];
+type SendStatus = ThreadDetails["sendStatuses"][number];
 
 function optimisticallySetThreadUnread(
 	localStore: OptimisticLocalStore,
@@ -199,6 +204,171 @@ function findRepliedToMessage(message: Message, messages: Message[]) {
 	}
 
 	return undefined;
+}
+
+function ThreadEmailComposer({ thread }: { thread: ThreadDetails }) {
+	const saveDraft = useMutation(api.email.outbound.saveDraft);
+	const queueReply = useMutation(api.email.outbound.queueReply);
+	const outboundConfiguration = getOutboundConfiguration(thread.inbox);
+	const outboundConfigured = Boolean(outboundConfiguration);
+	const [body, setBody] = useState(thread.draft?.body ?? "");
+	const [draftRevision, setDraftRevision] = useState(
+		thread.draft?.revision ?? 0,
+	);
+	const [pendingSend, setPendingSend] = useState<{
+		body: string;
+		clientRequestId: string;
+		draftRevision: number;
+	} | null>(null);
+	const [isSending, setIsSending] = useState(false);
+
+	async function sendReply() {
+		if (!body.trim() || isSending) {
+			return;
+		}
+
+		setIsSending(true);
+		try {
+			let send = pendingSend?.body === body ? pendingSend : null;
+			if (!send) {
+				const draft = await saveDraft({
+					threadId: thread.thread._id,
+					body,
+					expectedRevision: draftRevision,
+				});
+				send = {
+					body,
+					clientRequestId: crypto.randomUUID(),
+					draftRevision: draft.revision,
+				};
+				setDraftRevision(draft.revision);
+				setPendingSend(send);
+			}
+
+			await queueReply({
+				threadId: thread.thread._id,
+				draftRevision: send.draftRevision,
+				clientRequestId: send.clientRequestId,
+			});
+			setBody("");
+			setDraftRevision(0);
+			setPendingSend(null);
+		} catch (error) {
+			showAppNotification({
+				title: "Reply could not be sent",
+				description: getConvexErrorMessage(
+					error,
+					"The email reply could not be sent.",
+				),
+			});
+		} finally {
+			setIsSending(false);
+		}
+	}
+
+	return (
+		<div className="pointer-events-auto flex w-full flex-col">
+			{!outboundConfigured && (
+				<div className="mx-4 flex items-center justify-between gap-3 rounded-t-xl border-x border-t border-foreground/5 bg-popover/60 px-3 py-1 text-xs backdrop-blur-sm dark:border-foreground/10">
+					<span className="text-muted-foreground">
+						Choose an outbound integration to reply.
+					</span>
+					<Button
+						nativeButton={false}
+						variant="ghost"
+						size="xs"
+						render={<Link to="/settings/organization/email" />}
+					>
+						Configure
+					</Button>
+				</div>
+			)}
+			<EmailComposer
+				value={body}
+				onValueChange={(value) => {
+					setBody(value);
+					if (pendingSend?.body !== value) {
+						setPendingSend(null);
+					}
+				}}
+				onSend={() => void sendReply()}
+				senderAddress={outboundConfiguration?.address}
+				disabled={!outboundConfigured || isSending}
+				isSending={isSending}
+				placeholder={
+					outboundConfigured
+						? "Write a reply…"
+						: "Choose an outbound integration to reply"
+				}
+				className="w-full"
+			/>
+		</div>
+	);
+}
+
+function OutboundSendFailure({
+	messageId,
+	send,
+}: {
+	messageId: Id<"emailMessages">;
+	send: SendStatus;
+}) {
+	const retryFailedSend = useMutation(api.email.outbound.retryFailedSend);
+	const [isRetrying, setIsRetrying] = useState(false);
+	const canRetry =
+		send.failure !== undefined &&
+		send.failure.kind !== "ambiguous" &&
+		send.failure.kind !== "permanent";
+
+	async function retry() {
+		setIsRetrying(true);
+		try {
+			await retryFailedSend({ messageId });
+		} catch (error) {
+			showAppNotification({
+				title: "Email could not be retried",
+				description: getConvexErrorMessage(
+					error,
+					"This email cannot be retried safely.",
+				),
+			});
+		} finally {
+			setIsRetrying(false);
+		}
+	}
+
+	return (
+		<div className="mt-5 flex items-start justify-between gap-4 rounded-xl bg-destructive/10 px-3 py-2 text-destructive">
+			<div className="flex min-w-0 items-start gap-2">
+				<IconAlertCircle
+					className="mt-0.5 size-4 shrink-0"
+					aria-hidden="true"
+				/>
+				<div className="min-w-0">
+					<p className="text-xs font-medium">Failed</p>
+					{send.failure && (
+						<p className="mt-0.5 text-xs leading-5">{send.failure.message}</p>
+					)}
+				</div>
+			</div>
+			{canRetry && (
+				<Button
+					type="button"
+					variant="outline"
+					size="xs"
+					disabled={isRetrying}
+					className="border-destructive/20 bg-background/50 text-destructive hover:bg-background"
+					onClick={() => void retry()}
+				>
+					<IconRefresh
+						data-icon="inline-start"
+						className={cn(isRetrying && "animate-spin")}
+					/>
+					Retry
+				</Button>
+			)}
+		</div>
+	);
 }
 
 export function ThreadList({
@@ -482,6 +652,10 @@ export function ThreadView({
 		);
 	}
 
+	const sendStatusByMessageId = new Map(
+		thread.sendStatuses.map((send) => [send.messageId, send]),
+	);
+
 	return (
 		<div className="relative h-full">
 			<div
@@ -515,7 +689,14 @@ export function ThreadView({
 				className="h-full"
 				viewportProps={{ className: "overscroll-none" }}
 			>
-				<div className="w-full px-6 pt-14 pb-28 md:pb-32">
+				<div
+					className={cn(
+						"w-full px-6 pt-14",
+						getOutboundConfiguration(thread.inbox)
+							? "pb-28 md:pb-32"
+							: "pb-36 md:pb-40",
+					)}
+				>
 					<div className="divide-y">
 						{thread.messages.map((message) => {
 							const repliedToMessage = findRepliedToMessage(
@@ -525,6 +706,7 @@ export function ThreadView({
 							const { authoredText, quotedText } = parseEmailReply(
 								message.textBody,
 							);
+							const sendStatus = sendStatusByMessageId.get(message._id);
 
 							return (
 								<article
@@ -623,13 +805,23 @@ export function ThreadView({
 											</Collapsible>
 										)}
 									</div>
+									{message.direction === "outbound" &&
+										sendStatus?.status === "failed" && (
+											<OutboundSendFailure
+												messageId={message._id}
+												send={sendStatus}
+											/>
+										)}
 								</article>
 							);
 						})}
 					</div>
 				</div>
 			</ScrollArea>
-			<EmailCaseActions thread={thread} createOptions={createOptions} />
+			<div className="pointer-events-none absolute inset-x-4 bottom-4 z-30 mx-auto flex max-w-3xl flex-col items-end gap-3 sm:inset-x-6 sm:bottom-6">
+				<EmailCaseActions thread={thread} createOptions={createOptions} />
+				<ThreadEmailComposer key={thread.thread._id} thread={thread} />
+			</div>
 		</div>
 	);
 }

@@ -5,7 +5,8 @@ import type { QueryCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
 import { requireActor } from "../auth/access";
 import { getActiveCaseRelationForEmailThread } from "../case/emailRelations";
-import { updateInboxUnreadThreadCount } from "./unreadCounts";
+import { getOutboundConfiguration } from "./inboxModel";
+import { countInboxUnreadThreads, setThreadUnread } from "./unreadCounts";
 
 async function listLatestThreadMessages(
 	ctx: QueryCtx,
@@ -28,9 +29,7 @@ export const listOutboundIntegrations = query({
 		const integrations = await ctx.db
 			.query("emailIntegrations")
 			.withIndex("by_organization_id_and_provider", (index) =>
-				index
-					.eq("organizationId", workspace.organization._id)
-					.eq("provider", "resend"),
+				index.eq("organizationId", workspace.organization._id),
 			)
 			.take(100);
 		return integrations.map((integration) => ({
@@ -55,8 +54,9 @@ export const listInboxes = query({
 			.take(100);
 		return await Promise.all(
 			inboxes.map(async (inbox) => {
-				const outboundIntegration = inbox.outboundIntegrationId
-					? await ctx.db.get(inbox.outboundIntegrationId)
+				const outbound = getOutboundConfiguration(inbox);
+				const outboundIntegration = outbound
+					? await ctx.db.get(outbound.integrationId)
 					: null;
 				return {
 					_id: inbox._id,
@@ -64,13 +64,17 @@ export const listInboxes = query({
 					displayName: inbox.displayName,
 					address: inbox.address,
 					status: "active" as const,
-					unreadCount: inbox.unreadThreadCount,
+					unreadCount:
+						inbox.unreadThreadCount ??
+						(await countInboxUnreadThreads(ctx, inbox._id)),
 					outboundIntegration:
-						outboundIntegration?.organizationId === workspace.organization._id
+						outboundIntegration?.organizationId ===
+							workspace.organization._id && outbound
 							? {
 									integrationId: outboundIntegration._id,
 									provider: outboundIntegration.provider,
 									status: outboundIntegration.status,
+									address: outbound.address,
 								}
 							: null,
 				};
@@ -237,12 +241,7 @@ export const setUnread = mutation({
 			return null;
 		}
 
-		await ctx.db.patch(thread._id, { isUnread: args.isUnread });
-		await updateInboxUnreadThreadCount(
-			ctx,
-			thread.inboxId,
-			args.isUnread ? 1 : -1,
-		);
+		await setThreadUnread(ctx, thread, args.isUnread);
 		return null;
 	},
 });

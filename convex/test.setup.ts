@@ -74,6 +74,7 @@ export async function createActiveEmailInbox(
 	return await test.mutation(api.email.inboxes.create, {
 		address,
 		displayName,
+		outbound: null,
 	});
 }
 

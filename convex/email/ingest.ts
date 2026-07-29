@@ -13,7 +13,7 @@ import {
 	normalizedInboundEmailValidator,
 } from "./model";
 import { routeEmailToOrganizationInbox } from "./router";
-import { updateInboxUnreadThreadCount } from "./unreadCounts";
+import { setThreadUnread } from "./unreadCounts";
 
 async function findThreadByInternetMessageId(
 	ctx: MutationCtx,
@@ -276,13 +276,11 @@ export const storeInboundEmail = internalMutation({
 			}
 		}
 
-		const threadWasUnread = thread?.isUnread === true;
 		if (!thread) {
 			const threadId = await ctx.db.insert("emailThreads", {
 				organizationId: inbox.organizationId,
 				inboxId: event.inboxId,
 				lastActivityAt: args.email.receivedAt,
-				isUnread: true,
 			});
 			thread = await ctx.db.get(threadId);
 		}
@@ -339,18 +337,13 @@ export const storeInboundEmail = internalMutation({
 
 		const isLatestMessage =
 			!thread.latestMessageId || args.email.receivedAt >= thread.lastActivityAt;
-		await ctx.db.patch(thread._id, {
-			isUnread: true,
-			...(isLatestMessage
-				? {
-						latestMessageId: messageId,
-						lastActivityAt: args.email.receivedAt,
-					}
-				: {}),
-		});
-		if (!threadWasUnread) {
-			await updateInboxUnreadThreadCount(ctx, thread.inboxId, 1);
+		if (isLatestMessage) {
+			await ctx.db.patch(thread._id, {
+				latestMessageId: messageId,
+				lastActivityAt: args.email.receivedAt,
+			});
 		}
+		await setThreadUnread(ctx, thread, true);
 
 		const activeCaseRelation = await getActiveCaseRelationForEmailThread(
 			ctx,

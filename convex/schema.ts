@@ -11,6 +11,14 @@ import {
 import { entityFieldTypeValidator, entityIconValidator } from "./entity/model";
 import { globalSearchTargetValidator } from "./globalSearch/model";
 
+const emailInboxBaseValidator = v.object({
+	organizationId: v.id("organizations"),
+	displayName: v.string(),
+	address: v.string(),
+	status: v.union(v.literal("active"), v.literal("disabled")),
+	unreadThreadCount: v.optional(v.number()),
+});
+
 export default defineSchema({
 	organizations: defineTable({
 		name: v.string(),
@@ -53,14 +61,19 @@ export default defineSchema({
 			"nextAttemptAt",
 		]),
 
-	emailInboxes: defineTable({
-		organizationId: v.id("organizations"),
-		displayName: v.string(),
-		address: v.string(),
-		status: v.union(v.literal("active"), v.literal("disabled")),
-		outboundIntegrationId: v.optional(v.id("emailIntegrations")),
-		unreadThreadCount: v.number(),
-	})
+	emailInboxes: defineTable(
+		emailInboxBaseValidator.extend({
+			// Kept during the outbound configuration migration. New code
+			// dual-writes it until every deployment reads the nested field.
+			outboundIntegrationId: v.optional(v.id("emailIntegrations")),
+			outbound: v.optional(
+				v.object({
+					integrationId: v.id("emailIntegrations"),
+					address: v.string(),
+				}),
+			),
+		}),
+	)
 		.index("by_organization_id", ["organizationId"])
 		.index("by_organization_id_and_address", ["organizationId", "address"])
 		.index("by_organization_id_and_status", ["organizationId", "status"]),

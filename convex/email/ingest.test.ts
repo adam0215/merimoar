@@ -151,6 +151,38 @@ describe("inbound email ingestion", () => {
 			},
 		);
 
+		const thirdEventId = await t.run(async (ctx) =>
+			ctx.db.insert("emailIngestEvents", {
+				inboxId,
+				integrationId,
+				externalEventId: "event-4",
+				externalMessageId: "resend-message-3",
+				eventType: "email.received",
+				status: "queued",
+				rawPayload: "{}",
+				receivedAt: 3_100,
+				attempts: 0,
+				replayCount: 0,
+				processingGeneration: 0,
+			}),
+		);
+		const thirdMessageId = await t.mutation(
+			internal.email.ingest.storeInboundEmail,
+			{
+				eventId: thirdEventId,
+				processingGeneration: 0,
+				email: {
+					...firstEmail,
+					externalMessageId: "resend-message-3",
+					internetMessageId: "<third@example.com>",
+					inReplyTo: "<second@example.com>",
+					references: ["<first@example.com>", "<second@example.com>"],
+					sentAt: 3_000,
+					receivedAt: 3_100,
+				},
+			},
+		);
+
 		const state = await t.run(async (ctx) => ({
 			threads: await ctx.db.query("emailThreads").collect(),
 			messages: await ctx.db.query("emailMessages").collect(),
@@ -163,13 +195,13 @@ describe("inbound email ingestion", () => {
 		expect(secondMessageId).not.toBe(firstMessageId);
 		expect(duplicateMessageId).toBe(secondMessageId);
 		expect(state.threads).toHaveLength(1);
-		expect(state.messages).toHaveLength(2);
+		expect(state.messages).toHaveLength(3);
 		expect(state.contacts).toHaveLength(1);
 		expect(state.contacts[0]).toMatchObject({
 			address: "ada@example.com",
 			name: "Ada",
 			firstSeenAt: 1_100,
-			lastSeenAt: 2_100,
+			lastSeenAt: 3_100,
 		});
 		expect(
 			state.messages.every(
@@ -178,7 +210,7 @@ describe("inbound email ingestion", () => {
 					message.senderContactId === state.contacts[0]?._id,
 			),
 		).toBe(true);
-		expect(state.threads[0]?.latestMessageId).toBe(secondMessageId);
+		expect(state.threads[0]?.latestMessageId).toBe(thirdMessageId);
 		expect(state.threads[0]?.isUnread).toBe(true);
 		expect(state.inbox?.unreadThreadCount).toBe(1);
 		expect(state.duplicateEvent?.status).toBe("processed");

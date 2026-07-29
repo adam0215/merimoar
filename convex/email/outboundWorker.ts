@@ -5,41 +5,21 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
 import { internalAction } from "../_generated/server";
-import type { EmailSendFailure } from "./model";
-import { createOutboundEmailProvider } from "./outboundProvider";
-import { fetchResendAccess } from "./resendAccess";
-
-async function recordRetryableFailure(
-	ctx: ActionCtx,
-	args: {
-		sendId: Id<"emailSends">;
-		generation: number;
-		failure: EmailSendFailure;
-	},
-) {
-	await ctx.runMutation(
-		internal.email.outbound.recordKnownRetryableFailure,
-		args,
-	);
-}
-
-async function recordTerminalFailure(
-	ctx: ActionCtx,
-	args: {
-		sendId: Id<"emailSends">;
-		generation: number;
-		failure: EmailSendFailure;
-	},
-) {
-	await ctx.runMutation(internal.email.outbound.recordTerminalFailure, args);
-}
+import {
+	ambiguousProviderOutcomeFailure,
+	type EmailSendFailure,
+} from "./model";
+import {
+	connectOutboundEmailProvider,
+	type OutboundEmailProvider,
+} from "./outboundProvider";
 
 async function reconcileInternetMessageId(
 	ctx: ActionCtx,
 	messageId: Id<"emailMessages">,
 	integrationId: Id<"emailIntegrations">,
 	externalMessageId: string,
-	provider: ReturnType<typeof createOutboundEmailProvider>,
+	provider: OutboundEmailProvider,
 ) {
 	try {
 		const internetMessageId =
@@ -85,14 +65,16 @@ export const processOutboundEmail = internalAction({
 				},
 			);
 			try {
-				const access = await fetchResendAccess(context.integration);
-				if (access.active) {
+				const connection = await connectOutboundEmailProvider(
+					context.integration,
+				);
+				if (connection.status === "ready") {
 					await reconcileInternetMessageId(
 						ctx,
 						context.message._id,
 						context.integration._id,
 						context.message.externalMessageId,
-						createOutboundEmailProvider(context.integration, access.token),
+						connection.provider,
 					);
 				}
 			} catch {
@@ -102,52 +84,44 @@ export const processOutboundEmail = internalAction({
 			return null;
 		}
 
-		let access: Awaited<ReturnType<typeof fetchResendAccess>>;
+		let connection: Awaited<ReturnType<typeof connectOutboundEmailProvider>>;
 		try {
-			access = await fetchResendAccess(context.integration);
+			connection = await connectOutboundEmailProvider(context.integration);
 		} catch {
-			await recordRetryableFailure(ctx, {
-				sendId: args.sendId,
-				generation: args.generation,
-				failure: {
-					kind: "before_provider",
-					reason: "access_unavailable",
-					message: "Could not obtain an email provider access token.",
-				},
-			});
-			throw new Error("Email provider access is temporarily unavailable");
-		}
-		if (!access.active) {
 			await ctx.runMutation(
-				internal.email.integrations.markNeedsReauthorization,
+				internal.email.outbound.recordKnownRetryableFailure,
 				{
-					integrationId: context.integration._id,
-					expectedConnectedAccountUpdatedAt:
-						context.integration.workosConnectedAccountUpdatedAt,
+					sendId: args.sendId,
+					generation: args.generation,
+					failure: {
+						kind: "before_provider",
+						reason: "access_unavailable",
+						message: "Could not obtain an email provider access token.",
+					},
 				},
 			);
-			await recordTerminalFailure(ctx, {
+			throw new Error("Email provider access is temporarily unavailable");
+		}
+		if (connection.status === "unavailable") {
+			if (connection.reauthorizationRequired) {
+				await ctx.runMutation(
+					internal.email.integrations.markNeedsReauthorization,
+					{
+						integrationId: context.integration._id,
+						expectedConnectedAccountUpdatedAt:
+							context.integration.workosConnectedAccountUpdatedAt,
+					},
+				);
+			}
+			await ctx.runMutation(internal.email.outbound.recordTerminalFailure, {
 				sendId: args.sendId,
 				generation: args.generation,
-				failure: {
-					kind: "before_provider",
-					reason:
-						access.error === "missing_required_scope"
-							? "configuration"
-							: "route_inactive",
-					message:
-						access.error === "missing_required_scope"
-							? "Resend must grant the full_access scope."
-							: "The Resend account must be reauthorized.",
-				},
+				failure: connection.failure,
 			});
 			return null;
 		}
 
-		const provider = createOutboundEmailProvider(
-			context.integration,
-			access.token,
-		);
+		const provider = connection.provider;
 		const canCallProvider = await ctx.runMutation(
 			internal.email.outbound.beginProviderCall,
 			args,
@@ -159,14 +133,10 @@ export const processOutboundEmail = internalAction({
 		try {
 			result = await provider.send(context.message);
 		} catch {
-			await recordTerminalFailure(ctx, {
+			await ctx.runMutation(internal.email.outbound.recordTerminalFailure, {
 				sendId: args.sendId,
 				generation: args.generation,
-				failure: {
-					kind: "ambiguous",
-					message:
-						"The provider outcome is unknown; the email will not be sent again.",
-				},
+				failure: ambiguousProviderOutcomeFailure,
 			});
 			return null;
 		}
@@ -182,15 +152,18 @@ export const processOutboundEmail = internalAction({
 				);
 			}
 			if (result.kind === "transient") {
-				await recordRetryableFailure(ctx, {
-					sendId: args.sendId,
-					generation: args.generation,
-					failure: {
-						kind: "provider_rejected",
-						reason: "transient",
-						message: result.message,
+				await ctx.runMutation(
+					internal.email.outbound.recordKnownRetryableFailure,
+					{
+						sendId: args.sendId,
+						generation: args.generation,
+						failure: {
+							kind: "provider_rejected",
+							reason: "transient",
+							message: result.message,
+						},
 					},
-				});
+				);
 				throw new Error("Email provider temporarily rejected the send");
 			}
 			const failure: EmailSendFailure =
@@ -204,7 +177,7 @@ export const processOutboundEmail = internalAction({
 							reason: result.kind,
 							message: result.message,
 						};
-			await recordTerminalFailure(ctx, {
+			await ctx.runMutation(internal.email.outbound.recordTerminalFailure, {
 				sendId: args.sendId,
 				generation: args.generation,
 				failure,
@@ -243,21 +216,21 @@ export const reconcileProviderMetadata = internalAction({
 	returns: v.null(),
 	handler: async (ctx, args): Promise<null> => {
 		const integration = await ctx.runQuery(
-			internal.email.integrations.getResendAccessContext,
+			internal.email.integrations.getOutboundAccessContext,
 			{ integrationId: args.integrationId },
 		);
 		if (!integration) {
 			return null;
 		}
 		try {
-			const access = await fetchResendAccess(integration);
-			if (access.active) {
+			const connection = await connectOutboundEmailProvider(integration);
+			if (connection.status === "ready") {
 				await reconcileInternetMessageId(
 					ctx,
 					args.messageId,
 					args.integrationId,
 					args.externalMessageId,
-					createOutboundEmailProvider(integration, access.token),
+					connection.provider,
 				);
 			}
 		} catch {
