@@ -1,6 +1,11 @@
 import { IconArrowRight, IconMailShare } from "@tabler/icons-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "#/components/ui/button.tsx";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 import { cn } from "#/lib/utils.ts";
 
 export function EmailComposer({
@@ -77,13 +82,21 @@ export function EmailComposer({
 					/>
 				)}
 				{senderAddress && (
-					<span
-						className="flex min-w-0 items-center gap-1.5 self-center pr-3 text-xs leading-4 text-muted-foreground"
-						aria-label={`Sent from ${senderAddress}`}
-					>
-						<IconMailShare className="size-3.5 shrink-0" aria-hidden="true" />
-						<span className="truncate">{senderAddress}</span>
-					</span>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									aria-label={`Sent from ${senderAddress}`}
+								/>
+							}
+						>
+							<IconMailShare className="size-3.5" />
+						</TooltipTrigger>
+						<TooltipContent>{senderAddress}</TooltipContent>
+					</Tooltip>
 				)}
 				<Button
 					type="submit"
