@@ -12,7 +12,7 @@ import { Button } from "#/components/ui/button.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
 import { cn } from "#/lib/utils.ts";
-import { api } from "../../../convex/_generated/api";
+import { api } from "../../../../convex/_generated/api";
 
 type EmailSearch = {
 	inbox?: string;
@@ -53,7 +53,7 @@ const preloadInitialEmailPage = createServerFn({ method: "GET" })
 		};
 	});
 
-export const Route = createFileRoute("/_authenticated/email")({
+export const Route = createFileRoute("/_authenticated/(work)/email")({
 	validateSearch: (search: Record<string, unknown>): EmailSearch => ({
 		inbox: typeof search.inbox === "string" ? search.inbox : undefined,
 		thread: typeof search.thread === "string" ? search.thread : undefined,

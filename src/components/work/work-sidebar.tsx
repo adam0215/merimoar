@@ -38,7 +38,7 @@ import {
 	SidebarRail,
 } from "#/components/ui/sidebar.tsx";
 import { cn } from "#/lib/utils.ts";
-import { api } from "../../convex/_generated/api";
+import { api } from "../../../convex/_generated/api";
 
 type EmailInbox = FunctionReturnType<
 	typeof api.email.reader.listInboxes
@@ -142,7 +142,7 @@ function InboxSidebarGroup({
 	);
 }
 
-export function AppSidebar({
+export function WorkSidebar({
 	inboxes,
 	selectedInboxId,
 }: {

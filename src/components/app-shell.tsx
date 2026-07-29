@@ -1,7 +1,14 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { IconArtboard, IconBriefcase2 } from "@tabler/icons-react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
+import { useEffect, useState } from "react";
+import {
+	type AgentView,
+	getAgentNavItem,
+	isAgentView,
+} from "#/components/agents/agent-navigation.ts";
+import { AgentsSidebar } from "#/components/agents/agents-sidebar.tsx";
 import { AppNotificationCenter } from "#/components/app-notification-center.tsx";
-import { AppSidebar } from "#/components/app-sidebar.tsx";
 import { MerimoarLogo } from "#/components/merimoar-logo.tsx";
 import {
 	SidebarInset,
@@ -9,15 +16,20 @@ import {
 	SidebarTrigger,
 	useSidebar,
 } from "#/components/ui/sidebar.tsx";
+import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs.tsx";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
+import { WorkSidebar } from "#/components/work/work-sidebar.tsx";
 import { cn } from "#/lib/utils.ts";
 import { api } from "../../convex/_generated/api";
 
-function getPageTitle(pathname: string) {
+function getPageTitle(pathname: string, agentView: AgentView) {
+	if (isAgentsPath(pathname)) {
+		return getAgentNavItem(agentView).label;
+	}
 	if (pathname === "/settings/organization/entities") {
 		return "Entity settings";
 	}
@@ -36,11 +48,22 @@ function getPageTitle(pathname: string) {
 	return "Email";
 }
 
+function isAgentsPath(pathname: string) {
+	return pathname === "/agents" || pathname.startsWith("/agents/");
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
 	const location = useRouterState({
 		select: (state) => state.location,
 	});
-	const inboxes = useQuery(api.email.reader.listInboxes, {});
+	const isAgentsArea = isAgentsPath(location.pathname);
+	const agentView = isAgentView(location.search.view)
+		? location.search.view
+		: "tasks";
+	const inboxes = useQuery(
+		api.email.reader.listInboxes,
+		isAgentsArea ? "skip" : {},
+	);
 	const selectedInboxId =
 		location.pathname === "/email" ? location.search.inbox : undefined;
 	const visibleInboxes = selectedInboxId
@@ -51,8 +74,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	return (
 		<SidebarProvider className="app-shell-enter pt-14">
 			<AppNotificationCenter />
-			<AppSidebar inboxes={inboxes ?? []} selectedInboxId={selectedInboxId} />
-			<AppHeader pathname={location.pathname} inboxAddresses={inboxAddresses} />
+			{isAgentsArea ? (
+				<AgentsSidebar selectedView={agentView} />
+			) : (
+				<WorkSidebar
+					inboxes={inboxes ?? []}
+					selectedInboxId={selectedInboxId}
+				/>
+			)}
+			<AppHeader
+				pathname={location.pathname}
+				agentView={agentView}
+				inboxAddresses={inboxAddresses}
+			/>
 			<SidebarInset className="h-[calc(100svh-3.5rem)] min-h-0 overflow-hidden">
 				{children}
 			</SidebarInset>
@@ -62,12 +96,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
 function AppHeader({
 	pathname,
+	agentView,
 	inboxAddresses,
 }: {
 	pathname: string;
+	agentView: AgentView;
 	inboxAddresses: string[];
 }) {
 	const { state } = useSidebar();
+	const activeArea = isAgentsPath(pathname) ? "agents" : "work";
 
 	return (
 		<header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center border-b bg-background">
@@ -89,18 +126,64 @@ function AppHeader({
 			</div>
 			<div
 				className={cn(
-					"flex min-w-0 flex-1 items-center pr-4 pl-2",
+					"flex min-w-0 flex-1 items-center gap-4 pr-4 pl-2",
 					state === "expanded" && "md:pl-0",
 				)}
 			>
 				<div className="flex min-w-0 flex-col sm:flex-row sm:items-baseline sm:gap-2">
-					<p className="text-sm font-medium">{getPageTitle(pathname)}</p>
+					<p className="text-sm font-medium">
+						{getPageTitle(pathname, agentView)}
+					</p>
 					{pathname === "/email" && (
 						<InboxAddressSummary addresses={inboxAddresses} />
 					)}
 				</div>
+				<AreaTabs activeArea={activeArea} />
 			</div>
 		</header>
+	);
+}
+
+function AreaTabs({ activeArea }: { activeArea: "work" | "agents" }) {
+	const navigate = useNavigate();
+	const [selectedArea, setSelectedArea] = useState(activeArea);
+
+	useEffect(() => {
+		setSelectedArea(activeArea);
+	}, [activeArea]);
+
+	return (
+		<Tabs
+			value={selectedArea}
+			onValueChange={(value) => {
+				if (value === "work") {
+					setSelectedArea(value);
+					void navigate({ to: "/email", search: {} }).catch(() => {
+						setSelectedArea(activeArea);
+					});
+					return;
+				}
+
+				if (value === "agents") {
+					setSelectedArea(value);
+					void navigate({ to: "/agents", search: {} }).catch(() => {
+						setSelectedArea(activeArea);
+					});
+				}
+			}}
+			className="ml-auto shrink-0"
+		>
+			<TabsList aria-label="Workspace">
+				<TabsTrigger value="work">
+					<IconBriefcase2 data-icon="inline-start" />
+					Work
+				</TabsTrigger>
+				<TabsTrigger value="agents">
+					<IconArtboard data-icon="inline-start" />
+					Agents
+				</TabsTrigger>
+			</TabsList>
+		</Tabs>
 	);
 }
 

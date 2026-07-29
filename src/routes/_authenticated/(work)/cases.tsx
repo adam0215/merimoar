@@ -13,7 +13,7 @@ import { CaseView as CaseDetailPanel } from "#/components/case/case-view.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
 import { cn } from "#/lib/utils.ts";
-import { api } from "../../../convex/_generated/api";
+import { api } from "../../../../convex/_generated/api";
 
 type CasesSearch = {
 	case?: string;
@@ -51,7 +51,7 @@ const preloadInitialCasePage = createServerFn({ method: "GET" })
 		};
 	});
 
-export const Route = createFileRoute("/_authenticated/cases")({
+export const Route = createFileRoute("/_authenticated/(work)/cases")({
 	validateSearch: (search: Record<string, unknown>): CasesSearch => ({
 		case: typeof search.case === "string" ? search.case : undefined,
 		view: isCaseViewFilter(search.view) ? search.view : undefined,

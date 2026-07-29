@@ -10,7 +10,7 @@ import { Button } from "#/components/ui/button.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
 import { cn } from "#/lib/utils.ts";
-import { api } from "../../../convex/_generated/api";
+import { api } from "../../../../convex/_generated/api";
 
 type ContactsSearch = {
 	contact?: string;
@@ -64,7 +64,7 @@ const preloadInitialContactPage = createServerFn({ method: "GET" })
 		};
 	});
 
-export const Route = createFileRoute("/_authenticated/contacts")({
+export const Route = createFileRoute("/_authenticated/(work)/contacts")({
 	validateSearch: (search: Record<string, unknown>): ContactsSearch => ({
 		contact: typeof search.contact === "string" ? search.contact : undefined,
 	}),

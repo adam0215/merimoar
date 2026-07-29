@@ -25,8 +25,8 @@ import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/serve
 import { refreshResendPipesConnectionState } from "#/integrations/workos/resend-pipes-functions.ts";
 import { showAppNotification } from "#/lib/app-notifications.ts";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
-import { api } from "../../../../../convex/_generated/api";
-import type { Id } from "../../../../../convex/_generated/dataModel";
+import { api } from "../../../../../../convex/_generated/api";
+import type { Id } from "../../../../../../convex/_generated/dataModel";
 
 const preloadEmailSettings = createServerFn({ method: "GET" }).handler(
 	async () => {
@@ -40,7 +40,7 @@ const preloadEmailSettings = createServerFn({ method: "GET" }).handler(
 );
 
 export const Route = createFileRoute(
-	"/_authenticated/settings/organization/email",
+	"/_authenticated/(work)/settings/organization/email",
 )({
 	loader: async () => {
 		const [emailSettings, resendPipesConnectionState] = await Promise.all([

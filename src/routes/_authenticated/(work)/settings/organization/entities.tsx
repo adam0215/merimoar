@@ -3,7 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { useQuery } from "convex-helpers/react/cache";
 import { EntitySettings } from "#/components/entity/entity-settings.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
-import { api } from "../../../../../convex/_generated/api";
+import { api } from "../../../../../../convex/_generated/api";
 
 type EntitySettingsSearch = {
 	type?: string;
@@ -30,7 +30,7 @@ const preloadEntitySettings = createServerFn({ method: "GET" })
 	});
 
 export const Route = createFileRoute(
-	"/_authenticated/settings/organization/entities",
+	"/_authenticated/(work)/settings/organization/entities",
 )({
 	validateSearch: (search: Record<string, unknown>): EntitySettingsSearch => ({
 		type: typeof search.type === "string" ? search.type : undefined,
