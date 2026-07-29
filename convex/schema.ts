@@ -59,6 +59,7 @@ export default defineSchema({
 		address: v.string(),
 		status: v.union(v.literal("active"), v.literal("disabled")),
 		outboundIntegrationId: v.optional(v.id("emailIntegrations")),
+		unreadThreadCount: v.number(),
 	})
 		.index("by_organization_id", ["organizationId"])
 		.index("by_organization_id_and_address", ["organizationId", "address"])
@@ -81,10 +82,17 @@ export default defineSchema({
 		latestMessageId: v.optional(v.id("emailMessages")),
 		lastActivityAt: v.number(),
 		isUnread: v.optional(v.boolean()),
-	}).index("by_organization_id_and_last_activity_at", [
-		"organizationId",
-		"lastActivityAt",
-	]),
+	})
+		.index("by_organization_id_and_last_activity_at", [
+			"organizationId",
+			"lastActivityAt",
+		])
+		.index("by_organization_id_and_inbox_id_and_last_activity_at", [
+			"organizationId",
+			"inboxId",
+			"lastActivityAt",
+		])
+		.index("by_inbox_id_and_is_unread", ["inboxId", "isUnread"]),
 
 	emailThreadExternalReferences: defineTable({
 		threadId: v.id("emailThreads"),

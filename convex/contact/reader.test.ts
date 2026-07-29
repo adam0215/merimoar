@@ -67,6 +67,7 @@ describe("contact reader", () => {
 					displayName: "Support",
 					address: "support@merimoar.test",
 					status: "active",
+					unreadThreadCount: 0,
 				});
 				const integrationId = await ctx.db.insert("emailIntegrations", {
 					organizationId,

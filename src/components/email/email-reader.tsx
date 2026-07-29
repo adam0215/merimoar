@@ -56,27 +56,59 @@ function optimisticallySetThreadUnread(
 		isUnread: boolean;
 	},
 ) {
-	optimisticallyUpdateValueInPaginatedQuery(
-		localStore,
-		api.email.reader.listThreads,
-		{},
-		(item) =>
-			item.thread._id === args.threadId
-				? {
-						...item,
-						thread: { ...item.thread, isUnread: args.isUnread },
-					}
-				: item,
-	);
+	const threadQuery = localStore
+		.getAllQueries(api.email.reader.getThread)
+		.find((query) => query.value?.thread._id === args.threadId);
+	const currentThread = threadQuery?.value?.thread;
+	const inboxId = currentThread?.inboxId;
+	const unreadStateChanged =
+		currentThread !== undefined &&
+		(currentThread.isUnread ?? false) !== args.isUnread;
 
-	for (const query of localStore.getAllQueries(api.email.reader.getThread)) {
-		if (query.value?.thread._id !== args.threadId) {
-			continue;
-		}
-		localStore.setQuery(api.email.reader.getThread, query.args, {
-			...query.value,
-			thread: { ...query.value.thread, isUnread: args.isUnread },
+	if (threadQuery?.value) {
+		localStore.setQuery(api.email.reader.getThread, threadQuery.args, {
+			...threadQuery.value,
+			thread: { ...threadQuery.value.thread, isUnread: args.isUnread },
 		});
+	}
+
+	function updateCachedThreadList(queryArgs: { inboxId?: string }) {
+		optimisticallyUpdateValueInPaginatedQuery(
+			localStore,
+			api.email.reader.listThreads,
+			queryArgs,
+			(item) =>
+				item.thread._id === args.threadId
+					? {
+							...item,
+							thread: { ...item.thread, isUnread: args.isUnread },
+						}
+					: item,
+		);
+	}
+
+	updateCachedThreadList({});
+	if (inboxId) {
+		updateCachedThreadList({ inboxId });
+	}
+
+	const inboxes = localStore.getQuery(api.email.reader.listInboxes, {});
+	if (inboxes && inboxId && unreadStateChanged) {
+		localStore.setQuery(
+			api.email.reader.listInboxes,
+			{},
+			inboxes.map((inbox) =>
+				inbox._id === inboxId
+					? {
+							...inbox,
+							unreadCount: Math.max(
+								0,
+								inbox.unreadCount + (args.isUnread ? 1 : -1),
+							),
+						}
+					: inbox,
+			),
+		);
 	}
 }
 
@@ -171,12 +203,14 @@ function findRepliedToMessage(message: Message, messages: Message[]) {
 
 export function ThreadList({
 	items,
+	selectedInboxId,
 	selectedThreadId,
 	status,
 	loadMore,
 	compact,
 }: {
 	items: ThreadListItem[];
+	selectedInboxId?: string;
 	selectedThreadId?: string;
 	status: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";
 	loadMore: () => void;
@@ -246,7 +280,10 @@ export function ThreadList({
 						<Link
 							key={thread._id}
 							to="/email"
-							search={{ thread: thread._id }}
+							search={{
+								inbox: selectedInboxId,
+								thread: thread._id,
+							}}
 							className={cn(
 								"mb-0.5 grid items-center gap-x-2 rounded-lg px-3 py-2 text-xs text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
 								thread.isUnread
@@ -309,7 +346,10 @@ export function ThreadList({
 					<Link
 						key={thread._id}
 						to="/email"
-						search={{ thread: thread._id }}
+						search={{
+							inbox: selectedInboxId,
+							thread: thread._id,
+						}}
 						className={cn(
 							"group mb-1 flex gap-3 rounded-xl px-3 py-3.5 text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
 							isActive && "bg-muted",

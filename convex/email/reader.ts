@@ -5,6 +5,7 @@ import type { QueryCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
 import { requireActor } from "../auth/access";
 import { getActiveCaseRelationForEmailThread } from "../case/emailRelations";
+import { updateInboxUnreadThreadCount } from "./unreadCounts";
 
 async function listLatestThreadMessages(
 	ctx: QueryCtx,
@@ -63,6 +64,7 @@ export const listInboxes = query({
 					displayName: inbox.displayName,
 					address: inbox.address,
 					status: "active" as const,
+					unreadCount: inbox.unreadThreadCount,
 					outboundIntegration:
 						outboundIntegration?.organizationId === workspace.organization._id
 							? {
@@ -80,16 +82,43 @@ export const listInboxes = query({
 export const listThreads = query({
 	args: {
 		paginationOpts: paginationOptsValidator,
+		inboxId: v.optional(v.string()),
 	},
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
-		const result = await ctx.db
-			.query("emailThreads")
-			.withIndex("by_organization_id_and_last_activity_at", (query) =>
-				query.eq("organizationId", workspace.organization._id),
-			)
-			.order("desc")
-			.paginate(args.paginationOpts);
+		let inboxId = args.inboxId
+			? ctx.db.normalizeId("emailInboxes", args.inboxId)
+			: null;
+		if (args.inboxId) {
+			const inbox = inboxId ? await ctx.db.get(inboxId) : null;
+			if (!inbox || inbox.organizationId !== workspace.organization._id) {
+				throw new ConvexError({
+					code: "EMAIL_INBOX_NOT_FOUND",
+					message: "The email inbox could not be found.",
+				});
+			}
+			inboxId = inbox._id;
+		}
+
+		const result = inboxId
+			? await ctx.db
+					.query("emailThreads")
+					.withIndex(
+						"by_organization_id_and_inbox_id_and_last_activity_at",
+						(query) =>
+							query
+								.eq("organizationId", workspace.organization._id)
+								.eq("inboxId", inboxId),
+					)
+					.order("desc")
+					.paginate(args.paginationOpts)
+			: await ctx.db
+					.query("emailThreads")
+					.withIndex("by_organization_id_and_last_activity_at", (query) =>
+						query.eq("organizationId", workspace.organization._id),
+					)
+					.order("desc")
+					.paginate(args.paginationOpts);
 
 		const page = await Promise.all(
 			result.page.map(async (thread) => ({
@@ -204,9 +233,16 @@ export const setUnread = mutation({
 			});
 		}
 
-		if (thread.isUnread !== args.isUnread) {
-			await ctx.db.patch(thread._id, { isUnread: args.isUnread });
+		if (thread.isUnread === args.isUnread) {
+			return null;
 		}
+
+		await ctx.db.patch(thread._id, { isUnread: args.isUnread });
+		await updateInboxUnreadThreadCount(
+			ctx,
+			thread.inboxId,
+			args.isUnread ? 1 : -1,
+		);
 		return null;
 	},
 });

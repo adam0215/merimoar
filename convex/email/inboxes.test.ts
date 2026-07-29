@@ -76,6 +76,7 @@ describe("email inboxes", () => {
 			displayName: "Support inbox",
 			address: "support@example.com",
 			status: "active",
+			unreadThreadCount: 0,
 		});
 		expect(inbox).not.toHaveProperty("provider");
 		expect(inbox).not.toHaveProperty("webhookId");

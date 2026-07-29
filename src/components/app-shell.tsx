@@ -37,17 +37,22 @@ function getPageTitle(pathname: string) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-	const pathname = useRouterState({
-		select: (state) => state.location.pathname,
+	const location = useRouterState({
+		select: (state) => state.location,
 	});
 	const inboxes = useQuery(api.email.reader.listInboxes, {});
-	const inboxAddresses = inboxes?.map((inbox) => inbox.address) ?? [];
+	const selectedInboxId =
+		location.pathname === "/email" ? location.search.inbox : undefined;
+	const visibleInboxes = selectedInboxId
+		? inboxes?.filter((inbox) => inbox._id === selectedInboxId)
+		: inboxes;
+	const inboxAddresses = visibleInboxes?.map((inbox) => inbox.address) ?? [];
 
 	return (
 		<SidebarProvider className="app-shell-enter pt-14">
 			<AppNotificationCenter />
-			<AppSidebar />
-			<AppHeader pathname={pathname} inboxAddresses={inboxAddresses} />
+			<AppSidebar inboxes={inboxes ?? []} selectedInboxId={selectedInboxId} />
+			<AppHeader pathname={location.pathname} inboxAddresses={inboxAddresses} />
 			<SidebarInset className="h-[calc(100svh-3.5rem)] min-h-0 overflow-hidden">
 				{children}
 			</SidebarInset>
