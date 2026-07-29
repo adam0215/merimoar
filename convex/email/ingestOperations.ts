@@ -25,13 +25,21 @@ function describeFailure(event: Doc<"emailIngestEvents">) {
 	}
 }
 
-async function requireOwnedInbox(
+async function findOwnedInbox(
 	ctx: QueryCtx | MutationCtx,
 	inboxId: Doc<"emailInboxes">["_id"],
 ) {
 	const actor = await requireActor(ctx);
 	const inbox = await ctx.db.get(inboxId);
-	if (inbox?.organizationId !== actor.organization._id) {
+	return inbox?.organizationId === actor.organization._id ? inbox : null;
+}
+
+async function requireOwnedInbox(
+	ctx: QueryCtx | MutationCtx,
+	inboxId: Doc<"emailInboxes">["_id"],
+) {
+	const inbox = await findOwnedInbox(ctx, inboxId);
+	if (!inbox) {
 		throwFailedEventNotFound();
 	}
 	return inbox;
@@ -57,7 +65,10 @@ export const listFailedEvents = query({
 		inboxId: v.id("emailInboxes"),
 	},
 	handler: async (ctx, args) => {
-		const inbox = await requireOwnedInbox(ctx, args.inboxId);
+		const inbox = await findOwnedInbox(ctx, args.inboxId);
+		if (!inbox) {
+			return [];
+		}
 		const recipientRows = (
 			await Promise.all(
 				(["failed", "unroutable"] as const).map((status) =>

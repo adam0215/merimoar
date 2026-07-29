@@ -139,11 +139,11 @@ describe("failed email ingest operations", () => {
 		await expect(
 			base.query(api.email.ingestOperations.listFailedEvents, { inboxId }),
 		).rejects.toThrow("Sign in");
-		await expect(
-			actor.query(api.email.ingestOperations.listFailedEvents, {
+		expect(
+			await actor.query(api.email.ingestOperations.listFailedEvents, {
 				inboxId: otherInboxId,
 			}),
-		).rejects.toThrow("could not be found");
+		).toEqual([]);
 		await expect(
 			otherActor.mutation(api.email.ingestOperations.replayFailedEvent, {
 				inboxId,

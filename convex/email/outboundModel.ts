@@ -34,6 +34,11 @@ export function selectReplyRecipient(
 		: null;
 }
 
+export function isReservedNonDeliverableAddress(address: string) {
+	const domain = normalizeEmailAddress(address).split("@").at(-1);
+	return domain === "invalid" || domain?.endsWith(".invalid") === true;
+}
+
 export function createProviderIdempotencyKey(messageId: string) {
 	return `merimoar-email-${messageId}`;
 }

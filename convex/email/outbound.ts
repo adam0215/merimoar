@@ -10,6 +10,7 @@ import { type EmailSendFailure, emailSendFailureValidator } from "./model";
 import {
 	createReplySubject,
 	createReplyThreading,
+	isReservedNonDeliverableAddress,
 	selectReplyRecipient,
 } from "./outboundModel";
 import { emailOutboundPool } from "./outboundQueue";
@@ -254,6 +255,12 @@ export const queueReply = mutation({
 				"The reply would be addressed to the inbox itself.",
 			);
 		}
+		if (isReservedNonDeliverableAddress(recipient.address)) {
+			throwDomainError(
+				"EMAIL_RECIPIENT_NON_DELIVERABLE",
+				"Replies to reserved demo addresses cannot be sent.",
+			);
+		}
 		const threading = createReplyThreading(replyTarget);
 		const queuedAt = Date.now();
 		const messageId = await ctx.db.insert("emailMessages", {
@@ -391,6 +398,20 @@ export const prepareSendAttempt = internalMutation({
 					kind: "before_provider",
 					reason: "configuration",
 					message: "The outbound email route is invalid.",
+				},
+			});
+			return null;
+		}
+		if (
+			[...message.to, ...message.cc, ...message.bcc].some((recipient) =>
+				isReservedNonDeliverableAddress(recipient.address),
+			)
+		) {
+			await ctx.db.patch(send._id, {
+				status: "failed",
+				failure: {
+					kind: "permanent",
+					message: "Replies to reserved demo addresses cannot be sent.",
 				},
 			});
 			return null;

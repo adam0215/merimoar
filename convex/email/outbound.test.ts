@@ -359,6 +359,76 @@ describe("outbound email replies", () => {
 		expect(state.inbox?.unreadThreadCount).toBe(0);
 	});
 
+	it("blocks reserved demo recipients before queueing or calling the provider", async () => {
+		const fixture = await createFixture();
+		await fixture.base.run(async (ctx) => {
+			await ctx.db.patch(fixture.inboundMessageId, {
+				from: {
+					address: "customer@seed-kund.invalid",
+					name: "Seed customer",
+				},
+				replyTo: [],
+			});
+		});
+		const draft = await fixture.actor.mutation(api.email.outbound.saveDraft, {
+			threadId: fixture.threadId,
+			body: "This must never leave the demo inbox.",
+		});
+
+		await expectErrorCode(
+			fixture.actor.mutation(api.email.outbound.queueReply, {
+				threadId: fixture.threadId,
+				draftRevision: draft.revision,
+				clientRequestId: "reserved-demo-recipient",
+			}),
+			"EMAIL_RECIPIENT_NON_DELIVERABLE",
+		);
+		expect(
+			await fixture.base.run(async (ctx) =>
+				ctx.db.query("emailSends").collect(),
+			),
+		).toHaveLength(0);
+
+		const unsafeSend = await fixture.base.run(async (ctx) => {
+			const messageId = await ctx.db.insert("emailMessages", {
+				inboxId: fixture.inboxId,
+				integrationId: fixture.integrationId,
+				threadId: fixture.threadId,
+				direction: "outbound",
+				authoredByMemberId: fixture.memberId,
+				from: { address: "replies@verified.example" },
+				to: [{ address: "customer@seed-kund.invalid" }],
+				cc: [],
+				bcc: [],
+				replyTo: [],
+				references: [],
+				subject: "Unsafe fixture",
+				textBody: "This should be stopped by the worker boundary.",
+				sentAt: 2_000,
+			});
+			const sendId = await ctx.db.insert("emailSends", {
+				messageId,
+				requestedByMemberId: fixture.memberId,
+				clientRequestId: "unsafe-direct-write",
+				status: "queued",
+				generation: 0,
+				attemptCount: 0,
+			});
+			return { messageId, sendId, deduplicated: false };
+		});
+
+		expect(await prepareSendAttempt(fixture, unsafeSend)).toBeNull();
+		expect(
+			await fixture.base.run(async (ctx) => ctx.db.get(unsafeSend.sendId)),
+		).toMatchObject({
+			status: "failed",
+			failure: {
+				kind: "permanent",
+				message: "Replies to reserved demo addresses cannot be sent.",
+			},
+		});
+	});
+
 	it("atomically snapshots routing and scopes client idempotency to the requesting actor", async () => {
 		const fixture = await createFixture();
 		const queued = await saveAndQueue(fixture);

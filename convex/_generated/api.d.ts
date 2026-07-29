@@ -56,6 +56,9 @@ import type * as globalSearch_model from "../globalSearch/model.js";
 import type * as globalSearch_reader from "../globalSearch/reader.js";
 import type * as http from "../http.js";
 import type * as migrations from "../migrations.js";
+import type * as seed_acme from "../seed/acme.js";
+import type * as seed_acmeData from "../seed/acmeData.js";
+import type * as seed_acmeMigration from "../seed/acmeMigration.js";
 import type * as workos from "../workos.js";
 
 import type {
@@ -113,6 +116,9 @@ declare const fullApi: ApiFromModules<{
   "globalSearch/reader": typeof globalSearch_reader;
   http: typeof http;
   migrations: typeof migrations;
+  "seed/acme": typeof seed_acme;
+  "seed/acmeData": typeof seed_acmeData;
+  "seed/acmeMigration": typeof seed_acmeMigration;
   workos: typeof workos;
 }>;
 
