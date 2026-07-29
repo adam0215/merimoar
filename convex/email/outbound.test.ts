@@ -10,7 +10,7 @@ import { readResendInternetMessageId } from "./outboundModel";
 import {
 	classifyResendSendError,
 	createResendSendRequest,
-} from "./outboundProvider";
+} from "./outboundResendProvider";
 
 const ISSUER = "https://api.workos.com/";
 
@@ -64,12 +64,14 @@ async function createFixture() {
 			displayName: "Support",
 			address: "support@merimoar.test",
 			status: "active",
+			unreadThreadCount: 0,
 		});
 		const otherInboxId = await ctx.db.insert("emailInboxes", {
 			organizationId: otherOrganizationId,
 			displayName: "Other",
 			address: "support@other.test",
 			status: "active",
+			unreadThreadCount: 0,
 		});
 		const threadId = await ctx.db.insert("emailThreads", {
 			organizationId,
@@ -182,9 +184,17 @@ async function createFixture() {
 		"other-outbound",
 	);
 	await base.run(async (ctx) => {
-		await ctx.db.patch(ids.inboxId, { outboundIntegrationId: integrationId });
+		await ctx.db.patch(ids.inboxId, {
+			outbound: {
+				integrationId,
+				address: "replies@verified.example",
+			},
+		});
 		await ctx.db.patch(ids.otherInboxId, {
-			outboundIntegrationId: otherIntegrationId,
+			outbound: {
+				integrationId: otherIntegrationId,
+				address: "replies@other-verified.example",
+			},
 		});
 	});
 	return {
@@ -225,9 +235,55 @@ async function saveAndQueue(
 	});
 }
 
-function expectErrorCode(error: unknown, code: string) {
-	expect(error).toBeInstanceOf(ConvexError);
-	expect((error as ConvexError<{ code: string }>).data.code).toBe(code);
+type OutboundFixture = Awaited<ReturnType<typeof createFixture>>;
+type QueuedReply = Awaited<ReturnType<typeof saveAndQueue>>;
+
+function sendTransitionArgs(queued: QueuedReply, generation = 0) {
+	return {
+		sendId: queued.sendId,
+		messageId: queued.messageId,
+		generation,
+	};
+}
+
+async function prepareSendAttempt(
+	fixture: OutboundFixture,
+	queued: QueuedReply,
+	generation = 0,
+) {
+	return await fixture.base.mutation(
+		internal.email.outbound.prepareSendAttempt,
+		sendTransitionArgs(queued, generation),
+	);
+}
+
+async function beginProviderCall(
+	fixture: OutboundFixture,
+	queued: QueuedReply,
+	generation = 0,
+) {
+	return await fixture.base.mutation(
+		internal.email.outbound.beginProviderCall,
+		sendTransitionArgs(queued, generation),
+	);
+}
+
+async function requireWorkId(fixture: OutboundFixture, queued: QueuedReply) {
+	const workId = await fixture.base.run(
+		async (ctx) => (await ctx.db.get(queued.sendId))?.workId,
+	);
+	if (!workId) {
+		throw new Error("Expected outbound email work");
+	}
+	return workId;
+}
+
+async function expectErrorCode(promise: Promise<unknown>, code: string) {
+	await expect(promise).rejects.toSatisfy((error) => {
+		expect(error).toBeInstanceOf(ConvexError);
+		expect((error as ConvexError<{ code: string }>).data.code).toBe(code);
+		return true;
+	});
 }
 
 describe("outbound email replies", () => {
@@ -286,6 +342,23 @@ describe("outbound email replies", () => {
 		expect(readResendInternetMessageId({ message_id: 123 })).toBeUndefined();
 	});
 
+	it("marks an unread thread as read without drifting the inbox count", async () => {
+		const fixture = await createFixture();
+		await fixture.base.run(async (ctx) => {
+			await ctx.db.patch(fixture.threadId, { isUnread: true });
+			await ctx.db.patch(fixture.inboxId, { unreadThreadCount: 1 });
+		});
+
+		await saveAndQueue(fixture);
+
+		const state = await fixture.base.run(async (ctx) => ({
+			thread: await ctx.db.get(fixture.threadId),
+			inbox: await ctx.db.get(fixture.inboxId),
+		}));
+		expect(state.thread?.isUnread).toBe(false);
+		expect(state.inbox?.unreadThreadCount).toBe(0);
+	});
+
 	it("atomically snapshots routing and scopes client idempotency to the requesting actor", async () => {
 		const fixture = await createFixture();
 		const queued = await saveAndQueue(fixture);
@@ -306,16 +379,14 @@ describe("outbound email replies", () => {
 				lastActivityAt: 1_000,
 			});
 		});
-		await expect(
+		await expectErrorCode(
 			fixture.actor.mutation(api.email.outbound.queueReply, {
 				threadId: conflictingThreadId,
 				draftRevision: 1,
 				clientRequestId: "request-1",
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_CLIENT_REQUEST_ID_CONFLICT");
-			return true;
-		});
+			"EMAIL_CLIENT_REQUEST_ID_CONFLICT",
+		);
 
 		const secondActorDraft = await fixture.secondActor.mutation(
 			api.email.outbound.saveDraft,
@@ -370,7 +441,7 @@ describe("outbound email replies", () => {
 			authoredByMemberId: fixture.memberId,
 			integrationId: fixture.integrationId,
 			from: {
-				address: "support@merimoar.test",
+				address: "replies@verified.example",
 				name: "Support",
 			},
 			to: [{ address: "reply-to@example.com", name: "Replies" }],
@@ -412,7 +483,7 @@ describe("outbound email replies", () => {
 		}
 		expect(createResendSendRequest(state.message)).toEqual({
 			payload: {
-				from: '"Support" <support@merimoar.test>',
+				from: '"Support" <replies@verified.example>',
 				to: ['"Replies" <reply-to@example.com>'],
 				subject: "Re: Need help",
 				text: "A plain-text reply.",
@@ -454,16 +525,14 @@ describe("outbound email replies", () => {
 			threadId: second.threadId,
 			body: "Should not send.",
 		});
-		await expect(
+		await expectErrorCode(
 			second.actor.mutation(api.email.outbound.queueReply, {
 				threadId: second.threadId,
 				draftRevision: draft.revision,
 				clientRequestId: "self-addressed",
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_REPLY_RECIPIENT_INVALID");
-			return true;
-		});
+			"EMAIL_REPLY_RECIPIENT_INVALID",
+		);
 
 		const outboundOnlyThreadId = await second.base.run(async (ctx) => {
 			const threadId = await ctx.db.insert("emailThreads", {
@@ -496,68 +565,64 @@ describe("outbound email replies", () => {
 				body: "Do not reply to ourselves.",
 			},
 		);
-		await expect(
+		await expectErrorCode(
 			second.actor.mutation(api.email.outbound.queueReply, {
 				threadId: outboundOnlyThreadId,
 				draftRevision: outboundOnlyDraft.revision,
 				clientRequestId: "outbound-only",
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_REPLY_TARGET_NOT_FOUND");
-			return true;
-		});
+			"EMAIL_REPLY_TARGET_NOT_FOUND",
+		);
 	});
 
 	it("enforces organization, route ownership, configuration, and connection state", async () => {
+		expect.hasAssertions();
 		const fixture = await createFixture();
-		await expect(
+		await expectErrorCode(
 			fixture.otherActor.mutation(api.email.outbound.saveDraft, {
 				threadId: fixture.threadId,
 				body: "Cross tenant",
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_THREAD_NOT_FOUND");
-			return true;
-		});
+			"EMAIL_THREAD_NOT_FOUND",
+		);
 
 		await fixture.base.run(async (ctx) => {
 			await ctx.db.patch(fixture.inboxId, {
-				outboundIntegrationId: undefined,
+				outbound: undefined,
 			});
 		});
 		let draft = await fixture.actor.mutation(api.email.outbound.saveDraft, {
 			threadId: fixture.threadId,
 			body: "Unconfigured",
 		});
-		await expect(
+		await expectErrorCode(
 			fixture.actor.mutation(api.email.outbound.queueReply, {
 				threadId: fixture.threadId,
 				draftRevision: draft.revision,
 				clientRequestId: "unconfigured",
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_OUTBOUND_NOT_CONFIGURED");
-			return true;
-		});
+			"EMAIL_OUTBOUND_NOT_CONFIGURED",
+		);
 
 		await fixture.base.run(async (ctx) => {
 			await ctx.db.patch(fixture.inboxId, {
-				outboundIntegrationId: fixture.integrationId,
+				outbound: {
+					integrationId: fixture.integrationId,
+					address: "replies@verified.example",
+				},
 			});
 			await ctx.db.patch(fixture.integrationId, {
 				status: "needs_reauthorization",
 			});
 		});
-		await expect(
+		await expectErrorCode(
 			fixture.actor.mutation(api.email.outbound.queueReply, {
 				threadId: fixture.threadId,
 				draftRevision: draft.revision,
 				clientRequestId: "disconnected",
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_INTEGRATION_NOT_CONNECTED");
-			return true;
-		});
+			"EMAIL_INTEGRATION_NOT_CONNECTED",
+		);
 
 		const otherIntegrationId = await createConnectedResendIntegration(
 			fixture.base,
@@ -567,7 +632,10 @@ describe("outbound email replies", () => {
 		await fixture.base.run(async (ctx) => {
 			await ctx.db.patch(fixture.integrationId, { status: "connected" });
 			await ctx.db.patch(fixture.inboxId, {
-				outboundIntegrationId: otherIntegrationId,
+				outbound: {
+					integrationId: otherIntegrationId,
+					address: "replies@verified.example",
+				},
 			});
 		});
 		draft = await fixture.actor.mutation(api.email.outbound.saveDraft, {
@@ -575,24 +643,18 @@ describe("outbound email replies", () => {
 			body: "Corrupt route",
 			expectedRevision: draft.revision,
 		});
-		await expect(
+		await expectErrorCode(
 			fixture.actor.mutation(api.email.outbound.queueReply, {
 				threadId: fixture.threadId,
 				draftRevision: draft.revision,
 				clientRequestId: "wrong-org-integration",
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_OUTBOUND_ROUTE_INVALID");
-			return true;
-		});
+			"EMAIL_OUTBOUND_ROUTE_INVALID",
+		);
 	});
 
 	it("keeps inbox selection across disablement and prevents stale draft writes and sends", async () => {
 		const fixture = await createFixture();
-		await fixture.actor.mutation(api.email.inboxes.setOutboundIntegration, {
-			inboxId: fixture.inboxId,
-			integrationId: fixture.integrationId,
-		});
 		const first = await fixture.actor.mutation(api.email.outbound.saveDraft, {
 			threadId: fixture.threadId,
 			body: "First",
@@ -602,26 +664,22 @@ describe("outbound email replies", () => {
 			body: "Second",
 			expectedRevision: first.revision,
 		});
-		await expect(
+		await expectErrorCode(
 			fixture.actor.mutation(api.email.outbound.saveDraft, {
 				threadId: fixture.threadId,
 				body: "Stale",
 				expectedRevision: first.revision,
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_DRAFT_STALE_REVISION");
-			return true;
-		});
-		await expect(
+			"EMAIL_DRAFT_STALE_REVISION",
+		);
+		await expectErrorCode(
 			fixture.actor.mutation(api.email.outbound.queueReply, {
 				threadId: fixture.threadId,
 				draftRevision: first.revision,
 				clientRequestId: "stale-send",
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_DRAFT_STALE_REVISION");
-			return true;
-		});
+			"EMAIL_DRAFT_STALE_REVISION",
+		);
 
 		await fixture.actor.mutation(api.email.inboxes.remove, {
 			inboxId: fixture.inboxId,
@@ -630,29 +688,25 @@ describe("outbound email replies", () => {
 			await fixture.base.run(async (ctx) => ctx.db.get(fixture.inboxId)),
 		).toMatchObject({
 			status: "disabled",
-			outboundIntegrationId: fixture.integrationId,
+			outbound: {
+				integrationId: fixture.integrationId,
+				address: "replies@verified.example",
+			},
 		});
-		await expect(
+		await expectErrorCode(
 			fixture.actor.mutation(api.email.outbound.queueReply, {
 				threadId: fixture.threadId,
 				draftRevision: second.revision,
 				clientRequestId: "disabled",
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_ROUTE_INACTIVE");
-			return true;
-		});
+			"EMAIL_ROUTE_INACTIVE",
+		);
 	});
 
 	it("retries canceled and pre-provider failures without a provider window", async () => {
 		const canceled = await createFixture();
 		const canceledQueued = await saveAndQueue(canceled, "canceled");
-		const canceledWorkId = await canceled.base.run(
-			async (ctx) => (await ctx.db.get(canceledQueued.sendId))?.workId,
-		);
-		if (!canceledWorkId) {
-			throw new Error("Expected queued work");
-		}
+		const canceledWorkId = await requireWorkId(canceled, canceledQueued);
 		await canceled.base.mutation(
 			internal.email.outboundQueue.completeOutboundWork,
 			{
@@ -673,20 +727,8 @@ describe("outbound email replies", () => {
 
 		const workerFailed = await createFixture();
 		const workerQueued = await saveAndQueue(workerFailed, "worker-failed");
-		await workerFailed.base.mutation(
-			internal.email.outbound.prepareSendAttempt,
-			{
-				sendId: workerQueued.sendId,
-				messageId: workerQueued.messageId,
-				generation: 0,
-			},
-		);
-		const workerWorkId = await workerFailed.base.run(
-			async (ctx) => (await ctx.db.get(workerQueued.sendId))?.workId,
-		);
-		if (!workerWorkId) {
-			throw new Error("Expected claimed work");
-		}
+		await prepareSendAttempt(workerFailed, workerQueued);
+		const workerWorkId = await requireWorkId(workerFailed, workerQueued);
 		await workerFailed.base.mutation(
 			internal.email.outboundQueue.completeOutboundWork,
 			{
@@ -709,14 +751,7 @@ describe("outbound email replies", () => {
 
 		const accessFailure = await createFixture();
 		const accessQueued = await saveAndQueue(accessFailure, "access-failure");
-		await accessFailure.base.mutation(
-			internal.email.outbound.prepareSendAttempt,
-			{
-				sendId: accessQueued.sendId,
-				messageId: accessQueued.messageId,
-				generation: 0,
-			},
-		);
+		await prepareSendAttempt(accessFailure, accessQueued);
 		await accessFailure.base.mutation(
 			internal.email.outbound.recordTerminalFailure,
 			{
@@ -756,47 +791,23 @@ describe("outbound email replies", () => {
 				status: "needs_reauthorization",
 			});
 		});
-		expect(
-			await route.base.mutation(internal.email.outbound.prepareSendAttempt, {
-				sendId: routeQueued.sendId,
-				messageId: routeQueued.messageId,
-				generation: 0,
-			}),
-		).toBeNull();
+		expect(await prepareSendAttempt(route, routeQueued)).toBeNull();
 		await route.base.run(async (ctx) => {
 			await ctx.db.patch(route.integrationId, { status: "connected" });
 		});
 		await route.actor.mutation(api.email.outbound.retryFailedSend, {
 			messageId: routeQueued.messageId,
 		});
-		expect(
-			await route.base.mutation(internal.email.outbound.prepareSendAttempt, {
-				sendId: routeQueued.sendId,
-				messageId: routeQueued.messageId,
-				generation: 1,
-			}),
-		).not.toBeNull();
+		expect(await prepareSendAttempt(route, routeQueued, 1)).not.toBeNull();
 
 		const rejected = await createFixture();
 		const rejectedQueued = await saveAndQueue(rejected, "known-rejection");
 		const claims = await Promise.all([
-			rejected.base.mutation(internal.email.outbound.prepareSendAttempt, {
-				sendId: rejectedQueued.sendId,
-				messageId: rejectedQueued.messageId,
-				generation: 0,
-			}),
-			rejected.base.mutation(internal.email.outbound.prepareSendAttempt, {
-				sendId: rejectedQueued.sendId,
-				messageId: rejectedQueued.messageId,
-				generation: 0,
-			}),
+			prepareSendAttempt(rejected, rejectedQueued),
+			prepareSendAttempt(rejected, rejectedQueued),
 		]);
 		expect(claims.filter(Boolean)).toHaveLength(1);
-		await rejected.base.mutation(internal.email.outbound.beginProviderCall, {
-			sendId: rejectedQueued.sendId,
-			messageId: rejectedQueued.messageId,
-			generation: 0,
-		});
+		await beginProviderCall(rejected, rejectedQueued);
 		await rejected.base.mutation(
 			internal.email.outbound.recordTerminalFailure,
 			{
@@ -815,16 +826,8 @@ describe("outbound email replies", () => {
 
 		const expired = await createFixture();
 		const expiredQueued = await saveAndQueue(expired, "expired-rejection");
-		await expired.base.mutation(internal.email.outbound.prepareSendAttempt, {
-			sendId: expiredQueued.sendId,
-			messageId: expiredQueued.messageId,
-			generation: 0,
-		});
-		await expired.base.mutation(internal.email.outbound.beginProviderCall, {
-			sendId: expiredQueued.sendId,
-			messageId: expiredQueued.messageId,
-			generation: 0,
-		});
+		await prepareSendAttempt(expired, expiredQueued);
+		await beginProviderCall(expired, expiredQueued);
 		await expired.base.mutation(internal.email.outbound.recordTerminalFailure, {
 			sendId: expiredQueued.sendId,
 			generation: 0,
@@ -843,36 +846,21 @@ describe("outbound email replies", () => {
 		}
 		const now = vi.spyOn(Date, "now").mockReturnValue(expiresAt);
 		try {
-			await expect(
+			await expectErrorCode(
 				expired.actor.mutation(api.email.outbound.retryFailedSend, {
 					messageId: expiredQueued.messageId,
 				}),
-			).rejects.toSatisfy((error) => {
-				expectErrorCode(error, "EMAIL_SEND_RETRY_WINDOW_EXPIRED");
-				return true;
-			});
+				"EMAIL_SEND_RETRY_WINDOW_EXPIRED",
+			);
 		} finally {
 			now.mockRestore();
 		}
 
 		const ambiguous = await createFixture();
 		const ambiguousQueued = await saveAndQueue(ambiguous, "ambiguous");
-		await ambiguous.base.mutation(internal.email.outbound.prepareSendAttempt, {
-			sendId: ambiguousQueued.sendId,
-			messageId: ambiguousQueued.messageId,
-			generation: 0,
-		});
-		await ambiguous.base.mutation(internal.email.outbound.beginProviderCall, {
-			sendId: ambiguousQueued.sendId,
-			messageId: ambiguousQueued.messageId,
-			generation: 0,
-		});
-		const ambiguousWorkId = await ambiguous.base.run(
-			async (ctx) => (await ctx.db.get(ambiguousQueued.sendId))?.workId,
-		);
-		if (!ambiguousWorkId) {
-			throw new Error("Expected provider work");
-		}
+		await prepareSendAttempt(ambiguous, ambiguousQueued);
+		await beginProviderCall(ambiguous, ambiguousQueued);
+		const ambiguousWorkId = await requireWorkId(ambiguous, ambiguousQueued);
 		await ambiguous.base.mutation(
 			internal.email.outboundQueue.completeOutboundWork,
 			{
@@ -881,14 +869,12 @@ describe("outbound email replies", () => {
 				result: { kind: "failed", error: "Connection timed out" },
 			},
 		);
-		await expect(
+		await expectErrorCode(
 			ambiguous.actor.mutation(api.email.outbound.retryFailedSend, {
 				messageId: ambiguousQueued.messageId,
 			}),
-		).rejects.toSatisfy((error) => {
-			expectErrorCode(error, "EMAIL_SEND_NOT_RETRYABLE");
-			return true;
-		});
+			"EMAIL_SEND_NOT_RETRYABLE",
+		);
 	});
 
 	it("treats an external provider ID as reconcile-only", async () => {
@@ -900,13 +886,7 @@ describe("outbound email replies", () => {
 			});
 			await ctx.db.patch(fixture.integrationId, { status: "disconnected" });
 		});
-		expect(
-			await fixture.base.mutation(internal.email.outbound.prepareSendAttempt, {
-				sendId: queued.sendId,
-				messageId: queued.messageId,
-				generation: 0,
-			}),
-		).toMatchObject({
+		expect(await prepareSendAttempt(fixture, queued)).toMatchObject({
 			message: { externalMessageId: "already-accepted-id" },
 		});
 		await fixture.base.mutation(
@@ -957,16 +937,8 @@ describe("outbound email replies", () => {
 			});
 			return caseId;
 		});
-		await fixture.base.mutation(internal.email.outbound.prepareSendAttempt, {
-			sendId: queued.sendId,
-			messageId: queued.messageId,
-			generation: 0,
-		});
-		await fixture.base.mutation(internal.email.outbound.beginProviderCall, {
-			sendId: queued.sendId,
-			messageId: queued.messageId,
-			generation: 0,
-		});
+		await prepareSendAttempt(fixture, queued);
+		await beginProviderCall(fixture, queued);
 		await fixture.base.mutation(internal.email.outbound.recordTerminalFailure, {
 			sendId: queued.sendId,
 			generation: 0,

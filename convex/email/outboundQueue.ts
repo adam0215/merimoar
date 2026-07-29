@@ -2,6 +2,7 @@ import { Workpool } from "@convex-dev/workpool";
 import { v } from "convex/values";
 import { components } from "../_generated/api";
 import type { DataModel } from "../_generated/dataModel";
+import { ambiguousProviderOutcomeFailure } from "./model";
 
 export const emailOutboundPool = new Workpool(
 	components.emailOutboundWorkpool,
@@ -43,28 +44,24 @@ export const completeOutboundWork = emailOutboundPool.defineOnComplete<
 		const providerMayHaveBeenContacted =
 			send.status === "sending" &&
 			send.providerCallGeneration === context.generation;
+		const failure =
+			queuedFailure ??
+			(providerMayHaveBeenContacted
+				? ambiguousProviderOutcomeFailure
+				: {
+						kind: "before_provider" as const,
+						reason:
+							result.kind === "canceled"
+								? ("work_canceled" as const)
+								: ("worker_failed" as const),
+						message:
+							result.kind === "canceled"
+								? "Email send work was canceled before contacting the provider."
+								: "Email send work failed before contacting the provider.",
+					});
 		await ctx.db.patch(send._id, {
 			status: "failed",
-			failure: {
-				...(queuedFailure ??
-					(providerMayHaveBeenContacted
-						? {
-								kind: "ambiguous" as const,
-								message:
-									"The provider outcome is unknown; the email will not be sent again.",
-							}
-						: {
-								kind: "before_provider" as const,
-								reason:
-									result.kind === "canceled"
-										? ("work_canceled" as const)
-										: ("worker_failed" as const),
-								message:
-									result.kind === "canceled"
-										? "Email send work was canceled before contacting the provider."
-										: "Email send work failed before contacting the provider.",
-							})),
-			},
+			failure,
 		});
 	},
 });

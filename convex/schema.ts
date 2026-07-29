@@ -58,8 +58,13 @@ export default defineSchema({
 		displayName: v.string(),
 		address: v.string(),
 		status: v.union(v.literal("active"), v.literal("disabled")),
-		outboundIntegrationId: v.optional(v.id("emailIntegrations")),
 		unreadThreadCount: v.number(),
+		outbound: v.optional(
+			v.object({
+				integrationId: v.id("emailIntegrations"),
+				address: v.string(),
+			}),
+		),
 	})
 		.index("by_organization_id", ["organizationId"])
 		.index("by_organization_id_and_address", ["organizationId", "address"])

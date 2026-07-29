@@ -138,7 +138,7 @@ http.route({
 			if (result.status === "accepted" && result.needsMetadata) {
 				await ctx.scheduler.runAfter(
 					0,
-					internal.email.outboundResend.reconcileProviderMetadata,
+					internal.email.outboundWorker.reconcileProviderMetadata,
 					{
 						messageId: result.messageId,
 						externalMessageId: sentEvent.data.email_id,

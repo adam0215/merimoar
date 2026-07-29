@@ -1,11 +1,14 @@
-import { IconInbox } from "@tabler/icons-react";
+import { IconInbox, IconMailbox, IconMailShare } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useQueries, useQuery } from "convex-helpers/react/cache";
 import { useEffect, useState } from "react";
-import { AddEmailInboxDialog } from "#/components/email/add-email-inbox-dialog.tsx";
+import {
+	AddEmailInboxDialog,
+	EditEmailInboxDialog,
+} from "#/components/email/add-email-inbox-dialog.tsx";
 import { RemoveEmailInboxDialog } from "#/components/email/remove-email-inbox-dialog.tsx";
 import { ResendPipesConnection } from "#/components/email/resend-pipes-connection.tsx";
 import { Badge } from "#/components/ui/badge.tsx";
@@ -25,10 +28,14 @@ import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
-const preloadEmailInboxes = createServerFn({ method: "GET" }).handler(
+const preloadEmailSettings = createServerFn({ method: "GET" }).handler(
 	async () => {
 		const client = await createAuthenticatedConvexHttpClient();
-		return await client.query(api.email.reader.listInboxes, {});
+		const [inboxes, outboundIntegrations] = await Promise.all([
+			client.query(api.email.reader.listInboxes, {}),
+			client.query(api.email.reader.listOutboundIntegrations, {}),
+		]);
+		return { inboxes, outboundIntegrations };
 	},
 );
 
@@ -36,11 +43,11 @@ export const Route = createFileRoute(
 	"/_authenticated/settings/organization/email",
 )({
 	loader: async () => {
-		const [inboxes, resendPipesConnectionState] = await Promise.all([
-			preloadEmailInboxes(),
+		const [emailSettings, resendPipesConnectionState] = await Promise.all([
+			preloadEmailSettings(),
 			refreshResendPipesConnectionState(),
 		]);
-		return { inboxes, resendPipesConnectionState };
+		return { ...emailSettings, resendPipesConnectionState };
 	},
 	component: OrganizationEmailSettings,
 });
@@ -48,13 +55,20 @@ export const Route = createFileRoute(
 function OrganizationEmailSettings() {
 	const {
 		inboxes: prefetchedInboxes,
+		outboundIntegrations: prefetchedOutboundIntegrations,
 		resendPipesConnectionState: initialResendPipesConnectionState,
 	} = Route.useLoaderData();
 	const [resendPipesConnectionState, setResendPipesConnectionState] = useState(
 		initialResendPipesConnectionState,
 	);
 	const liveInboxes = useQuery(api.email.reader.listInboxes, {});
+	const liveOutboundIntegrations = useQuery(
+		api.email.reader.listOutboundIntegrations,
+		{},
+	);
 	const inboxes = liveInboxes ?? prefetchedInboxes;
+	const outboundIntegrations =
+		liveOutboundIntegrations ?? prefetchedOutboundIntegrations;
 
 	useEffect(() => {
 		let isDisposed = false;
@@ -119,7 +133,7 @@ function OrganizationEmailSettings() {
 
 				<div className="mb-4 flex flex-wrap items-center justify-between gap-4">
 					<h2 className="text-base font-medium">Inboxes</h2>
-					<AddEmailInboxDialog />
+					<AddEmailInboxDialog outboundIntegrations={outboundIntegrations} />
 				</div>
 				<div className="space-y-3">
 					{inboxes.length === 0 && (
@@ -144,23 +158,40 @@ function OrganizationEmailSettings() {
 										<CardTitle className="truncate">
 											{inbox.displayName}
 										</CardTitle>
-										<CardDescription className="mt-1 truncate">
-											{inbox.address}
-										</CardDescription>
+										<div className="mt-2 flex flex-col gap-1.5 text-sm text-muted-foreground">
+											<CardDescription className="flex min-w-0 items-center gap-2">
+												<IconMailbox className="size-4 shrink-0" />
+												<span className="truncate">{inbox.address}</span>
+											</CardDescription>
+											<p className="flex min-w-0 items-center gap-2">
+												<IconMailShare className="size-4 shrink-0" />
+												<span className="truncate">
+													{inbox.outboundIntegration
+														? inbox.outboundIntegration.address
+														: "No outbound"}
+												</span>
+											</p>
+										</div>
 									</div>
 								</div>
-								<CardAction className="flex items-center self-center gap-1">
+								<CardAction className="flex flex-col items-end gap-2 self-center">
 									<Badge
 										variant="outline"
 										className="border-accent bg-accent/10 text-accent"
 									>
 										Active
 									</Badge>
-									<RemoveEmailInboxDialog
-										inboxId={inbox._id}
-										displayName={inbox.displayName}
-										address={inbox.address}
-									/>
+									<div className="flex items-center gap-1">
+										<EditEmailInboxDialog
+											inbox={inbox}
+											outboundIntegrations={outboundIntegrations}
+										/>
+										<RemoveEmailInboxDialog
+											inboxId={inbox._id}
+											displayName={inbox.displayName}
+											address={inbox.address}
+										/>
+									</div>
 								</CardAction>
 							</CardHeader>
 						</Card>

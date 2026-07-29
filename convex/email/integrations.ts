@@ -3,6 +3,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internalMutation, internalQuery } from "../_generated/server";
+import { requireActor } from "../auth/access";
 
 export type ResendPipesSnapshot = {
 	connectedAccountId: string;
@@ -125,7 +126,7 @@ export const getResendProvisioningContext = internalQuery({
 	},
 });
 
-export const getResendAccessContext = internalQuery({
+export const getOutboundAccessContext = internalQuery({
 	args: {
 		integrationId: v.id("emailIntegrations"),
 	},
@@ -153,6 +154,39 @@ export const getResendAccessContext = internalQuery({
 	),
 	handler: async (ctx, args) => {
 		return await ctx.db.get(args.integrationId);
+	},
+});
+
+export const getSelectableResendAccessContext = internalQuery({
+	args: {
+		integrationId: v.id("emailIntegrations"),
+	},
+	returns: v.union(
+		v.object({
+			_id: v.id("emailIntegrations"),
+			provider: v.literal("resend"),
+			workosOrganizationId: v.string(),
+			workosUserId: v.string(),
+		}),
+		v.null(),
+	),
+	handler: async (ctx, args) => {
+		const workspace = await requireActor(ctx);
+		const integration = await ctx.db.get(args.integrationId);
+		if (
+			!integration ||
+			integration.organizationId !== workspace.organization._id ||
+			integration.provider !== "resend" ||
+			integration.status !== "connected"
+		) {
+			return null;
+		}
+		return {
+			_id: integration._id,
+			provider: integration.provider,
+			workosOrganizationId: integration.workosOrganizationId,
+			workosUserId: integration.workosUserId,
+		};
 	},
 });
 

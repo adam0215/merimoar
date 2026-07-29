@@ -68,6 +68,7 @@ describe("email inboxes", () => {
 		const inboxId = await actor.mutation(api.email.inboxes.create, {
 			displayName: " Support inbox ",
 			address: " Support@Example.COM ",
+			outbound: null,
 		});
 
 		const inbox = await base.run(async (ctx) => ctx.db.get(inboxId));
@@ -88,10 +89,12 @@ describe("email inboxes", () => {
 			actor.mutation(api.email.inboxes.create, {
 				displayName: "Support",
 				address: "support@example.com",
+				outbound: null,
 			}),
 			actor.mutation(api.email.inboxes.create, {
 				displayName: "Operations",
 				address: "operations@example.com",
+				outbound: null,
 			}),
 		]);
 
@@ -99,22 +102,49 @@ describe("email inboxes", () => {
 		expect(await actor.query(api.email.reader.listInboxes, {})).toHaveLength(2);
 	});
 
+	it("selects a connected outbound integration while creating an inbox", async () => {
+		const { actor, base, organizationId } = await createFixture();
+		const integrationId = await createConnectedResendIntegration(
+			base,
+			organizationId,
+		);
+
+		const inboxId = await actor.mutation(api.email.inboxes.create, {
+			displayName: "Support",
+			address: "support@example.com",
+			outbound: {
+				integrationId,
+				address: " Team@Verified.Example ",
+			},
+		});
+
+		expect(await base.run(async (ctx) => ctx.db.get(inboxId))).toMatchObject({
+			outbound: {
+				integrationId,
+				address: "team@verified.example",
+			},
+		});
+	});
+
 	it("scopes address uniqueness to the organization router", async () => {
 		const { actor, otherActor } = await createFixture();
 		await actor.mutation(api.email.inboxes.create, {
 			displayName: "Primary support",
 			address: "support@example.com",
+			outbound: null,
 		});
 		await expect(
 			actor.mutation(api.email.inboxes.create, {
 				displayName: "Duplicate support",
 				address: "SUPPORT@EXAMPLE.COM",
+				outbound: null,
 			}),
 		).rejects.toThrow("already has an inbox");
 		await expect(
 			otherActor.mutation(api.email.inboxes.create, {
 				displayName: "Other support",
 				address: "support@example.com",
+				outbound: null,
 			}),
 		).resolves.toBeDefined();
 	});
@@ -125,10 +155,12 @@ describe("email inboxes", () => {
 			actor.mutation(api.email.inboxes.create, {
 				displayName: "First",
 				address: "shared@example.com",
+				outbound: null,
 			}),
 			actor.mutation(api.email.inboxes.create, {
 				displayName: "Second",
 				address: "SHARED@example.com",
+				outbound: null,
 			}),
 		]);
 
@@ -144,12 +176,14 @@ describe("email inboxes", () => {
 			actor.mutation(api.email.inboxes.create, {
 				displayName: "S",
 				address: "not-an-email",
+				outbound: null,
 			}),
 		).rejects.toThrow("Use at least 2 characters.");
 		await expect(
 			base.mutation(api.email.inboxes.create, {
 				displayName: "Support",
 				address: "support@example.com",
+				outbound: null,
 			}),
 		).rejects.toThrow("Sign in");
 	});
@@ -159,6 +193,7 @@ describe("email inboxes", () => {
 		const inboxId = await actor.mutation(api.email.inboxes.create, {
 			displayName: "Support",
 			address: "support@example.com",
+			outbound: null,
 		});
 
 		await expect(
@@ -170,22 +205,102 @@ describe("email inboxes", () => {
 		});
 	});
 
+	it("updates inbox details and outbound routing within the active organization", async () => {
+		const { actor, base, otherActor, organizationId } = await createFixture();
+		const integrationId = await createConnectedResendIntegration(
+			base,
+			organizationId,
+		);
+		const inboxId = await actor.mutation(api.email.inboxes.create, {
+			displayName: "Support",
+			address: "support@example.com",
+			outbound: null,
+		});
+		const otherInboxId = await actor.mutation(api.email.inboxes.create, {
+			displayName: "Operations",
+			address: "operations@example.com",
+			outbound: null,
+		});
+
+		await actor.mutation(api.email.inboxes.update, {
+			inboxId,
+			displayName: "Customer support",
+			address: " Help@Example.COM ",
+			outbound: {
+				integrationId,
+				address: "support@verified.example",
+			},
+		});
+		expect(await base.run(async (ctx) => ctx.db.get(inboxId))).toMatchObject({
+			displayName: "Customer support",
+			address: "help@example.com",
+			outbound: {
+				integrationId,
+				address: "support@verified.example",
+			},
+		});
+
+		await base.run(async (ctx) => {
+			await ctx.db.patch(integrationId, { status: "disconnected" });
+		});
+		await expect(
+			actor.mutation(api.email.inboxes.update, {
+				inboxId,
+				displayName: "Customer care",
+				address: "help@example.com",
+				outbound: {
+					integrationId,
+					address: "support@verified.example",
+				},
+			}),
+		).resolves.toBeNull();
+
+		await expect(
+			actor.mutation(api.email.inboxes.update, {
+				inboxId,
+				displayName: "Customer care",
+				address: "operations@example.com",
+				outbound: {
+					integrationId,
+					address: "support@verified.example",
+				},
+			}),
+		).rejects.toThrow("already has an inbox");
+		await expect(
+			otherActor.mutation(api.email.inboxes.update, {
+				inboxId: otherInboxId,
+				displayName: "Other",
+				address: "other@example.com",
+				outbound: null,
+			}),
+		).rejects.toThrow("could not be found");
+	});
+
 	it("selects or clears only a connected integration from the same organization", async () => {
 		const { actor, base, organizationId } = await createFixture();
 		const inboxId = await actor.mutation(api.email.inboxes.create, {
 			displayName: "Support",
 			address: "support@example.com",
+			outbound: null,
 		});
 		const integrationId = await createConnectedResendIntegration(
 			base,
 			organizationId,
 		);
-		await actor.mutation(api.email.inboxes.setOutboundIntegration, {
+		await actor.mutation(api.email.inboxes.update, {
 			inboxId,
-			integrationId,
+			displayName: "Support",
+			address: "support@example.com",
+			outbound: {
+				integrationId,
+				address: "team@verified.example",
+			},
 		});
 		expect(await base.run(async (ctx) => ctx.db.get(inboxId))).toMatchObject({
-			outboundIntegrationId: integrationId,
+			outbound: {
+				integrationId,
+				address: "team@verified.example",
+			},
 		});
 
 		const otherOrganizationId = await base.run(async (ctx) => {
@@ -206,9 +321,14 @@ describe("email inboxes", () => {
 			"other-organization",
 		);
 		await expect(
-			actor.mutation(api.email.inboxes.setOutboundIntegration, {
+			actor.mutation(api.email.inboxes.update, {
 				inboxId,
-				integrationId: otherIntegrationId,
+				displayName: "Support",
+				address: "support@example.com",
+				outbound: {
+					integrationId: otherIntegrationId,
+					address: "team@other.example",
+				},
 			}),
 		).rejects.toThrow("could not be found");
 
@@ -216,21 +336,30 @@ describe("email inboxes", () => {
 			await ctx.db.patch(integrationId, { status: "disconnected" });
 		});
 		await expect(
-			actor.mutation(api.email.inboxes.setOutboundIntegration, {
+			actor.mutation(api.email.inboxes.update, {
 				inboxId,
-				integrationId,
+				displayName: "Support",
+				address: "support@example.com",
+				outbound: {
+					integrationId,
+					address: "changed@verified.example",
+				},
 			}),
 		).rejects.toThrow("Connect the email integration");
 		expect(await base.run(async (ctx) => ctx.db.get(inboxId))).toMatchObject({
-			outboundIntegrationId: integrationId,
+			outbound: {
+				integrationId,
+				address: "team@verified.example",
+			},
 		});
 
-		await actor.mutation(api.email.inboxes.setOutboundIntegration, {
+		await actor.mutation(api.email.inboxes.update, {
 			inboxId,
-			integrationId: null,
+			displayName: "Support",
+			address: "support@example.com",
+			outbound: null,
 		});
-		expect(
-			await base.run(async (ctx) => ctx.db.get(inboxId)),
-		).not.toHaveProperty("outboundIntegrationId");
+		const inbox = await base.run(async (ctx) => ctx.db.get(inboxId));
+		expect(inbox).not.toHaveProperty("outbound");
 	});
 });
