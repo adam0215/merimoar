@@ -12,3 +12,16 @@ Resend accounts are connected through
 
 Email threads use Gemini embeddings and Convex vector search for
 [semantic case suggestions](docs/semantic-case-suggestions.md).
+
+## Workspace
+
+The repository is a Bun workspace with one shared lockfile. Dependencies use
+Bun's default isolated workspace layout and are installed with `bun install`
+from the repository root:
+
+- `packages/web` — the TanStack Start application
+- `packages/convex` — Convex functions and the generated client API
+- `packages/agent` — runtime-independent agent primitives
+
+Use `#/*` for imports within a package. Import across package boundaries by
+package name, for example `@merimoar/convex/api`.

@@ -24,7 +24,7 @@
 		"tailwindcss": {
 			// Use the real v4 entry point so @theme tokens and imported Tailwind
 			// plugins participate in canonicalization exactly as they do in the LSP.
-			"entryPoint": "src/styles.css",
+			"entryPoint": "packages/web/src/styles.css",
 			// Tailwind needs the root size to prove px/rem equivalence safely.
 			"rootFontSize": 16
 		}
@@ -88,7 +88,7 @@
 		".agents/**",
 		".codex/**",
 		// Convex and TanStack generate these files; their sources are linted instead.
-		"convex/_generated/**",
-		"src/routeTree.gen.ts"
+		"packages/convex/_generated/**",
+		"packages/web/src/routeTree.gen.ts"
 	]
 }

@@ -1,0 +1,45 @@
+{
+	"name": "@merimoar/convex",
+	"private": true,
+	"type": "module",
+	"imports": {
+		"#/*": "./*.ts"
+	},
+	"exports": {
+		"./api": {
+			"types": "./_generated/api.d.ts",
+			"default": "./_generated/api.js"
+		},
+		"./data-model": {
+			"types": "./_generated/dataModel.d.ts"
+		},
+		"./case/input": "./case/input.ts",
+		"./case/model": "./case/model.ts",
+		"./email/input": "./email/input.ts",
+		"./entity/constants": "./entity/constants.ts",
+		"./entity/input": "./entity/input.ts",
+		"./entity/values": "./entity/values.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@convex-dev/action-cache": "^0.3.1",
+		"@convex-dev/migrations": "^0.3.5",
+		"@convex-dev/workos-authkit": "0.2.7",
+		"@convex-dev/workpool": "^0.4.8",
+		"@google/genai": "^2.13.0",
+		"@workos-inc/node": "^10.8.0",
+		"convex": "^1.42.3",
+		"html-to-text": "^10.0.0",
+		"resend": "^6.18.0",
+		"valibot": "^1.4.2"
+	},
+	"devDependencies": {
+		"@types/html-to-text": "^9.0.4",
+		"@types/node": "^22.10.2",
+		"convex-test": "^0.0.54",
+		"typescript": "^6.0.2",
+		"vitest": "^4.1.10"
+	}
+}

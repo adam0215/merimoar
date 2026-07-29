@@ -49,7 +49,8 @@ change. Vector search and result hydration are not cached, so case data remains
 current.
 
 Model name and dimensions live in
-[`convex/case/embeddingModel.ts`](../convex/case/embeddingModel.ts). The schema
+[`packages/convex/case/embeddingModel.ts`](../packages/convex/case/embeddingModel.ts).
+The schema
 imports the same dimension constant, preventing the request and vector index
 sizes from drifting apart.
 
@@ -148,13 +149,16 @@ present.
 
 Relevant modules:
 
-- [`convex/case/embedding.ts`](../convex/case/embedding.ts): Gemini calls,
+- [`packages/convex/case/embedding.ts`](../packages/convex/case/embedding.ts):
+  Gemini calls,
   vector search, and public suggestion action
-- [`convex/case/embeddingData.ts`](../convex/case/embeddingData.ts): database
+- [`packages/convex/case/embeddingData.ts`](../packages/convex/case/embeddingData.ts):
+  database
   reads, writes, authorization, and hit hydration
-- [`convex/case/embeddingModel.ts`](../convex/case/embeddingModel.ts): model
+- [`packages/convex/case/embeddingModel.ts`](../packages/convex/case/embeddingModel.ts):
+  model
   constants, input construction, truncation, and normalization
-- [`src/components/email/email-case-actions.tsx`](../src/components/email/email-case-actions.tsx):
+- [`packages/web/src/components/email/email-case-actions.tsx`](../packages/web/src/components/email/email-case-actions.tsx):
   lazy loading and suggestion UI
 
 ## Configuration and deployment
