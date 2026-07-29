@@ -35,6 +35,7 @@ import {
 	caseTitleSchema,
 } from "../../../convex/case/input";
 import { CaseDescriptionEditor } from "./case-description-editor.tsx";
+import { CASE_STATUS_OPTIONS, CaseStatusDot } from "./case-status.tsx";
 import { formatShortDate } from "./format.ts";
 import type { CaseCreateOptions, CaseDetail } from "./types.ts";
 
@@ -42,6 +43,16 @@ const editableCaseFieldsSchema = v.object({
 	title: caseTitleSchema,
 	description: caseDescriptionSchema,
 });
+
+const CASE_STATUS_SELECT_ITEMS = CASE_STATUS_OPTIONS.map((option) => ({
+	value: option.value,
+	label: (
+		<>
+			<CaseStatusDot status={option.value} />
+			{option.label}
+		</>
+	),
+}));
 
 type CaseForm = ReturnType<typeof caseToForm>;
 
@@ -333,46 +344,27 @@ export function CaseHeader({
 				<Field>
 					<FieldLabel>Status</FieldLabel>
 					<Select
-						items={[
-							{
-								value: "open",
-								label: (
-									<>
-										<StatusDot status="open" />
-										Open
-									</>
-								),
-							},
-							{
-								value: "closed",
-								label: (
-									<>
-										<StatusDot status="closed" />
-										Closed
-									</>
-								),
-							},
-						]}
+						items={CASE_STATUS_SELECT_ITEMS}
 						value={form.status}
-						onValueChange={(value) =>
-							setForm((current) => ({
-								...current,
-								status: value === "closed" ? "closed" : "open",
-							}))
-						}
+						onValueChange={(value) => {
+							if (value) {
+								setForm((current) => ({
+									...current,
+									status: value,
+								}));
+							}
+						}}
 					>
 						<SelectTrigger className="w-full">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
-							<SelectItem value="open">
-								<StatusDot status="open" />
-								Open
-							</SelectItem>
-							<SelectItem value="closed">
-								<StatusDot status="closed" />
-								Closed
-							</SelectItem>
+							{CASE_STATUS_OPTIONS.map((option) => (
+								<SelectItem key={option.value} value={option.value}>
+									<CaseStatusDot status={option.value} />
+									{option.label}
+								</SelectItem>
+							))}
 						</SelectContent>
 					</Select>
 				</Field>
@@ -447,18 +439,6 @@ function SaveStatus({
 				</span>
 			)}
 		</div>
-	);
-}
-
-function StatusDot({ status }: { status: CaseForm["status"] }) {
-	return (
-		<span
-			className={
-				status === "open"
-					? "size-2 shrink-0 rounded-full bg-accent"
-					: "size-2 shrink-0 rounded-full bg-muted-foreground/40"
-			}
-		/>
 	);
 }
 

@@ -265,6 +265,17 @@ export default defineSchema({
 		globalSearchEntryId: v.optional(v.id("globalSearchEntries")),
 	})
 		.index("by_organization_id_and_reference", ["organizationId", "reference"])
+		.index("by_organization_id_and_status_and_last_activity_at", [
+			"organizationId",
+			"status",
+			"lastActivityAt",
+		])
+		.index("by_organization_id_and_owner_member_id_and_last_activity_at", [
+			"organizationId",
+			"ownerMemberId",
+			"lastActivityAt",
+		])
+		.index("by_organization_id_and_due_at", ["organizationId", "dueAt"])
 		.index("by_organization_id_and_last_activity_at", [
 			"organizationId",
 			"lastActivityAt",

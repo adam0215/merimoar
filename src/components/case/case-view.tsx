@@ -8,28 +8,22 @@ import type { CaseCreateOptions, CaseDetail } from "./types.ts";
 
 export function CaseView({
 	detail,
-	caseWasSelected,
 	createOptions,
 }: {
 	detail: CaseDetail | null | undefined;
-	caseWasSelected: boolean;
 	createOptions: CaseCreateOptions | undefined;
 }) {
-	if (caseWasSelected && detail === undefined) {
+	if (detail === undefined) {
 		return <CaseViewSkeleton />;
 	}
 
-	if (!detail) {
+	if (detail === null) {
 		return (
 			<div className="flex h-full flex-col items-center justify-center px-8 text-center">
 				<IconFolder className="mb-4 size-6 text-muted-foreground/50" />
-				<h2 className="font-medium">
-					{caseWasSelected ? "Case not found" : "Select a case"}
-				</h2>
+				<h2 className="font-medium">Case not found</h2>
 				<p className="mt-1 max-w-72 text-sm text-muted-foreground">
-					{caseWasSelected
-						? "This case is unavailable in the current organization."
-						: "Choose a case to see its context, relationships, and events."}
+					This case is unavailable in the current organization.
 				</p>
 			</div>
 		);

@@ -360,6 +360,7 @@ export const storeInboundEmail = internalMutation({
 				messageId,
 				args.email.receivedAt,
 			);
+			await ctx.db.patch(caseRecord._id, { status: "needs_attention" });
 		}
 
 		await ctx.db.patch(event._id, {

@@ -311,7 +311,7 @@ describe("email to case linking", () => {
 		).rejects.toThrow("could not be found");
 	});
 
-	it("references each inbound message once and advances linked case activity", async () => {
+	it("marks the linked case as needing attention for a new inbound message", async () => {
 		const { base, actor, inboxId, integrationId, firstThreadId, firstCaseId } =
 			await createCaseLinkingFixture();
 		await actor.mutation(api.case.mutations.linkEmailThread, {
@@ -403,6 +403,7 @@ describe("email to case linking", () => {
 		expect("body" in (inboundEvents[0] ?? {})).toBe(false);
 		expect(state.caseRecord?.lastActivityAt).toBe(receivedAt);
 		expect(state.caseRecord?.updatedAt).toBeGreaterThan(100);
+		expect(state.caseRecord?.status).toBe("needs_attention");
 	});
 
 	it("backfills legacy notes without deleting or changing their content", async () => {

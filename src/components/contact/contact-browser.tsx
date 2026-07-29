@@ -14,6 +14,8 @@ import { Skeleton } from "#/components/ui/skeleton.tsx";
 import { coverImageForId } from "#/lib/cover-image.ts";
 import { cn } from "#/lib/utils.ts";
 import type { api } from "../../../convex/_generated/api";
+import { CASE_STATUS_LABELS } from "../../../convex/case/model";
+import { CaseStatusDot } from "../case/case-status.tsx";
 
 type Contact = NonNullable<FunctionReturnType<typeof api.contact.reader.get>>;
 type ContactMessage = FunctionReturnType<
@@ -186,7 +188,7 @@ export function ContactView({
 	messageStatus: PaginationStatus;
 	loadMoreMessages: () => void;
 }) {
-	const casesWithOpenFirst = [...cases].sort(
+	const casesWithClosedLast = [...cases].sort(
 		(firstCase, secondCase) =>
 			Number(firstCase.status === "closed") -
 			Number(secondCase.status === "closed"),
@@ -376,7 +378,7 @@ export function ContactView({
 							))}
 
 						{caseStatus !== "LoadingFirstPage" &&
-							casesWithOpenFirst.map((caseRecord) => (
+							casesWithClosedLast.map((caseRecord) => (
 								<Link
 									key={caseRecord._id}
 									to="/cases"
@@ -391,15 +393,13 @@ export function ContactView({
 											{caseRecord.title}
 										</span>
 										<span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-											<span
-												className={cn(
-													"size-1.5 shrink-0 rounded-full bg-muted-foreground/40",
-													caseRecord.status === "open" && "bg-accent",
-												)}
+											<CaseStatusDot
+												status={caseRecord.status}
+												className="size-1.5"
 											/>
 											<span className="truncate">
 												{caseRecord.reference} ·{" "}
-												{caseRecord.status === "open" ? "Open" : "Closed"}
+												{CASE_STATUS_LABELS[caseRecord.status]}
 											</span>
 										</span>
 									</span>
