@@ -59,29 +59,29 @@ function InboxSidebarGroup({
 			<SidebarGroupContent>
 				<SidebarMenu>
 					<Collapsible defaultOpen={isActive} render={<SidebarMenuItem />}>
-						<SidebarMenuButton
-							isActive={isActive}
-							tooltip={`Inboxes (${totalUnreadCount} unread)`}
-							className={cn(
-								hasInboxes ? "pr-14" : "pr-8",
-								isActive ? "text-foreground" : "text-muted-foreground",
-							)}
-							render={<Link to="/email" search={{}} />}
-						>
-							<IconInbox />
-							<span>Inboxes</span>
-						</SidebarMenuButton>
-						<SidebarMenuBadge
-							className={cn(
-								hasInboxes ? "right-8" : "right-2",
-								"font-normal text-muted-foreground text-xs peer-hover/menu-button:text-muted-foreground peer-data-active/menu-button:text-muted-foreground",
-							)}
-							aria-label={`${totalUnreadCount} unread`}
-						>
-							{totalUnreadCount}
-						</SidebarMenuBadge>
-						{hasInboxes && (
-							<>
+						<div className="relative">
+							<SidebarMenuButton
+								isActive={isActive}
+								tooltip={`Inboxes (${totalUnreadCount} unread)`}
+								className={cn(
+									hasInboxes ? "pr-14" : "pr-8",
+									isActive ? "text-foreground" : "text-muted-foreground",
+								)}
+								render={<Link to="/email" search={{}} />}
+							>
+								<IconInbox />
+								<span>Inboxes</span>
+							</SidebarMenuButton>
+							<SidebarMenuBadge
+								className={cn(
+									hasInboxes ? "right-8" : "right-2",
+									"top-1/2! translate-x-px -translate-y-1/2 justify-end px-0 font-normal text-muted-foreground text-xs peer-hover/menu-button:text-muted-foreground peer-data-active/menu-button:text-muted-foreground",
+								)}
+								aria-label={`${totalUnreadCount} unread`}
+							>
+								{totalUnreadCount}
+							</SidebarMenuBadge>
+							{hasInboxes && (
 								<CollapsibleTrigger
 									render={
 										<SidebarMenuAction
@@ -93,40 +93,42 @@ function InboxSidebarGroup({
 								>
 									<IconChevronRight className="transition-transform duration-200 group-data-panel-open/collapsible:rotate-90" />
 								</CollapsibleTrigger>
-								<CollapsibleContent>
-									<SidebarMenuSub>
-										{inboxes.map((inbox) => {
-											const inboxIsActive = selectedInboxId === inbox._id;
+							)}
+						</div>
+						{hasInboxes && (
+							<CollapsibleContent>
+								<SidebarMenuSub>
+									{inboxes.map((inbox) => {
+										const inboxIsActive = selectedInboxId === inbox._id;
 
-											return (
-												<SidebarMenuSubItem key={inbox._id}>
-													<SidebarMenuSubButton
-														isActive={inboxIsActive}
-														className={
-															inboxIsActive
-																? "text-foreground"
-																: "text-muted-foreground"
-														}
-														render={
-															<Link to="/email" search={{ inbox: inbox._id }} />
-														}
+										return (
+											<SidebarMenuSubItem key={inbox._id}>
+												<SidebarMenuSubButton
+													isActive={inboxIsActive}
+													className={
+														inboxIsActive
+															? "text-foreground"
+															: "text-muted-foreground"
+													}
+													render={
+														<Link to="/email" search={{ inbox: inbox._id }} />
+													}
+												>
+													<span className="min-w-0 flex-1 truncate">
+														{inbox.displayName}
+													</span>
+													<span
+														className="ml-auto min-w-5 shrink-0 text-right font-normal text-muted-foreground text-xs tabular-nums"
+														aria-label={`${inbox.unreadCount} unread`}
 													>
-														<span className="min-w-0 flex-1 truncate">
-															{inbox.displayName}
-														</span>
-														<span
-															className="ml-auto min-w-5 shrink-0 text-right font-normal text-muted-foreground text-xs tabular-nums"
-															aria-label={`${inbox.unreadCount} unread`}
-														>
-															{inbox.unreadCount}
-														</span>
-													</SidebarMenuSubButton>
-												</SidebarMenuSubItem>
-											);
-										})}
-									</SidebarMenuSub>
-								</CollapsibleContent>
-							</>
+														{inbox.unreadCount}
+													</span>
+												</SidebarMenuSubButton>
+											</SidebarMenuSubItem>
+										);
+									})}
+								</SidebarMenuSub>
+							</CollapsibleContent>
 						)}
 					</Collapsible>
 				</SidebarMenu>
