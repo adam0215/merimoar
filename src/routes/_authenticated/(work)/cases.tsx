@@ -1,4 +1,4 @@
-import { IconArrowLeft } from "@tabler/icons-react";
+import { IconArrowLeft, IconX } from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { usePaginatedQuery, useQuery } from "convex-helpers/react/cache";
@@ -171,6 +171,23 @@ function CasesPage() {
 								key={selectedCaseId}
 								detail={selectedDetail}
 								createOptions={createOptions}
+								closeButton={
+									<Button
+										nativeButton={false}
+										variant="ghost"
+										size="icon-sm"
+										render={
+											<Link
+												to="/cases"
+												search={{ view: selectedView }}
+												aria-label="Close case"
+												title="Close case"
+											/>
+										}
+									>
+										<IconX />
+									</Button>
+								}
 							/>
 						</div>
 					</div>

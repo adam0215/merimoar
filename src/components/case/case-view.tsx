@@ -9,9 +9,11 @@ import type { CaseCreateOptions, CaseDetail } from "./types.ts";
 export function CaseView({
 	detail,
 	createOptions,
+	closeButton,
 }: {
 	detail: CaseDetail | null | undefined;
 	createOptions: CaseCreateOptions | undefined;
+	closeButton: React.ReactNode;
 }) {
 	if (detail === undefined) {
 		return <CaseViewSkeleton />;
@@ -31,7 +33,8 @@ export function CaseView({
 
 	return (
 		<div className="h-full overflow-y-auto overscroll-none">
-			<div className="mx-auto w-full max-w-6xl px-5 py-6 md:px-8 md:py-8">
+			<div className="mx-auto w-full max-w-6xl px-5 pt-2 pb-6 md:px-8 md:pb-8">
+				<div className="mb-2 flex justify-end">{closeButton}</div>
 				<CaseHeader detail={detail} members={createOptions?.members ?? []} />
 				<CaseRelationships detail={detail} />
 				<CaseEmailThreads detail={detail} />

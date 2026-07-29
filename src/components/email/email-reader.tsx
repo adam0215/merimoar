@@ -586,12 +586,12 @@ export function ThreadList({
 
 export function ThreadView({
 	thread,
-	isLoading,
 	createOptions,
+	closeButton,
 }: {
 	thread: ThreadDetails | null | undefined;
-	isLoading: boolean;
 	createOptions: CaseCreateOptions | undefined;
+	closeButton: React.ReactNode;
 }) {
 	const setUnreadMutation = useMutation(api.email.reader.setUnread);
 	const setUnread = useMemo(
@@ -627,7 +627,7 @@ export function ThreadView({
 		}
 	}
 
-	if (isLoading) {
+	if (thread === undefined) {
 		return (
 			<div className="mx-auto max-w-3xl space-y-8 p-6 md:p-10">
 				<div className="space-y-3">
@@ -660,7 +660,7 @@ export function ThreadView({
 			<div
 				role="toolbar"
 				aria-label="Thread actions"
-				className="absolute inset-x-0 top-0 z-30 flex h-8 items-center border-b bg-background px-4"
+				className="absolute inset-x-0 top-0 z-30 flex h-8 items-center justify-between border-b bg-background px-4"
 			>
 				<Tooltip>
 					<TooltipTrigger
@@ -683,6 +683,7 @@ export function ThreadView({
 						{thread.thread.isUnread ? "Mark as read" : "Mark as unread"}
 					</TooltipContent>
 				</Tooltip>
+				{closeButton}
 			</div>
 			<ScrollArea
 				className="h-full"

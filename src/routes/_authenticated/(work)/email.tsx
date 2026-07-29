@@ -2,6 +2,7 @@ import {
 	IconArrowLeft,
 	IconBaselineDensityLarge,
 	IconBaselineDensitySmall,
+	IconX,
 } from "@tabler/icons-react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
@@ -102,11 +103,17 @@ function EmailPage() {
 		: liveThreadStatus;
 
 	return (
-		<div className="grid h-full min-h-0 overflow-hidden md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]">
+		<div
+			className={cn(
+				"grid h-full min-h-0 grid-cols-1 overflow-hidden",
+				selectedThreadId &&
+					"md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]",
+			)}
+		>
 			<section
 				className={cn(
-					"min-h-0 overflow-hidden border-r bg-background",
-					selectedThreadId && "hidden md:block",
+					"min-h-0 overflow-hidden bg-background",
+					selectedThreadId && "hidden md:block md:border-r",
 				)}
 			>
 				<div className="relative h-full">
@@ -156,7 +163,7 @@ function EmailPage() {
 			<section
 				className={cn(
 					"min-h-0 min-w-0 overflow-hidden bg-background",
-					!selectedThreadId && "hidden md:block",
+					!selectedThreadId && "hidden",
 				)}
 			>
 				<div className="flex h-full min-h-0 flex-col">
@@ -180,9 +187,23 @@ function EmailPage() {
 						<ThreadView
 							thread={selectedThread}
 							createOptions={createOptions}
-							isLoading={Boolean(
-								selectedThreadId && selectedThread === undefined,
-							)}
+							closeButton={
+								<Button
+									nativeButton={false}
+									variant="ghost"
+									size="icon-sm"
+									render={
+										<Link
+											to="/email"
+											search={selectedInboxId ? { inbox: selectedInboxId } : {}}
+											aria-label="Close email"
+											title="Close email"
+										/>
+									}
+								>
+									<IconX />
+								</Button>
+							}
 						/>
 					</div>
 				</div>

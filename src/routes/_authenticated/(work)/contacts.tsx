@@ -1,4 +1,4 @@
-import { IconArrowLeft } from "@tabler/icons-react";
+import { IconArrowLeft, IconX } from "@tabler/icons-react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { usePaginatedQuery, useQuery } from "convex-helpers/react/cache";
@@ -156,11 +156,17 @@ function ContactsPage() {
 		: liveRelatedCaseStatus;
 
 	return (
-		<div className="grid h-full min-h-0 overflow-hidden md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]">
+		<div
+			className={cn(
+				"grid h-full min-h-0 grid-cols-1 overflow-hidden",
+				selectedContactId &&
+					"md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]",
+			)}
+		>
 			<section
 				className={cn(
-					"min-h-0 overflow-hidden border-r bg-background",
-					selectedContactId && "hidden md:block",
+					"min-h-0 overflow-hidden bg-background",
+					selectedContactId && "hidden md:block md:border-r",
 				)}
 			>
 				<ScrollArea
@@ -183,7 +189,7 @@ function ContactsPage() {
 			<section
 				className={cn(
 					"min-h-0 min-w-0 overflow-hidden bg-background",
-					!selectedContactId && "hidden md:block",
+					!selectedContactId && "hidden",
 				)}
 			>
 				<div className="flex h-full min-h-0 flex-col">
@@ -201,7 +207,6 @@ function ContactsPage() {
 					<div className="min-h-0 flex-1">
 						<ContactView
 							contact={selectedContact}
-							contactWasSelected={Boolean(selectedContactId)}
 							cases={relatedCases}
 							caseStatus={relatedCaseStatus}
 							loadMoreCases={() => {
@@ -216,6 +221,23 @@ function ContactsPage() {
 									loadMoreMessages(ADDITIONAL_MESSAGE_PAGE_SIZE);
 								}
 							}}
+							closeButton={
+								<Button
+									nativeButton={false}
+									variant="ghost"
+									size="icon-sm"
+									render={
+										<Link
+											to="/contacts"
+											search={{}}
+											aria-label="Close contact"
+											title="Close contact"
+										/>
+									}
+								>
+									<IconX />
+								</Button>
+							}
 						/>
 					</div>
 				</div>

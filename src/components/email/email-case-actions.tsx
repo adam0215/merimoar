@@ -1,4 +1,6 @@
 import {
+	IconArrowBarToLeftDashed,
+	IconArrowBarToRightDashed,
 	IconCheck,
 	IconCornerDownLeft,
 	IconFolder,
@@ -10,7 +12,13 @@ import { useKeyHold } from "@tanstack/react-hotkeys";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+	type MouseEvent as ReactMouseEvent,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { CreateCaseDialog } from "#/components/case/create-case-dialog.tsx";
 import type { CaseCreateOptions } from "#/components/case/types.ts";
 import { UnlinkEmailThreadButton } from "#/components/case/unlink-email-thread-button.tsx";
@@ -57,6 +65,7 @@ export function EmailCaseActions({
 }) {
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
 	const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+	const [actionsAreTuckedAway, setActionsAreTuckedAway] = useState(false);
 	const firstMessage = thread.messages[0];
 	const senderContacts = useMemo(() => {
 		const contactsById = new Map<
@@ -80,17 +89,59 @@ export function EmailCaseActions({
 		return [...contactsById.values()];
 	}, [thread.messages]);
 	const senderContactIds = senderContacts.map((contact) => contact._id);
+	const updateShowButtonMagneticOffset = (
+		event: ReactMouseEvent<HTMLButtonElement>,
+	) => {
+		if (!actionsAreTuckedAway) {
+			return;
+		}
+
+		const bounds = event.currentTarget.getBoundingClientRect();
+		const offsetX = (event.clientX - bounds.left - bounds.width / 2) * 0.25;
+		const offsetY = (event.clientY - bounds.top - bounds.height / 2) * 0.25;
+		event.currentTarget.style.translate = `${offsetX}px ${offsetY}px`;
+	};
+	const resetShowButtonMagneticOffset = (
+		event: ReactMouseEvent<HTMLButtonElement>,
+	) => {
+		event.currentTarget.style.removeProperty("translate");
+	};
+	const toggleCaseActions = () => {
+		setActionsAreTuckedAway((current) => !current);
+	};
+	const handleActionToggleClick = (
+		event: ReactMouseEvent<HTMLButtonElement>,
+	) => {
+		if (event.detail > 0) {
+			event.currentTarget.blur();
+		}
+		resetShowButtonMagneticOffset(event);
+		toggleCaseActions();
+	};
+	const actionMotionClassName = cn(
+		"transition-transform duration-200 ease-[cubic-bezier(0.32,0.72,0,1)] motion-reduce:transition-none",
+		actionsAreTuckedAway &&
+			"translate-x-full sm:translate-x-[calc(100%+0.5rem)]",
+	);
+	const actionToggleLabel = actionsAreTuckedAway
+		? "Show case actions"
+		: "Hide case actions";
 
 	return (
 		<>
 			<div
 				className={cn(
-					"pointer-events-none flex max-w-full flex-col items-end gap-2",
+					"pointer-events-none relative flex max-w-full flex-col items-end gap-2",
 					className,
 				)}
 			>
 				{thread.activeCase && (
-					<div className="group/case-pill pointer-events-auto relative min-w-0 max-w-66 rounded-full border bg-background/90 shadow-lg backdrop-blur-xl">
+					<div
+						className={cn(
+							"group/case-pill pointer-events-auto relative min-w-0 max-w-66 rounded-full border bg-background/90 shadow-lg backdrop-blur-xl",
+							actionMotionClassName,
+						)}
+					>
 						<Link
 							to="/cases"
 							search={{ case: thread.activeCase._id }}
@@ -100,7 +151,7 @@ export function EmailCaseActions({
 							<span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
 								<IconFolder className="size-3.5" />
 							</span>
-							<span className="min-w-0 pr-4">
+							<span className="min-w-0">
 								<span className="block truncate text-xs font-semibold">
 									{thread.activeCase.title}
 								</span>
@@ -118,7 +169,10 @@ export function EmailCaseActions({
 				)}
 
 				<ButtonGroup
-					className="pointer-events-auto rounded-4xl shadow-lg"
+					className={cn(
+						"pointer-events-auto rounded-4xl shadow-lg",
+						actionMotionClassName,
+					)}
 					aria-label="Case actions"
 				>
 					<Tooltip>
@@ -142,6 +196,45 @@ export function EmailCaseActions({
 						Create case
 					</Button>
 				</ButtonGroup>
+
+				<div
+					className={cn(
+						"group/case-actions-edge pointer-events-none absolute inset-y-0 z-10 flex w-8 items-center justify-end",
+						actionsAreTuckedAway
+							? "right-0 sm:-right-2"
+							: "-right-4 sm:-right-6",
+					)}
+				>
+					<button
+						type="button"
+						tabIndex={-1}
+						aria-hidden="true"
+						className="pointer-events-auto absolute inset-y-0 right-0 w-2 cursor-pointer"
+						onClick={toggleCaseActions}
+					/>
+					<Button
+						type="button"
+						variant="secondary"
+						size="icon-sm"
+						className={cn(
+							"pointer-events-none origin-right scale-50 opacity-0 shadow-md transition-[scale,opacity,translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/case-actions-edge:pointer-events-auto group-hover/case-actions-edge:scale-100 group-hover/case-actions-edge:opacity-100 group-hover/case-actions-edge:duration-300 group-hover/case-actions-edge:ease-[cubic-bezier(0.34,1.56,0.64,1)] focus-visible:pointer-events-auto focus-visible:scale-100 focus-visible:opacity-100 focus-visible:duration-300 focus-visible:ease-[cubic-bezier(0.34,1.56,0.64,1)] active:translate-y-0! motion-reduce:transition-none",
+							actionsAreTuckedAway ? "rounded-full" : "rounded-r-none",
+						)}
+						aria-label={actionToggleLabel}
+						title={actionToggleLabel}
+						onMouseMove={
+							actionsAreTuckedAway ? updateShowButtonMagneticOffset : undefined
+						}
+						onMouseLeave={resetShowButtonMagneticOffset}
+						onClick={handleActionToggleClick}
+					>
+						{actionsAreTuckedAway ? (
+							<IconArrowBarToLeftDashed />
+						) : (
+							<IconArrowBarToRightDashed />
+						)}
+					</Button>
+				</div>
 			</div>
 
 			<CreateCaseDialog

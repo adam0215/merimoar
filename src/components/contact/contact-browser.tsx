@@ -171,22 +171,22 @@ export function ContactList({
 
 export function ContactView({
 	contact,
-	contactWasSelected,
 	cases,
 	caseStatus,
 	loadMoreCases,
 	messages,
 	messageStatus,
 	loadMoreMessages,
+	closeButton,
 }: {
 	contact: Contact | null | undefined;
-	contactWasSelected: boolean;
 	cases: ContactCase[];
 	caseStatus: PaginationStatus;
 	loadMoreCases: () => void;
 	messages: ContactMessage[];
 	messageStatus: PaginationStatus;
 	loadMoreMessages: () => void;
+	closeButton: React.ReactNode;
 }) {
 	const casesWithClosedLast = [...cases].sort(
 		(firstCase, secondCase) =>
@@ -194,7 +194,7 @@ export function ContactView({
 			Number(secondCase.status === "closed"),
 	);
 
-	if (contactWasSelected && contact === undefined) {
+	if (contact === undefined) {
 		return (
 			<div className="mx-auto max-w-4xl p-6">
 				<div className="h-28 rounded-xl bg-accent/40" />
@@ -221,13 +221,9 @@ export function ContactView({
 		return (
 			<div className="flex h-full flex-col items-center justify-center px-8 text-center">
 				<IconAddressBook className="mb-4 size-6 text-muted-foreground/50" />
-				<h2 className="font-medium">
-					{contactWasSelected ? "Contact not found" : "Select a contact"}
-				</h2>
+				<h2 className="font-medium">Contact not found</h2>
 				<p className="mt-1 max-w-72 text-sm text-muted-foreground">
-					{contactWasSelected
-						? "This contact is unavailable in the current organization."
-						: "Choose a contact to see their email activity."}
+					This contact is unavailable in the current organization.
 				</p>
 			</div>
 		);
@@ -235,7 +231,8 @@ export function ContactView({
 
 	return (
 		<div className="h-full overflow-y-auto">
-			<div className="mx-auto w-full max-w-4xl p-6">
+			<div className="mx-auto w-full max-w-4xl px-6 pt-2 pb-6">
+				<div className="mb-2 flex justify-end">{closeButton}</div>
 				<div className="h-28 overflow-hidden rounded-xl bg-accent/40">
 					<RetroDither
 						className="size-full"

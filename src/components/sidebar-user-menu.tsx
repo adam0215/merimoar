@@ -113,7 +113,7 @@ export function SidebarUserMenu() {
 										label={option.label}
 										aria-label={option.label}
 										title={option.label}
-										className="size-7 justify-center rounded-full p-0 text-muted-foreground data-checked:bg-foreground/6 data-checked:text-foreground data-highlighted:bg-foreground/4 data-highlighted:text-foreground [&_[data-slot=dropdown-menu-radio-item-indicator]]:hidden"
+										className="size-7 justify-center rounded-full p-0 text-muted-foreground data-checked:bg-muted data-checked:text-foreground data-highlighted:bg-muted data-highlighted:text-foreground [&_[data-slot=dropdown-menu-radio-item-indicator]]:hidden"
 									>
 										<option.icon
 											className={cn(
