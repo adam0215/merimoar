@@ -19,6 +19,10 @@ Trust Typescript and the compiler. Don't write a bunch of extra code to double c
 
 Always refer to instructions in the DESIGN.md when implementing UI. Then use existing UI and styles as a reference above that.
 
+## When modeling databases
+
+Make sure to take normalization and deduplication into accoount when modeling data and especially databases. Data should not be duplicated or denormalized if there is no good reasong for it, like increased performance, cost reduction or security. Make sure to follow standard database practices to a reasonable degree. Always double check your data model for deduplication opportunities, like if you could derive a piece of data from a join or alike instead of duplicating the data onto another table. In this project for example the organization and owner of a piece of that could usually be derived a step or two higher in the data tree. Also check for duplicated intentions. If you have two tables and they share similar intentions, maybe they should be one? This is not law and should be approached pragmatically.
+
 ## Task Completion Requirements
 
 - Run verifications using the `bun run check / check:write` and `bun run test` commands. Keep local verification focused on the files and packages changed. Run the smallest relevant test set; do not run the full workspace test suite as a routine completion step.
