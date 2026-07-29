@@ -1,7 +1,5 @@
 import {
 	IconAddressBook,
-	IconCheck,
-	IconChevronDown,
 	IconChevronRight,
 	IconFolder,
 	IconFolderFilled,
@@ -11,19 +9,12 @@ import {
 } from "@tabler/icons-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { FunctionReturnType } from "convex/server";
-import { useRef } from "react";
 import { SidebarUserMenu } from "#/components/sidebar-user-menu.tsx";
 import {
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "#/components/ui/collapsible.tsx";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuItem,
-	DropdownMenuTrigger,
-} from "#/components/ui/dropdown-menu.tsx";
 import {
 	Sidebar,
 	SidebarContent,
@@ -57,8 +48,7 @@ function InboxSidebarGroup({
 	selectedInboxId?: string;
 	isActive: boolean;
 }) {
-	const inboxMenuPortalRef = useRef<HTMLElement | null>(null);
-	const hasInboxChoices = inboxes.length > 1;
+	const hasInboxes = inboxes.length > 0;
 	const totalUnreadCount = inboxes.reduce(
 		(total, inbox) => total + inbox.unreadCount,
 		0,
@@ -68,12 +58,12 @@ function InboxSidebarGroup({
 		<SidebarGroup>
 			<SidebarGroupContent>
 				<SidebarMenu>
-					<SidebarMenuItem>
+					<Collapsible defaultOpen={isActive} render={<SidebarMenuItem />}>
 						<SidebarMenuButton
 							isActive={isActive}
 							tooltip={`Inboxes (${totalUnreadCount} unread)`}
 							className={cn(
-								hasInboxChoices ? "pr-14" : "pr-8",
+								hasInboxes ? "pr-14" : "pr-8",
 								isActive ? "text-foreground" : "text-muted-foreground",
 							)}
 							render={<Link to="/email" search={{}} />}
@@ -83,69 +73,62 @@ function InboxSidebarGroup({
 						</SidebarMenuButton>
 						<SidebarMenuBadge
 							className={cn(
-								hasInboxChoices ? "right-8" : "right-2",
-								"top-1/2! -translate-y-1/2 font-normal text-muted-foreground text-xs peer-hover/menu-button:text-muted-foreground peer-data-active/menu-button:text-muted-foreground",
+								hasInboxes ? "right-8" : "right-2",
+								"font-normal text-muted-foreground text-xs peer-hover/menu-button:text-muted-foreground peer-data-active/menu-button:text-muted-foreground",
 							)}
 							aria-label={`${totalUnreadCount} unread`}
 						>
 							{totalUnreadCount}
 						</SidebarMenuBadge>
-						{hasInboxChoices && (
-							<DropdownMenu>
-								<DropdownMenuTrigger
+						{hasInboxes && (
+							<>
+								<CollapsibleTrigger
 									render={
 										<SidebarMenuAction
-											aria-label="Select inbox"
-											title="Select inbox"
-											ref={(node) => {
-												inboxMenuPortalRef.current =
-													node?.closest<HTMLElement>('[role="dialog"]') ?? null;
-											}}
+											aria-label="Toggle inboxes"
+											title="Toggle inboxes"
+											className="group/collapsible"
 										/>
 									}
 								>
-									<IconChevronDown />
-								</DropdownMenuTrigger>
-								<DropdownMenuContent
-									side="right"
-									align="start"
-									sideOffset={8}
-									container={inboxMenuPortalRef}
-									className="w-64"
-								>
-									{inboxes.map((inbox) => (
-										<DropdownMenuItem
-											key={inbox._id}
-											render={
-												<Link to="/email" search={{ inbox: inbox._id }} />
-											}
-										>
-											<IconInbox />
-											<span className="flex min-w-0 flex-1 flex-col">
-												<span className="truncate font-medium">
-													{inbox.displayName}
-												</span>
-												<span className="truncate text-xs text-muted-foreground">
-													{inbox.address}
-												</span>
-											</span>
-											<span className="ml-auto flex items-center gap-2">
-												<span
-													className="min-w-5 text-right font-normal text-muted-foreground text-xs tabular-nums"
-													aria-label={`${inbox.unreadCount} unread`}
-												>
-													{inbox.unreadCount}
-												</span>
-												<span className="flex size-4 items-center justify-center">
-													{selectedInboxId === inbox._id && <IconCheck />}
-												</span>
-											</span>
-										</DropdownMenuItem>
-									))}
-								</DropdownMenuContent>
-							</DropdownMenu>
+									<IconChevronRight className="transition-transform duration-200 group-data-panel-open/collapsible:rotate-90" />
+								</CollapsibleTrigger>
+								<CollapsibleContent>
+									<SidebarMenuSub>
+										{inboxes.map((inbox) => {
+											const inboxIsActive = selectedInboxId === inbox._id;
+
+											return (
+												<SidebarMenuSubItem key={inbox._id}>
+													<SidebarMenuSubButton
+														isActive={inboxIsActive}
+														className={
+															inboxIsActive
+																? "text-foreground"
+																: "text-muted-foreground"
+														}
+														render={
+															<Link to="/email" search={{ inbox: inbox._id }} />
+														}
+													>
+														<span className="min-w-0 flex-1 truncate">
+															{inbox.displayName}
+														</span>
+														<span
+															className="ml-auto min-w-5 shrink-0 text-right font-normal text-muted-foreground text-xs tabular-nums"
+															aria-label={`${inbox.unreadCount} unread`}
+														>
+															{inbox.unreadCount}
+														</span>
+													</SidebarMenuSubButton>
+												</SidebarMenuSubItem>
+											);
+										})}
+									</SidebarMenuSub>
+								</CollapsibleContent>
+							</>
 						)}
-					</SidebarMenuItem>
+					</Collapsible>
 				</SidebarMenu>
 			</SidebarGroupContent>
 		</SidebarGroup>
