@@ -9,6 +9,11 @@ import {
 } from "@tabler/icons-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { FunctionReturnType } from "convex/server";
+import {
+	CASE_VIEW_FILTER_OPTIONS,
+	CaseViewIndicator,
+	isCaseViewFilter,
+} from "#/components/case/case-status.tsx";
 import { SidebarUserMenu } from "#/components/sidebar-user-menu.tsx";
 import {
 	Collapsible,
@@ -144,9 +149,10 @@ export function AppSidebar({
 	inboxes: EmailInbox[];
 	selectedInboxId?: string;
 }) {
-	const pathname = useRouterState({
-		select: (state) => state.location.pathname,
+	const location = useRouterState({
+		select: (state) => state.location,
 	});
+	const pathname = location.pathname;
 	const emailIsActive = pathname === "/email";
 	const contactsIsActive = pathname === "/contacts";
 	const casesIsActive = pathname === "/cases";
@@ -156,6 +162,9 @@ export function AppSidebar({
 	const settingsIsActive = pathname.startsWith("/settings");
 	const CasesIcon = casesIsActive ? IconFolderFilled : IconFolder;
 	const SettingsIcon = settingsIsActive ? IconSettingsFilled : IconSettings;
+	const selectedCaseView = isCaseViewFilter(location.search.view)
+		? location.search.view
+		: "all";
 
 	return (
 		<Sidebar variant="sidebar" collapsible="icon">
@@ -170,19 +179,60 @@ export function AppSidebar({
 					<SidebarGroupLabel>Case management</SidebarGroupLabel>
 					<SidebarGroupContent>
 						<SidebarMenu>
-							<SidebarMenuItem>
+							<Collapsible
+								defaultOpen={casesIsActive}
+								render={<SidebarMenuItem />}
+							>
 								<SidebarMenuButton
 									isActive={casesIsActive}
 									tooltip="Cases"
-									className={
-										casesIsActive ? "text-foreground" : "text-muted-foreground"
-									}
+									className={cn(
+										"pr-8",
+										casesIsActive ? "text-foreground" : "text-muted-foreground",
+									)}
 									render={<Link to="/cases" search={{}} />}
 								>
 									<CasesIcon />
 									<span>Cases</span>
 								</SidebarMenuButton>
-							</SidebarMenuItem>
+								<CollapsibleTrigger
+									render={
+										<SidebarMenuAction
+											aria-label="Toggle case views"
+											title="Toggle case views"
+											className="group/collapsible"
+										/>
+									}
+								>
+									<IconChevronRight className="ml-auto transition-transform duration-200 group-data-panel-open/collapsible:rotate-90" />
+								</CollapsibleTrigger>
+								<CollapsibleContent>
+									<SidebarMenuSub>
+										{CASE_VIEW_FILTER_OPTIONS.map((option) => (
+											<SidebarMenuSubItem key={option.value}>
+												<SidebarMenuSubButton
+													isActive={
+														casesIsActive && selectedCaseView === option.value
+													}
+													render={
+														<Link
+															to="/cases"
+															search={{
+																view: option.value,
+															}}
+														/>
+													}
+												>
+													<span className="flex size-4 items-center justify-center">
+														<CaseViewIndicator view={option.value} />
+													</span>
+													<span>{option.label}</span>
+												</SidebarMenuSubButton>
+											</SidebarMenuSubItem>
+										))}
+									</SidebarMenuSub>
+								</CollapsibleContent>
+							</Collapsible>
 							<SidebarMenuItem>
 								<SidebarMenuButton
 									isActive={contactsIsActive}

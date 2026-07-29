@@ -19,7 +19,7 @@ import {
 	caseEventBodySchema,
 	optionalCaseEventBodySchema,
 } from "./input";
-import { caseStatusValidator } from "./model";
+import { CASE_STATUS_LABELS, caseStatusValidator } from "./model";
 import {
 	addContactCaseRelation,
 	addEntityCaseRelation,
@@ -215,7 +215,7 @@ export const update = mutation({
 			await appendSystemChangeCaseEvent(
 				ctx,
 				caseRecord,
-				details.output.status === "closed" ? "Case closed." : "Case reopened.",
+				`Case status changed to ${CASE_STATUS_LABELS[details.output.status]}.`,
 				actor.member._id,
 				now,
 			);

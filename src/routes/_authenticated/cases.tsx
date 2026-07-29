@@ -2,8 +2,14 @@ import { IconArrowLeft } from "@tabler/icons-react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { usePaginatedQuery, useQuery } from "convex-helpers/react/cache";
+import { useState } from "react";
 import { CaseList } from "#/components/case/case-list.tsx";
-import { CaseView } from "#/components/case/case-view.tsx";
+import {
+	type CaseView,
+	type CaseViewFilter,
+	isCaseViewFilter,
+} from "#/components/case/case-status.tsx";
+import { CaseView as CaseDetailPanel } from "#/components/case/case-view.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
 import { cn } from "#/lib/utils.ts";
@@ -11,14 +17,19 @@ import { api } from "../../../convex/_generated/api";
 
 type CasesSearch = {
 	case?: string;
+	view?: CaseViewFilter;
 };
 
 const preloadInitialCasePage = createServerFn({ method: "GET" })
-	.validator((input: { selectedCaseId?: string }) => input)
+	.validator(
+		(input: { selectedCaseId?: string; view?: CaseViewFilter }) => input,
+	)
 	.handler(async ({ data }) => {
 		const client = await createAuthenticatedConvexHttpClient();
 		const [cases, selectedCase, createOptions] = await Promise.all([
 			client.query(api.case.reader.list, {
+				view: data.view,
+				now: data.view === "overdue" ? Date.now() : undefined,
 				paginationOpts: {
 					cursor: null,
 					numItems: 30,
@@ -43,21 +54,34 @@ const preloadInitialCasePage = createServerFn({ method: "GET" })
 export const Route = createFileRoute("/_authenticated/cases")({
 	validateSearch: (search: Record<string, unknown>): CasesSearch => ({
 		case: typeof search.case === "string" ? search.case : undefined,
+		view: isCaseViewFilter(search.view) ? search.view : undefined,
 	}),
-	loaderDeps: ({ search }) => ({ selectedCaseId: search.case }),
+	loaderDeps: ({ search }) => ({
+		selectedCaseId: search.case,
+		view: search.view,
+	}),
 	loader: ({ deps }) => preloadInitialCasePage({ data: deps }),
 	component: CasesPage,
 });
 
 function CasesPage() {
 	const prefetched = Route.useLoaderData();
-	const { case: selectedCaseId } = Route.useSearch();
+	const { case: selectedCaseId, view: selectedView } = Route.useSearch();
+	const view: CaseView = selectedView ?? "all";
+	const [overdueCutoff] = useState(Date.now);
 	const navigate = useNavigate({ from: "/cases" });
 	const {
 		results: liveCases,
 		status: liveCaseStatus,
 		loadMore,
-	} = usePaginatedQuery(api.case.reader.list, {}, { initialNumItems: 30 });
+	} = usePaginatedQuery(
+		api.case.reader.list,
+		{
+			view: selectedView,
+			now: selectedView === "overdue" ? overdueCutoff : undefined,
+		},
+		{ initialNumItems: 30 },
+	);
 	const canUsePrefetchedCases = liveCaseStatus === "LoadingFirstPage";
 	const cases = canUsePrefetchedCases ? prefetched.cases.page : liveCases;
 	const caseStatus = canUsePrefetchedCases
@@ -78,11 +102,17 @@ function CasesPage() {
 	const createOptions = liveCreateOptions ?? prefetched.createOptions;
 
 	return (
-		<div className="grid h-full min-h-0 overflow-hidden md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]">
+		<div
+			className={cn(
+				"grid h-full min-h-0 grid-cols-1 overflow-hidden",
+				selectedCaseId &&
+					"md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]",
+			)}
+		>
 			<section
 				className={cn(
-					"min-h-0 overflow-hidden border-r bg-background",
-					selectedCaseId && "hidden md:block",
+					"min-h-0 overflow-hidden bg-background",
+					selectedCaseId && "hidden md:block md:border-r",
 				)}
 			>
 				<CaseList
@@ -95,38 +125,57 @@ function CasesPage() {
 						}
 					}}
 					createOptions={createOptions}
-					onCaseCreated={(caseId) => navigate({ search: { case: caseId } })}
+					onCaseCreated={(caseId) =>
+						navigate({
+							search: {
+								case: caseId,
+								view: selectedView,
+							},
+						})
+					}
+					view={view}
+					onViewChange={(nextView) =>
+						navigate({
+							search: {
+								case: selectedCaseId,
+								view: nextView === "all" ? undefined : nextView,
+							},
+						})
+					}
 				/>
 			</section>
 
-			<section
-				className={cn(
-					"min-h-0 min-w-0 overflow-hidden bg-background",
-					!selectedCaseId && "hidden md:block",
-				)}
-			>
-				<div className="flex h-full min-h-0 flex-col">
-					<div className="flex h-12 shrink-0 items-center border-b px-3 md:hidden">
-						<Button
-							nativeButton={false}
-							variant="ghost"
-							size="sm"
-							render={<Link to="/cases" search={{}} />}
-						>
-							<IconArrowLeft />
-							Back to cases
-						</Button>
+			{selectedCaseId && (
+				<section className="min-h-0 min-w-0 overflow-hidden bg-background">
+					<div className="flex h-full min-h-0 flex-col">
+						<div className="flex h-12 shrink-0 items-center border-b px-3 md:hidden">
+							<Button
+								nativeButton={false}
+								variant="ghost"
+								size="sm"
+								render={
+									<Link
+										to="/cases"
+										search={{
+											view: selectedView,
+										}}
+									/>
+								}
+							>
+								<IconArrowLeft />
+								Back to cases
+							</Button>
+						</div>
+						<div className="min-h-0 flex-1">
+							<CaseDetailPanel
+								key={selectedCaseId}
+								detail={selectedDetail}
+								createOptions={createOptions}
+							/>
+						</div>
 					</div>
-					<div className="min-h-0 flex-1">
-						<CaseView
-							key={selectedCaseId ?? "no-case"}
-							detail={selectedDetail}
-							caseWasSelected={Boolean(selectedCaseId)}
-							createOptions={createOptions}
-						/>
-					</div>
-				</div>
-			</section>
+				</section>
+			)}
 		</div>
 	);
 }

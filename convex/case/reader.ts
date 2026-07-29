@@ -1,4 +1,8 @@
-import { paginationOptsValidator } from "convex/server";
+import {
+	type PaginationOptions,
+	type PaginationResult,
+	paginationOptsValidator,
+} from "convex/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
@@ -13,6 +17,7 @@ import {
 	listActiveEmailThreadRelationsForCase,
 	MAX_EMAIL_THREADS_PER_CASE,
 } from "./emailRelations";
+import { type CaseView, caseViewFilterValidator } from "./model";
 import {
 	listActiveCaseRelations,
 	MAX_CASE_CONTACT_RELATIONS,
@@ -66,19 +71,93 @@ async function resolveActiveMember(
 	};
 }
 
+async function paginateCasesForView(
+	ctx: Pick<QueryCtx, "db">,
+	organizationId: Id<"organizations">,
+	memberId: Id<"organizationMembers">,
+	view: CaseView,
+	now: number | undefined,
+	paginationOpts: PaginationOptions,
+): Promise<PaginationResult<Doc<"cases">>> {
+	switch (view) {
+		case "all":
+			return await ctx.db
+				.query("cases")
+				.withIndex("by_organization_id_and_last_activity_at", (index) =>
+					index.eq("organizationId", organizationId),
+				)
+				.order("desc")
+				.paginate(paginationOpts);
+		case "needs_attention":
+		case "waiting":
+		case "closed":
+			return await ctx.db
+				.query("cases")
+				.withIndex(
+					"by_organization_id_and_status_and_last_activity_at",
+					(index) =>
+						index.eq("organizationId", organizationId).eq("status", view),
+				)
+				.order("desc")
+				.paginate(paginationOpts);
+		case "assigned_to_me":
+		case "unassigned":
+			return await ctx.db
+				.query("cases")
+				.withIndex(
+					"by_organization_id_and_owner_member_id_and_last_activity_at",
+					(index) =>
+						index
+							.eq("organizationId", organizationId)
+							.eq("ownerMemberId", view === "assigned_to_me" ? memberId : null),
+				)
+				.filter((filter) => filter.neq(filter.field("status"), "closed"))
+				.order("desc")
+				.paginate(paginationOpts);
+		case "overdue":
+			if (now === undefined) {
+				throw new Error("Overdue cases require the current time");
+			}
+			return await ctx.db
+				.query("cases")
+				.withIndex("by_organization_id_and_due_at", (index) =>
+					index
+						.eq("organizationId", organizationId)
+						.gt("dueAt", null)
+						.lt("dueAt", now),
+				)
+				.filter((filter) => filter.neq(filter.field("status"), "closed"))
+				.order("asc")
+				.paginate(paginationOpts);
+		case "all_open":
+			return await ctx.db
+				.query("cases")
+				.withIndex("by_organization_id_and_last_activity_at", (index) =>
+					index.eq("organizationId", organizationId),
+				)
+				.filter((filter) => filter.neq(filter.field("status"), "closed"))
+				.order("desc")
+				.paginate(paginationOpts);
+	}
+}
+
 export const list = query({
 	args: {
 		paginationOpts: paginationOptsValidator,
+		view: v.optional(caseViewFilterValidator),
+		now: v.optional(v.number()),
 	},
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
-		const result = await ctx.db
-			.query("cases")
-			.withIndex("by_organization_id_and_last_activity_at", (index) =>
-				index.eq("organizationId", workspace.organization._id),
-			)
-			.order("desc")
-			.paginate(args.paginationOpts);
+		const view = args.view ?? "all";
+		const result = await paginateCasesForView(
+			ctx,
+			workspace.organization._id,
+			workspace.member._id,
+			view,
+			args.now,
+			args.paginationOpts,
+		);
 
 		return {
 			...result,

@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { api } from "../_generated/api";
 import { createTest, syncWorkosUser } from "../test.setup";
+import type { CaseViewFilter } from "./model";
 
 // TEST FIXTURES: The Merimoar organization, people, emails, and WorkOS-style
 // identifiers below exist only in convex-test's isolated in-memory database.
@@ -173,6 +174,98 @@ describe("cases", () => {
 				(caseRecord) => caseRecord.organizationId === organizationId,
 			),
 		).toBe(true);
+	});
+
+	it("filters cases by the configured views", async () => {
+		const { actor, actorMemberId, base, organizationId, ownerMemberId } =
+			await createFixture();
+		await base.run(async (ctx) => {
+			const cases = [
+				{
+					reference: "CASE-ATTENTION",
+					status: "needs_attention" as const,
+					ownerMemberId: actorMemberId,
+					dueAt: 20_000,
+				},
+				{
+					reference: "CASE-WAITING",
+					status: "waiting" as const,
+					ownerMemberId: null,
+					dueAt: null,
+				},
+				{
+					reference: "CASE-CLEAR",
+					status: "clear" as const,
+					ownerMemberId: actorMemberId,
+					dueAt: 5_000,
+				},
+				{
+					reference: "CASE-CLOSED",
+					status: "closed" as const,
+					ownerMemberId: null,
+					dueAt: 5_000,
+				},
+				{
+					reference: "CASE-OPEN",
+					status: "open" as const,
+					ownerMemberId,
+					dueAt: null,
+				},
+			];
+			await Promise.all(
+				cases.map((caseRecord, index) =>
+					ctx.db.insert("cases", {
+						organizationId,
+						reference: caseRecord.reference,
+						title: caseRecord.reference,
+						description: "",
+						ownerMemberId: caseRecord.ownerMemberId,
+						dueAt: caseRecord.dueAt,
+						status: caseRecord.status,
+						lastActivityAt: 1_000 + index,
+						createdAt: 100,
+						updatedAt: 100,
+					}),
+				),
+			);
+		});
+
+		async function listReferences(view: CaseViewFilter) {
+			const result = await actor.query(api.case.reader.list, {
+				view,
+				now: 10_000,
+				paginationOpts: { cursor: null, numItems: 20 },
+			});
+			return result.page.map((item) => item.case.reference);
+		}
+
+		expect(await listReferences("needs_attention")).toEqual(["CASE-ATTENTION"]);
+		expect(await listReferences("assigned_to_me")).toEqual([
+			"CASE-CLEAR",
+			"CASE-ATTENTION",
+		]);
+		expect(await listReferences("unassigned")).toEqual(["CASE-WAITING"]);
+		expect(await listReferences("waiting")).toEqual(["CASE-WAITING"]);
+		expect(await listReferences("closed")).toEqual(["CASE-CLOSED"]);
+		expect(await listReferences("overdue")).toEqual(["CASE-CLEAR"]);
+		const defaultView = await actor.query(api.case.reader.list, {
+			paginationOpts: { cursor: null, numItems: 20 },
+		});
+		expect(defaultView.page.map((item) => item.case.reference)).toEqual([
+			"CASE-OPEN",
+			"CASE-CLOSED",
+			"CASE-CLEAR",
+			"CASE-WAITING",
+			"CASE-ATTENTION",
+			"CASE-RELATED",
+		]);
+		expect(await listReferences("all_open")).toEqual([
+			"CASE-OPEN",
+			"CASE-CLEAR",
+			"CASE-WAITING",
+			"CASE-ATTENTION",
+			"CASE-RELATED",
+		]);
 	});
 
 	it("derives tenant and audit actor from WorkOS identity", async () => {
