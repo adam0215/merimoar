@@ -3,6 +3,7 @@ import {
 	IconChevronRight,
 	IconFolder,
 	IconFolderFilled,
+	IconHome,
 	IconInbox,
 	IconSettings,
 	IconSettingsFilled,
@@ -44,14 +45,16 @@ type EmailInbox = FunctionReturnType<
 	typeof api.email.reader.listInboxes
 >[number];
 
-function InboxSidebarGroup({
+function PrimaryNavigationSidebarGroup({
 	inboxes,
 	selectedInboxId,
-	isActive,
+	overviewIsActive,
+	emailIsActive,
 }: {
 	inboxes: EmailInbox[];
 	selectedInboxId?: string;
-	isActive: boolean;
+	overviewIsActive: boolean;
+	emailIsActive: boolean;
 }) {
 	const hasInboxes = inboxes.length > 0;
 	const totalUnreadCount = inboxes.reduce(
@@ -63,14 +66,27 @@ function InboxSidebarGroup({
 		<SidebarGroup>
 			<SidebarGroupContent>
 				<SidebarMenu>
-					<Collapsible defaultOpen={isActive} render={<SidebarMenuItem />}>
+					<SidebarMenuItem>
+						<SidebarMenuButton
+							isActive={overviewIsActive}
+							tooltip="My overview"
+							className={
+								overviewIsActive ? "text-foreground" : "text-muted-foreground"
+							}
+							render={<Link to="/" search={{}} />}
+						>
+							<IconHome />
+							<span>My overview</span>
+						</SidebarMenuButton>
+					</SidebarMenuItem>
+					<Collapsible defaultOpen={emailIsActive} render={<SidebarMenuItem />}>
 						<div className="relative">
 							<SidebarMenuButton
-								isActive={isActive}
+								isActive={emailIsActive}
 								tooltip={`Inboxes (${totalUnreadCount} unread)`}
 								className={cn(
 									hasInboxes ? "pr-14" : "pr-8",
-									isActive ? "text-foreground" : "text-muted-foreground",
+									emailIsActive ? "text-foreground" : "text-muted-foreground",
 								)}
 								render={<Link to="/email" search={{}} />}
 							>
@@ -153,6 +169,7 @@ export function WorkSidebar({
 		select: (state) => state.location,
 	});
 	const pathname = location.pathname;
+	const overviewIsActive = pathname === "/";
 	const emailIsActive = pathname === "/email";
 	const contactsIsActive = pathname === "/contacts";
 	const casesIsActive = pathname === "/cases";
@@ -169,10 +186,11 @@ export function WorkSidebar({
 	return (
 		<Sidebar variant="sidebar" collapsible="icon">
 			<SidebarContent className="gap-0">
-				<InboxSidebarGroup
+				<PrimaryNavigationSidebarGroup
 					inboxes={inboxes}
 					selectedInboxId={selectedInboxId}
-					isActive={emailIsActive}
+					overviewIsActive={overviewIsActive}
+					emailIsActive={emailIsActive}
 				/>
 
 				<SidebarGroup className="pt-4">

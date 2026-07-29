@@ -29,6 +29,7 @@ const MAX_ORGANIZATION_MEMBERS = 50;
 const MAX_CONTACT_OPTIONS = 50;
 const MAX_CASE_OPTIONS = 100;
 const RECENT_CASES_LIMIT = 5;
+const OVERVIEW_ASSIGNED_CASE_COUNT_LIMIT = 100;
 
 function getUserName(
 	user: NonNullable<Awaited<ReturnType<typeof getWorkosUser>>>,
@@ -184,6 +185,31 @@ export const listRecent = query({
 			)
 			.order("desc")
 			.take(RECENT_CASES_LIMIT);
+	},
+});
+
+export const getMyOverviewStats = query({
+	args: {},
+	handler: async (ctx) => {
+		const workspace = await requireActor(ctx);
+		const assignedCases = await ctx.db
+			.query("cases")
+			.withIndex(
+				"by_organization_id_and_owner_member_id_and_last_activity_at",
+				(index) =>
+					index
+						.eq("organizationId", workspace.organization._id)
+						.eq("ownerMemberId", workspace.member._id),
+			)
+			.filter((filter) => filter.neq(filter.field("status"), "closed"))
+			.order("desc")
+			.take(OVERVIEW_ASSIGNED_CASE_COUNT_LIMIT);
+
+		return {
+			assignedCaseCount: Math.min(assignedCases.length, 99),
+			hasMoreThan99AssignedCases: assignedCases.length > 99,
+			latestCaseActivityAt: assignedCases[0]?.lastActivityAt ?? null,
+		};
 	},
 });
 

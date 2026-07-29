@@ -176,6 +176,54 @@ describe("cases", () => {
 		).toBe(true);
 	});
 
+	it("caps the overview assigned case count only after 99 cases", async () => {
+		const { actor, actorMemberId, base, organizationId } =
+			await createFixture();
+		await base.run(async (ctx) => {
+			for (let index = 1; index <= 99; index += 1) {
+				await ctx.db.insert("cases", {
+					organizationId,
+					reference: `CASE-ASSIGNED-${index}`,
+					title: `Assigned case ${index}`,
+					description: "",
+					ownerMemberId: actorMemberId,
+					dueAt: null,
+					status: "open",
+					lastActivityAt: index,
+					createdAt: index,
+					updatedAt: index,
+				});
+			}
+		});
+
+		expect(await actor.query(api.case.reader.getMyOverviewStats, {})).toEqual({
+			assignedCaseCount: 99,
+			hasMoreThan99AssignedCases: false,
+			latestCaseActivityAt: 99,
+		});
+
+		await base.run(async (ctx) => {
+			await ctx.db.insert("cases", {
+				organizationId,
+				reference: "CASE-ASSIGNED-100",
+				title: "Assigned case 100",
+				description: "",
+				ownerMemberId: actorMemberId,
+				dueAt: null,
+				status: "open",
+				lastActivityAt: 100,
+				createdAt: 100,
+				updatedAt: 100,
+			});
+		});
+
+		expect(await actor.query(api.case.reader.getMyOverviewStats, {})).toEqual({
+			assignedCaseCount: 99,
+			hasMoreThan99AssignedCases: true,
+			latestCaseActivityAt: 100,
+		});
+	});
+
 	it("filters cases by the configured views", async () => {
 		const { actor, actorMemberId, base, organizationId, ownerMemberId } =
 			await createFixture();

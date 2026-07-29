@@ -30,6 +30,9 @@ function getPageTitle(pathname: string, agentView: AgentView) {
 	if (isAgentsPath(pathname)) {
 		return getAgentNavItem(agentView).label;
 	}
+	if (pathname === "/") {
+		return "My overview";
+	}
 	if (pathname === "/settings/organization/entities") {
 		return "Entity settings";
 	}
@@ -115,7 +118,7 @@ function AppHeader({
 				)}
 			>
 				<Link
-					to="/email"
+					to="/"
 					search={{}}
 					aria-label="Merimoar"
 					className="flex size-8 items-center justify-center text-foreground"
@@ -158,7 +161,7 @@ function AreaTabs({ activeArea }: { activeArea: "work" | "agents" }) {
 			onValueChange={(value) => {
 				if (value === "work") {
 					setSelectedArea(value);
-					void navigate({ to: "/email", search: {} }).catch(() => {
+					void navigate({ to: "/", search: {} }).catch(() => {
 						setSelectedArea(activeArea);
 					});
 					return;
