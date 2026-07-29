@@ -406,6 +406,79 @@ describe("email to case linking", () => {
 		expect(state.caseRecord?.status).toBe("needs_attention");
 	});
 
+	it("rolls back inbound persistence when a transactional domain handler fails", async () => {
+		const { base, inboxId, integrationId, firstThreadId, otherCaseId } =
+			await createCaseLinkingFixture();
+		const receivedAt = 2_000_000_000_000;
+		const eventId = await base.run(async (ctx) => {
+			await ctx.db.insert("emailThreadExternalReferences", {
+				threadId: firstThreadId,
+				inboxId,
+				integrationId,
+				externalThreadId: "invalid-case-relation-thread",
+			});
+			await ctx.db.insert("caseEmailThreadRelations", {
+				caseId: otherCaseId,
+				threadId: firstThreadId,
+				startedAt: receivedAt - 1,
+				endedAt: null,
+				linkedByMemberId: null,
+				unlinkedByMemberId: null,
+			});
+			return await ctx.db.insert("emailIngestEvents", {
+				inboxId,
+				integrationId,
+				externalEventId: "invalid-case-relation-event",
+				externalMessageId: "invalid-case-relation-message",
+				eventType: "email.received",
+				status: "queued",
+				rawPayload: "{}",
+				receivedAt,
+				attempts: 0,
+				replayCount: 0,
+				processingGeneration: 0,
+			});
+		});
+
+		await expect(
+			base.mutation(internal.email.ingest.storeInboundEmail, {
+				eventId,
+				processingGeneration: 0,
+				email: {
+					externalMessageId: "invalid-case-relation-message",
+					externalThreadId: "invalid-case-relation-thread",
+					internetMessageId: "<invalid-case-relation@example.com>",
+					references: [],
+					from: { name: "Ada", address: "ada@example.com" },
+					to: [{ address: "support@merimoar.test" }],
+					cc: [],
+					bcc: [],
+					replyTo: [],
+					subject: "Policy review",
+					textBody: "This transaction must roll back.",
+					sentAt: receivedAt - 100,
+					receivedAt,
+				},
+			}),
+		).rejects.toThrow("invalid active case relation");
+
+		const state = await base.run(async (ctx) => ({
+			event: await ctx.db.get(eventId),
+			inbox: await ctx.db.get(inboxId),
+			thread: await ctx.db.get(firstThreadId),
+			messages: await ctx.db.query("emailMessages").collect(),
+			contacts: await ctx.db.query("contacts").collect(),
+			caseEvents: await ctx.db.query("caseEvents").collect(),
+		}));
+		expect(state.event?.status).toBe("queued");
+		expect(state.inbox?.unreadThreadCount).toBe(0);
+		expect(state.thread).not.toHaveProperty("latestMessageId");
+		expect(state.thread).not.toHaveProperty("isUnread");
+		expect(state.messages).toHaveLength(0);
+		expect(state.contacts).toHaveLength(0);
+		expect(state.caseEvents).toHaveLength(0);
+	});
+
 	it("backfills legacy notes without deleting or changing their content", async () => {
 		const { base, actorMemberId, firstCaseId } =
 			await createCaseLinkingFixture();

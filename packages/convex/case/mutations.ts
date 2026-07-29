@@ -6,17 +6,13 @@ import {
 	linkEmailThreadToCase,
 	unlinkEmailThreadFromCase,
 } from "#/case/emailRelations";
-import { removeCaseEmbedding } from "#/case/embeddingData";
-import {
-	appendHumanNoteCaseEvent,
-	appendSystemChangeCaseEvent,
-} from "#/case/events";
+import { appendHumanNoteCaseEvent } from "#/case/events";
 import {
 	caseDetailsInputSchema,
 	caseEventBodySchema,
 	optionalCaseEventBodySchema,
 } from "#/case/input";
-import { CASE_STATUS_LABELS, caseStatusValidator } from "#/case/model";
+import { caseStatusValidator } from "#/case/model";
 import {
 	addContactCaseRelation,
 	addEntityCaseRelation,
@@ -27,6 +23,7 @@ import {
 	removeRelatedCaseRelation,
 	validateInitialRelations,
 } from "#/case/relations";
+import { dispatchDomainEvent } from "#/domainEvents";
 import { syncGlobalSearchEntry } from "#/globalSearch/model";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
@@ -49,9 +46,7 @@ async function generateCaseReference(
 				index.eq("organizationId", organizationId).eq("reference", reference),
 			)
 			.unique();
-		if (!existing) {
-			return reference;
-		}
+		if (!existing) return reference;
 	}
 	throw new Error("Could not generate a unique case reference");
 }
@@ -147,9 +142,7 @@ export const create = mutation({
 		}
 		if (args.emailThreadId) {
 			const caseRecord = await ctx.db.get(caseId);
-			if (!caseRecord) {
-				throw new Error("Could not load the created case");
-			}
+			if (!caseRecord) throw new Error("Could not load the created case");
 			await linkEmailThreadToCase(
 				ctx,
 				actor.organization._id,
@@ -193,7 +186,7 @@ export const update = mutation({
 
 		const now = Date.now();
 		const statusChanged = caseRecord.status !== details.output.status;
-		const embeddingInputChanged =
+		const caseDetailsChanged =
 			caseRecord.title !== details.output.title ||
 			caseRecord.description !== details.output.description;
 		await ctx.db.patch("cases", caseRecord._id, {
@@ -220,18 +213,26 @@ export const update = mutation({
 			await ctx.db.patch("cases", caseRecord._id, { globalSearchEntryId });
 		}
 		if (statusChanged) {
-			await appendSystemChangeCaseEvent(
-				ctx,
-				caseRecord,
-				`Case status changed to ${CASE_STATUS_LABELS[details.output.status]}.`,
-				actor.member._id,
-				now,
-			);
+			await dispatchDomainEvent(ctx, {
+				name: "case.statusChanged",
+				payload: {
+					caseId: caseRecord._id,
+					status: details.output.status,
+					changedByMemberId: actor.member._id,
+					occurredAt: now,
+				},
+			});
 		}
-		if (embeddingInputChanged) {
-			await removeCaseEmbedding(ctx, caseRecord._id);
-			await ctx.scheduler.runAfter(0, internal.case.embedding.embedCase, {
-				caseId: caseRecord._id,
+		if (caseDetailsChanged) {
+			await dispatchDomainEvent(ctx, {
+				name: "case.detailsChanged",
+				payload: {
+					caseId: caseRecord._id,
+					previous: {
+						title: caseRecord.title,
+						description: caseRecord.description,
+					},
+				},
 			});
 		}
 		return null;

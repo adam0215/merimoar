@@ -1,7 +1,6 @@
 import { v } from "convex/values";
-import { getActiveCaseRelationForEmailThread } from "#/case/emailRelations";
-import { appendInboundEmailCaseEvent } from "#/case/events";
 import { upsertSenderContact } from "#/contact/model";
+import { dispatchDomainEvent } from "#/domainEvents";
 import { emailIngestPool } from "#/email/ingestQueue";
 import { updateIngestRecipientStatuses } from "#/email/ingestState";
 import {
@@ -9,7 +8,6 @@ import {
 	normalizedInboundEmailValidator,
 } from "#/email/model";
 import { routeEmailToOrganizationInbox } from "#/email/router";
-import { setThreadUnread } from "#/email/unreadCounts";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -89,14 +87,12 @@ export const routeResendEvent = internalMutation({
 			)
 			.unique();
 
-		if (existing) {
+		if (existing)
 			return { status: "duplicate" as const, eventId: existing._id };
-		}
 
 		const integration = await ctx.db.get(args.integrationId);
-		if (!integration || integration.status !== "connected") {
+		if (!integration || integration.status !== "connected")
 			return { status: "ignored" as const };
-		}
 		const { inbox, recipientAddresses } = await routeEmailToOrganizationInbox(
 			ctx,
 			integration.organizationId,
@@ -131,9 +127,7 @@ export const routeResendEvent = internalMutation({
 			),
 		);
 
-		if (!canRoute) {
-			return { status: "unroutable" as const, eventId };
-		}
+		if (!canRoute) return { status: "unroutable" as const, eventId };
 
 		const workId = await emailIngestPool.enqueueAction(
 			ctx,
@@ -159,25 +153,19 @@ export const prepareProcessingAttempt = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		const event = await ctx.db.get(args.eventId);
-		if (
-			!event?.inboxId ||
-			!event.integrationId ||
-			event.status !== "queued" ||
-			(event.processingGeneration ?? 0) !== args.processingGeneration
-		) {
+		if (!event?.inboxId) return null;
+		if (!event.integrationId) return null;
+		if (event.status !== "queued") return null;
+		if ((event.processingGeneration ?? 0) !== args.processingGeneration)
 			return null;
-		}
 
 		const [inbox, integration] = await Promise.all([
 			ctx.db.get(event.inboxId),
 			ctx.db.get(event.integrationId),
 		]);
-		if (
-			!inbox ||
-			inbox.status !== "active" ||
-			!integration ||
-			integration.status !== "connected"
-		) {
+		const routeIsActive =
+			inbox?.status === "active" && integration?.status === "connected";
+		if (!routeIsActive) {
 			await ctx.db.patch(event._id, {
 				status: "failed",
 				error: "The email inbox or integration is not active",
@@ -202,28 +190,25 @@ export const storeInboundEmail = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		const event = await ctx.db.get(args.eventId);
-		if (!event?.inboxId || !event.integrationId) {
+		if (!event?.inboxId)
 			throw new Error("Ingest event is not connected to an inbox");
-		}
+		if (!event.integrationId)
+			throw new Error("Ingest event is not connected to an inbox");
 		if (event.status === "processed") {
-			return await findExistingMessage(
+			const existingMessage = await findExistingMessage(
 				ctx,
 				event.inboxId,
 				event.integrationId,
 				args.email.externalMessageId,
-			).then((message) => message?._id ?? null);
+			);
+			return existingMessage?._id ?? null;
 		}
-		if (
-			event.status !== "queued" ||
-			(event.processingGeneration ?? 0) !== args.processingGeneration
-		) {
+		if (event.status !== "queued") return null;
+		if ((event.processingGeneration ?? 0) !== args.processingGeneration)
 			return null;
-		}
 
 		const inbox = await ctx.db.get(event.inboxId);
-		if (!inbox) {
-			throw new Error("Email inbox not found");
-		}
+		if (!inbox) throw new Error("Email inbox not found");
 
 		const existingMessage = await findExistingMessage(
 			ctx,
@@ -285,9 +270,7 @@ export const storeInboundEmail = internalMutation({
 			thread = await ctx.db.get(threadId);
 		}
 
-		if (!thread) {
-			throw new Error("Could not create email thread");
-		}
+		if (!thread) throw new Error("Could not create email thread");
 
 		if (args.email.externalThreadId) {
 			const externalThreadId = args.email.externalThreadId;
@@ -343,25 +326,14 @@ export const storeInboundEmail = internalMutation({
 				lastActivityAt: args.email.receivedAt,
 			});
 		}
-		await setThreadUnread(ctx, thread, true);
-
-		const activeCaseRelation = await getActiveCaseRelationForEmailThread(
-			ctx,
-			thread._id,
-		);
-		if (activeCaseRelation) {
-			const caseRecord = await ctx.db.get(activeCaseRelation.caseId);
-			if (!caseRecord || caseRecord.organizationId !== thread.organizationId) {
-				throw new Error("Email thread has an invalid active case relation");
-			}
-			await appendInboundEmailCaseEvent(
-				ctx,
-				caseRecord,
+		await dispatchDomainEvent(ctx, {
+			name: "email.messageReceived",
+			payload: {
 				messageId,
-				args.email.receivedAt,
-			);
-			await ctx.db.patch(caseRecord._id, { status: "needs_attention" });
-		}
+				threadId: thread._id,
+				receivedAt: args.email.receivedAt,
+			},
+		});
 
 		await ctx.db.patch(event._id, {
 			status: "processed",
@@ -383,13 +355,10 @@ export const recordTerminalProcessingFailure = internalMutation({
 	},
 	handler: async (ctx, args) => {
 		const event = await ctx.db.get(args.eventId);
-		if (
-			!event ||
-			event.status !== "queued" ||
-			(event.processingGeneration ?? 0) !== args.processingGeneration
-		) {
+		if (!event) return null;
+		if (event.status !== "queued") return null;
+		if ((event.processingGeneration ?? 0) !== args.processingGeneration)
 			return null;
-		}
 
 		await ctx.db.patch(event._id, {
 			status: "failed",

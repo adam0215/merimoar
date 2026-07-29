@@ -24,6 +24,7 @@ import type * as case_relations from "../case/relations.js";
 import type * as contact_model from "../contact/model.js";
 import type * as contact_reader from "../contact/reader.js";
 import type * as crons from "../crons.js";
+import type * as domainEvents from "../domainEvents.js";
 import type * as email_inboxes from "../email/inboxes.js";
 import type * as email_ingest from "../email/ingest.js";
 import type * as email_ingestErrors from "../email/ingestErrors.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   "contact/model": typeof contact_model;
   "contact/reader": typeof contact_reader;
   crons: typeof crons;
+  domainEvents: typeof domainEvents;
   "email/inboxes": typeof email_inboxes;
   "email/ingest": typeof email_ingest;
   "email/ingestErrors": typeof email_ingestErrors;

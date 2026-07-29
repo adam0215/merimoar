@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 
 import { describe, expect, it } from "vitest";
+import { CASE_EMBEDDING_DIMENSIONS } from "#/case/embeddingModel";
 import type { CaseViewFilter } from "#/case/model";
 import { createTest, syncWorkosUser } from "#/test.setup";
 import { api } from "../_generated/api";
@@ -10,6 +11,10 @@ import { api } from "../_generated/api";
 const ISSUER = "https://api.workos.com/";
 const ADAM_SUBJECT = "user_adam";
 const OTHER_SUBJECT = "user_other";
+const TEST_CASE_EMBEDDING = Array.from(
+	{ length: CASE_EMBEDDING_DIMENSIONS },
+	(_, index) => (index === 0 ? 1 : 0),
+);
 
 async function createFixture() {
 	const base = createTest();
@@ -358,6 +363,122 @@ describe("cases", () => {
 			relation: { addedByMemberId: actorMemberId },
 			relatedCase: { _id: caseId },
 		});
+	});
+
+	it("records a case status transition once and attributes it to the actor", async () => {
+		const { actor, actorMemberId, base, ownerMemberId } = await createFixture();
+		const caseId = await actor.mutation(api.case.mutations.create, {
+			title: "Status transition",
+			description: "Track one real transition.",
+			ownerMemberId,
+			dueAt: null,
+			initialEventBody: "",
+			contactIds: [],
+			entityIds: [],
+			relatedCaseIds: [],
+		});
+		const update = {
+			caseId,
+			title: "Status transition",
+			description: "Track one real transition.",
+			ownerMemberId,
+			dueAt: null,
+			status: "waiting" as const,
+		};
+
+		await actor.mutation(api.case.mutations.update, update);
+		await actor.mutation(api.case.mutations.update, update);
+
+		const state = await base.run(async (ctx) => ({
+			caseRecord: await ctx.db.get(caseId),
+			statusEvents: (
+				await ctx.db
+					.query("caseEvents")
+					.withIndex("by_case_id_and_occurred_at", (index) =>
+						index.eq("caseId", caseId),
+					)
+					.collect()
+			).filter(
+				(event) =>
+					"type" in event &&
+					event.type === "system_change" &&
+					event.body === "Case status changed to Waiting.",
+			),
+		}));
+
+		expect(state.caseRecord?.status).toBe("waiting");
+		expect(state.statusEvents).toHaveLength(1);
+		expect(state.statusEvents[0]?.createdByMemberId).toBe(actorMemberId);
+	});
+
+	it("invalidates and schedules rebuilding an embedding after case details change", async () => {
+		const { actor, base, organizationId, ownerMemberId, relatedCaseId } =
+			await createFixture();
+		const embeddingId = await base.run(async (ctx) =>
+			ctx.db.insert("caseEmbeddings", {
+				caseId: relatedCaseId,
+				organizationId,
+				embedding: TEST_CASE_EMBEDDING,
+			}),
+		);
+
+		await actor.mutation(api.case.mutations.update, {
+			caseId: relatedCaseId,
+			title: "Related handover",
+			description: "The case now has embedding-relevant details.",
+			ownerMemberId,
+			dueAt: null,
+			status: "open",
+		});
+
+		const state = await base.run(async (ctx) => ({
+			embedding: await ctx.db.get(embeddingId),
+			scheduledFunctions: await ctx.db.system
+				.query("_scheduled_functions")
+				.collect(),
+		}));
+		expect(state.embedding).toBeNull();
+		expect(state.scheduledFunctions).toContainEqual(
+			expect.objectContaining({
+				name: "case/embedding:embedCase",
+				args: [{ caseId: relatedCaseId }],
+				state: { kind: "pending" },
+			}),
+		);
+	});
+
+	it("preserves an embedding when changed case details produce the same embedding input", async () => {
+		const { actor, base, organizationId, ownerMemberId, relatedCaseId } =
+			await createFixture();
+		const embeddedSuffix = "x".repeat(6_000);
+		const embeddingId = await base.run(async (ctx) => {
+			await ctx.db.patch(relatedCaseId, {
+				description: `Old truncated prefix${embeddedSuffix}`,
+			});
+			return await ctx.db.insert("caseEmbeddings", {
+				caseId: relatedCaseId,
+				organizationId,
+				embedding: TEST_CASE_EMBEDDING,
+			});
+		});
+
+		await actor.mutation(api.case.mutations.update, {
+			caseId: relatedCaseId,
+			title: "Related handover",
+			description: `New truncated prefix${embeddedSuffix}`,
+			ownerMemberId,
+			dueAt: null,
+			status: "open",
+		});
+
+		const state = await base.run(async (ctx) => ({
+			embedding: await ctx.db.get(embeddingId),
+			scheduledFunctions: await ctx.db.system
+				.query("_scheduled_functions")
+				.collect(),
+		}));
+		expect(state.embedding).not.toBeNull();
+		expect(state.scheduledFunctions).toHaveLength(0);
 	});
 
 	it("treats case relations as symmetric without creating reverse duplicates", async () => {
