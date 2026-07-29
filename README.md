@@ -9,3 +9,6 @@ shadcn/ui.
 
 Resend accounts are connected through
 [WorkOS Pipes](docs/resend-pipes.md).
+
+Email threads use Gemini embeddings and Convex vector search for
+[semantic case suggestions](docs/semantic-case-suggestions.md).

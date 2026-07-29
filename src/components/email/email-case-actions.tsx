@@ -7,19 +7,24 @@ import {
 	IconFolderPlus,
 	IconLink,
 	IconLoader2,
+	IconUser,
 } from "@tabler/icons-react";
 import { useKeyHold } from "@tanstack/react-hotkeys";
 import { Link } from "@tanstack/react-router";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import {
 	type MouseEvent as ReactMouseEvent,
+	type RefObject,
 	useEffect,
 	useMemo,
 	useRef,
 	useState,
 } from "react";
+import { createStore } from "zustand/vanilla";
+import { CaseStatusDot } from "#/components/case/case-status.tsx";
 import { CreateCaseDialog } from "#/components/case/create-case-dialog.tsx";
+import { formatShortDate } from "#/components/case/format.ts";
 import type { CaseCreateOptions } from "#/components/case/types.ts";
 import { UnlinkEmailThreadButton } from "#/components/case/unlink-email-thread-button.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -32,7 +37,13 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "#/components/ui/dialog.tsx";
+import {
+	HoverCard,
+	HoverCardContent,
+	HoverCardTrigger,
+} from "#/components/ui/hover-card.tsx";
 import { SearchCombobox } from "#/components/ui/search-combobox.tsx";
+import { Skeleton } from "#/components/ui/skeleton.tsx";
 import {
 	Tooltip,
 	TooltipContent,
@@ -53,6 +64,43 @@ type CaseOption = {
 	reference: string;
 	isCurrent: boolean;
 };
+
+type SuggestedCaseOption = FunctionReturnType<
+	typeof api.case.embedding.suggestForEmailThread
+>[number] & { isCurrent: false };
+
+type CaseSuggestionState = SuggestedCaseOption[] | "failed" | undefined;
+
+const CASE_SUGGESTION_CACHE_TTL_MS = 5 * 60 * 1000;
+
+type CaseSuggestionCache = {
+	entries: Map<
+		Id<"emailThreads">,
+		{ cachedAt: number; suggestions: SuggestedCaseOption[] }
+	>;
+	cache: (
+		threadId: Id<"emailThreads">,
+		suggestions: SuggestedCaseOption[],
+	) => void;
+	remove: (threadId: Id<"emailThreads">) => void;
+};
+
+const caseSuggestionCache = createStore<CaseSuggestionCache>()((set) => ({
+	entries: new Map(),
+	cache: (threadId, suggestions) =>
+		set(({ entries }) => ({
+			entries: new Map(entries).set(threadId, {
+				cachedAt: Date.now(),
+				suggestions,
+			}),
+		})),
+	remove: (threadId) =>
+		set(({ entries }) => {
+			const nextEntries = new Map(entries);
+			nextEntries.delete(threadId);
+			return { entries: nextEntries };
+		}),
+}));
 
 export function EmailCaseActions({
 	thread,
@@ -272,15 +320,20 @@ function LinkEmailThreadDialog({
 	activeCaseId?: Id<"cases">;
 }) {
 	const linkEmailThread = useMutation(api.case.mutations.linkEmailThread);
+	const suggestCases = useAction(api.case.embedding.suggestForEmailThread);
 	const dialogRef = useRef<HTMLDivElement>(null);
 	const [query, setQuery] = useState("");
 	const [debouncedQuery, setDebouncedQuery] = useState("");
 	const [selectedCase, setSelectedCase] = useState<CaseOption | null>(null);
+	const [suggestions, setSuggestions] = useState<CaseSuggestionState>();
 	const [recentCasesRequested, setRecentCasesRequested] = useState(false);
 	const [isLinking, setIsLinking] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const isMetaHeld = useKeyHold("Meta");
 	const normalizedQuery = query.trim();
+	const visibleSuggestions = Array.isArray(suggestions)
+		? suggestions.filter((suggestion) => suggestion.caseId !== activeCaseId)
+		: suggestions;
 	const searchResults = useQuery(
 		api.globalSearch.reader.search,
 		debouncedQuery ? { query: debouncedQuery } : "skip",
@@ -328,10 +381,48 @@ function LinkEmailThreadDialog({
 		return () => window.clearTimeout(timeoutId);
 	}, [normalizedQuery]);
 
+	useEffect(() => {
+		if (!open) {
+			return;
+		}
+
+		const cached = caseSuggestionCache.getState().entries.get(threadId);
+		if (cached && Date.now() - cached.cachedAt < CASE_SUGGESTION_CACHE_TTL_MS) {
+			setSuggestions(cached.suggestions);
+			return;
+		}
+
+		caseSuggestionCache.getState().remove(threadId);
+		let canceled = false;
+		setSuggestions(undefined);
+		void suggestCases({ threadId })
+			.then((results) => {
+				const nextSuggestions = results.map((suggestion) => ({
+					...suggestion,
+					isCurrent: false as const,
+				}));
+				caseSuggestionCache.getState().cache(threadId, nextSuggestions);
+				if (canceled) {
+					return;
+				}
+				setSuggestions(nextSuggestions);
+			})
+			.catch(() => {
+				if (!canceled) {
+					setSuggestions("failed");
+				}
+			});
+
+		return () => {
+			canceled = true;
+		};
+	}, [open, suggestCases, threadId]);
+
 	function reset() {
 		setQuery("");
 		setDebouncedQuery("");
 		setSelectedCase(null);
+		setSuggestions(undefined);
 		setRecentCasesRequested(false);
 		setIsLinking(false);
 		setError(null);
@@ -422,6 +513,17 @@ function LinkEmailThreadDialog({
 						}
 					/>
 
+					{!normalizedQuery && !selectedCase && (
+						<CaseSuggestions
+							suggestions={visibleSuggestions}
+							container={dialogRef}
+							onSelect={(caseOption) => {
+								setSelectedCase(caseOption);
+								setError(null);
+							}}
+						/>
+					)}
+
 					{error && (
 						<p
 							className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive"
@@ -460,6 +562,112 @@ function LinkEmailThreadDialog({
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+function CaseSuggestions({
+	suggestions,
+	container,
+	onSelect,
+}: {
+	suggestions: CaseSuggestionState;
+	container: RefObject<HTMLDivElement | null>;
+	onSelect: (caseOption: CaseOption) => void;
+}) {
+	return (
+		<div>
+			<h3 className="px-1 pb-1.5 text-sm font-medium">Suggestions</h3>
+			{suggestions === undefined ? (
+				<div className="space-y-1">
+					{Array.from({ length: 3 }, (_, index) => (
+						<div
+							key={index}
+							className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+						>
+							<Skeleton className="size-8 shrink-0 rounded-full" />
+							<div className="min-w-0 flex-1 space-y-1.5">
+								<Skeleton className="h-4 w-2/3" />
+								<Skeleton className="h-3 w-1/3" />
+							</div>
+						</div>
+					))}
+				</div>
+			) : suggestions === "failed" ? (
+				<p className="px-3 py-4 text-center text-sm text-muted-foreground">
+					Suggestions unavailable
+				</p>
+			) : suggestions.length > 0 ? (
+				<div className="space-y-1">
+					{suggestions.map((caseOption) => (
+						<HoverCard key={caseOption.caseId}>
+							<HoverCardTrigger
+								delay={200}
+								closeDelay={100}
+								render={
+									<button
+										type="button"
+										className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+										aria-label={`Select ${caseOption.reference}: ${caseOption.title}`}
+										onClick={() => onSelect(caseOption)}
+									/>
+								}
+							>
+								<CaseOptionContent caseOption={caseOption} />
+							</HoverCardTrigger>
+							<HoverCardContent
+								side="top"
+								className="w-(--anchor-width)"
+								container={container}
+							>
+								<CaseSuggestionPreview caseOption={caseOption} />
+							</HoverCardContent>
+						</HoverCard>
+					))}
+				</div>
+			) : (
+				<p className="px-3 py-4 text-center text-sm text-muted-foreground">
+					No suggestions found
+				</p>
+			)}
+		</div>
+	);
+}
+
+function CaseSuggestionPreview({
+	caseOption,
+}: {
+	caseOption: SuggestedCaseOption;
+}) {
+	return (
+		<div>
+			<div className="flex items-center gap-2 text-xs">
+				<CaseStatusDot status={caseOption.status} className="size-1.5" />
+				<span className="font-medium text-muted-foreground">
+					{caseOption.reference}
+				</span>
+				<time className="ml-auto text-muted-foreground">
+					{formatShortDate(caseOption.lastActivityAt)}
+				</time>
+			</div>
+			<h4 className="mt-1.5 text-base leading-5 font-semibold">
+				{caseOption.title}
+			</h4>
+			<div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+				<IconUser className="size-3.5" />
+				<span className="truncate">{caseOption.ownerName ?? "Unassigned"}</span>
+				{caseOption.dueAt && (
+					<>
+						<span aria-hidden>·</span>
+						<span className="truncate">
+							Due {formatShortDate(caseOption.dueAt)}
+						</span>
+					</>
+				)}
+			</div>
+			<p className="mt-3 line-clamp-5 border-t pt-3 text-sm leading-5 text-muted-foreground">
+				{caseOption.description || "No description"}
+			</p>
+		</div>
 	);
 }
 

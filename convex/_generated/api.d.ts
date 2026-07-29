@@ -12,6 +12,9 @@ import type * as auth_access from "../auth/access.js";
 import type * as auth_members from "../auth/members.js";
 import type * as case_access from "../case/access.js";
 import type * as case_emailRelations from "../case/emailRelations.js";
+import type * as case_embedding from "../case/embedding.js";
+import type * as case_embeddingData from "../case/embeddingData.js";
+import type * as case_embeddingModel from "../case/embeddingModel.js";
 import type * as case_events from "../case/events.js";
 import type * as case_input from "../case/input.js";
 import type * as case_model from "../case/model.js";
@@ -72,6 +75,9 @@ declare const fullApi: ApiFromModules<{
   "auth/members": typeof auth_members;
   "case/access": typeof case_access;
   "case/emailRelations": typeof case_emailRelations;
+  "case/embedding": typeof case_embedding;
+  "case/embeddingData": typeof case_embeddingData;
+  "case/embeddingModel": typeof case_embeddingModel;
   "case/events": typeof case_events;
   "case/input": typeof case_input;
   "case/model": typeof case_model;
@@ -151,6 +157,7 @@ export declare const internal: FilterApi<
 export declare const components: {
   workOSAuthKit: import("@convex-dev/workos-authkit/_generated/component.js").ComponentApi<"workOSAuthKit">;
   migrations: import("@convex-dev/migrations/_generated/component.js").ComponentApi<"migrations">;
+  actionCache: import("@convex-dev/action-cache/_generated/component.js").ComponentApi<"actionCache">;
   emailIngestWorkpool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"emailIngestWorkpool">;
   emailOutboundWorkpool: import("@convex-dev/workpool/_generated/component.js").ComponentApi<"emailOutboundWorkpool">;
 };

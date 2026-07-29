@@ -1,9 +1,92 @@
 import { describe, expect, it } from "vitest";
 import { internal } from "../_generated/api";
 import { createTest } from "../test.setup";
-import { ACME_INBOX } from "./acmeData";
+import { ACME_INBOX, ACME_SUGGESTION_EMAILS } from "./acmeData";
 
 describe("Acme AB seed data", () => {
+	it("creates idempotent unlinked email threads for suggestion testing", async () => {
+		const test = createTest();
+		const organizationId = await test.run(async (ctx) => {
+			const organizationId = await ctx.db.insert("organizations", {
+				name: "Test organization",
+				workosOrganizationId: "org_suggestion_seed",
+				active: true,
+			});
+			await ctx.db.insert("organizationMembers", {
+				organizationId,
+				workosUserId: "user_suggestion_seed_owner",
+				active: true,
+			});
+			return organizationId;
+		});
+
+		const firstRun = await test.mutation(
+			internal.seed.acme.seedSuggestionEmails,
+			{
+				organizationId,
+				confirmation: "seed-suggestion-emails",
+			},
+		);
+		expect(firstRun).toMatchObject({
+			createdThreads: ACME_SUGGESTION_EMAILS.length,
+			existingThreads: 0,
+		});
+		await test.run(async (ctx) => {
+			for await (const message of ctx.db.query("emailMessages")) {
+				await ctx.db.patch(message._id, {
+					subject: `Testförslag: ${message.subject}`,
+				});
+			}
+		});
+		const secondRun = await test.mutation(
+			internal.seed.acme.seedSuggestionEmails,
+			{
+				organizationId,
+				confirmation: "seed-suggestion-emails",
+			},
+		);
+		expect(secondRun).toMatchObject({
+			createdThreads: 0,
+			existingThreads: ACME_SUGGESTION_EMAILS.length,
+			inboxId: firstRun.inboxId,
+		});
+
+		const state = await test.run(async (ctx) => {
+			const references = (
+				await ctx.db.query("emailThreadExternalReferences").collect()
+			).filter((reference) =>
+				reference.externalThreadId.startsWith("seed-suggestion-"),
+			);
+			const threadIds = new Set(
+				references.map((reference) => reference.threadId),
+			);
+			return {
+				references,
+				messages: (await ctx.db.query("emailMessages").collect()).filter(
+					(message) => threadIds.has(message.threadId),
+				),
+				relations: (
+					await ctx.db.query("caseEmailThreadRelations").collect()
+				).filter((relation) => threadIds.has(relation.threadId)),
+				inbox: await ctx.db.get(firstRun.inboxId),
+			};
+		});
+
+		expect(state.references).toHaveLength(ACME_SUGGESTION_EMAILS.length);
+		expect(state.messages).toHaveLength(5);
+		expect(
+			state.messages.every(
+				(message) =>
+					message.direction === "inbound" &&
+					!message.subject.includes("Testförslag:"),
+			),
+		).toBe(true);
+		expect(state.relations).toEqual([]);
+		expect(state.inbox).toMatchObject({
+			unreadThreadCount: ACME_SUGGESTION_EMAILS.length,
+		});
+	});
+
 	it("creates a coherent, idempotent demo inbox without an outbound route", async () => {
 		const test = createTest();
 		const organizationId = await test.run(async (ctx) => {

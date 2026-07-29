@@ -1,13 +1,26 @@
 import { v } from "convex/values";
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { internalMutation } from "../_generated/server";
 import { upsertSenderContact } from "../contact/model";
 import { syncGlobalSearchEntry } from "../globalSearch/model";
-import { ACME_CASES, ACME_INBOX, type AcmeCaseSeed } from "./acmeData";
+import {
+	ACME_CASES,
+	ACME_INBOX,
+	ACME_SUGGESTION_EMAILS,
+	type AcmeCaseSeed,
+	type AcmeSuggestionEmailSeed,
+} from "./acmeData";
 
 const HOUR_MS = 60 * 60 * 1_000;
 const DAY_MS = 24 * HOUR_MS;
+
+function formatSeedMessageSubject(subject: string, messageIndex: number) {
+	return messageIndex === 0 || subject.startsWith("Re:")
+		? subject
+		: `Re: ${subject}`;
+}
 
 async function requireOrganization(
 	ctx: MutationCtx,
@@ -154,6 +167,9 @@ async function insertSeedCase(
 		descriptor: "Case",
 	});
 	await ctx.db.patch(caseId, { globalSearchEntryId });
+	await ctx.scheduler.runAfter(0, internal.case.embedding.embedCase, {
+		caseId,
+	});
 
 	const threadId = await ctx.db.insert("emailThreads", {
 		organizationId,
@@ -205,10 +221,7 @@ async function insertSeedCase(
 			internetMessageId,
 			inReplyTo: previousMessageId,
 			references: [...internetMessageIds],
-			subject:
-				messageIndex === 0 || seed.subject.startsWith("Re:")
-					? seed.subject
-					: `Re: ${seed.subject}`,
+			subject: formatSeedMessageSubject(seed.subject, messageIndex),
 			textBody: message.body,
 			sentAt,
 			cc: [],
@@ -282,6 +295,75 @@ async function countUnreadThreads(
 	return unreadThreads.length;
 }
 
+async function insertSuggestionEmailThread(
+	ctx: MutationCtx,
+	args: {
+		organizationId: Id<"organizations">;
+		inboxId: Id<"emailInboxes">;
+		integrationId: Id<"emailIntegrations">;
+		seed: AcmeSuggestionEmailSeed;
+		now: number;
+	},
+) {
+	const { organizationId, inboxId, integrationId, seed, now } = args;
+	const startedAt = now - seed.daysAgo * DAY_MS;
+	const lastMessageAt =
+		startedAt +
+		Math.max(...seed.messages.map((message) => message.hoursAfterStart)) *
+			HOUR_MS;
+	const contactId = await upsertSenderContact(
+		ctx,
+		organizationId,
+		seed.contact,
+		lastMessageAt,
+	);
+	const threadId = await ctx.db.insert("emailThreads", {
+		organizationId,
+		inboxId,
+		lastActivityAt: lastMessageAt,
+		isUnread: true,
+	});
+	await ctx.db.insert("emailThreadExternalReferences", {
+		threadId,
+		inboxId,
+		integrationId,
+		externalThreadId: `seed-suggestion-${seed.key}`,
+	});
+
+	const internetMessageIds: string[] = [];
+	let latestMessageId: Id<"emailMessages"> | undefined;
+	for (const [messageIndex, message] of seed.messages.entries()) {
+		const sentAt = startedAt + message.hoursAfterStart * HOUR_MS;
+		const internetMessageId = `<suggestion-${seed.key}-${messageIndex + 1}@seed.acme.invalid>`;
+		latestMessageId = await ctx.db.insert("emailMessages", {
+			inboxId,
+			integrationId,
+			threadId,
+			senderContactId: contactId,
+			externalMessageId: `seed-suggestion-${seed.key}-${messageIndex + 1}`,
+			internetMessageId,
+			inReplyTo: internetMessageIds.at(-1),
+			references: [...internetMessageIds],
+			direction: "inbound",
+			from: seed.contact,
+			to: [{ address: ACME_INBOX.address }],
+			cc: [],
+			bcc: [],
+			replyTo: [],
+			subject: formatSeedMessageSubject(seed.subject, messageIndex),
+			textBody: message.body,
+			sentAt,
+			receivedAt: sentAt,
+		});
+		internetMessageIds.push(internetMessageId);
+	}
+
+	if (!latestMessageId) {
+		throw new Error(`Suggestion seed ${seed.key} has no email messages`);
+	}
+	await ctx.db.patch(threadId, { latestMessageId });
+}
+
 export const seed = internalMutation({
 	args: {
 		organizationId: v.id("organizations"),
@@ -336,5 +418,76 @@ export const seed = internalMutation({
 			createdThreads: createdCases,
 			inboxId,
 		};
+	},
+});
+
+export const seedSuggestionEmails = internalMutation({
+	args: {
+		organizationId: v.id("organizations"),
+		confirmation: v.literal("seed-suggestion-emails"),
+	},
+	returns: v.object({
+		createdThreads: v.number(),
+		existingThreads: v.number(),
+		inboxId: v.id("emailInboxes"),
+	}),
+	handler: async (ctx, args) => {
+		const organization = await requireOrganization(ctx, args.organizationId);
+		const owner = await requireSeedOwner(ctx, organization._id);
+		const integration = await getOrCreateSeedEmailIntegration(
+			ctx,
+			organization,
+			owner,
+		);
+		const inboxId = await getOrCreateSeedInbox(ctx, organization._id);
+		const now = Date.now();
+		let createdThreads = 0;
+		let existingThreads = 0;
+
+		for (const suggestionEmail of ACME_SUGGESTION_EMAILS) {
+			const existingReference = await ctx.db
+				.query("emailThreadExternalReferences")
+				.withIndex(
+					"by_inbox_id_and_integration_id_and_external_thread_id",
+					(index) =>
+						index
+							.eq("inboxId", inboxId)
+							.eq("integrationId", integration._id)
+							.eq("externalThreadId", `seed-suggestion-${suggestionEmail.key}`),
+				)
+				.unique();
+			if (existingReference) {
+				const messages = await ctx.db
+					.query("emailMessages")
+					.withIndex("by_thread_id_and_sent_at", (index) =>
+						index.eq("threadId", existingReference.threadId),
+					)
+					.take(suggestionEmail.messages.length);
+				for (const [messageIndex, message] of messages.entries()) {
+					const subject = formatSeedMessageSubject(
+						suggestionEmail.subject,
+						messageIndex,
+					);
+					if (message.subject !== subject) {
+						await ctx.db.patch(message._id, { subject });
+					}
+				}
+				existingThreads += 1;
+				continue;
+			}
+			await insertSuggestionEmailThread(ctx, {
+				organizationId: organization._id,
+				inboxId,
+				integrationId: integration._id,
+				seed: suggestionEmail,
+				now,
+			});
+			createdThreads += 1;
+		}
+
+		await ctx.db.patch(inboxId, {
+			unreadThreadCount: await countUnreadThreads(ctx, inboxId),
+		});
+		return { createdThreads, existingThreads, inboxId };
 	},
 });

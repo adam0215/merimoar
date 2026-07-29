@@ -54,6 +54,21 @@ export const validateInboundMessagesForOutboundUnion = migrations.define({
 	},
 });
 
+export const scheduleCaseEmbeddingBackfill = migrations.define({
+	table: "cases",
+	migrateOne: async (ctx, caseRecord) => {
+		const existing = await ctx.db
+			.query("caseEmbeddings")
+			.withIndex("by_case_id", (index) => index.eq("caseId", caseRecord._id))
+			.unique();
+		if (!existing) {
+			await ctx.scheduler.runAfter(0, internal.case.embedding.embedCase, {
+				caseId: caseRecord._id,
+			});
+		}
+	},
+});
+
 export const reconcileConnectedResendWebhooksForOutboundEvents =
 	migrations.define({
 		table: "emailIntegrations",

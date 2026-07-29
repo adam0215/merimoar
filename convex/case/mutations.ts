@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import * as validation from "valibot";
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { mutation } from "../_generated/server";
@@ -10,6 +11,7 @@ import {
 	linkEmailThreadToCase,
 	unlinkEmailThreadFromCase,
 } from "./emailRelations";
+import { removeCaseEmbedding } from "./embeddingData";
 import {
 	appendHumanNoteCaseEvent,
 	appendSystemChangeCaseEvent,
@@ -156,6 +158,9 @@ export const create = mutation({
 				actor.member._id,
 			);
 		}
+		await ctx.scheduler.runAfter(0, internal.case.embedding.embedCase, {
+			caseId,
+		});
 		return caseId;
 	},
 });
@@ -188,6 +193,9 @@ export const update = mutation({
 
 		const now = Date.now();
 		const statusChanged = caseRecord.status !== details.output.status;
+		const embeddingInputChanged =
+			caseRecord.title !== details.output.title ||
+			caseRecord.description !== details.output.description;
 		await ctx.db.patch("cases", caseRecord._id, {
 			title: details.output.title,
 			description: details.output.description,
@@ -219,6 +227,12 @@ export const update = mutation({
 				actor.member._id,
 				now,
 			);
+		}
+		if (embeddingInputChanged) {
+			await removeCaseEmbedding(ctx, caseRecord._id);
+			await ctx.scheduler.runAfter(0, internal.case.embedding.embedCase, {
+				caseId: caseRecord._id,
+			});
 		}
 		return null;
 	},

@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { CASE_EMBEDDING_DIMENSIONS } from "./case/embeddingModel";
 import { caseEventValidator, caseStatusValidator } from "./case/model";
 import {
 	emailIngestFailureKindValidator,
@@ -272,6 +273,18 @@ export default defineSchema({
 			"organizationId",
 			"lastActivityAt",
 		]),
+
+	caseEmbeddings: defineTable({
+		caseId: v.id("cases"),
+		organizationId: v.id("organizations"),
+		embedding: v.array(v.float64()),
+	})
+		.index("by_case_id", ["caseId"])
+		.vectorIndex("by_embedding", {
+			vectorField: "embedding",
+			dimensions: CASE_EMBEDDING_DIMENSIONS,
+			filterFields: ["organizationId"],
+		}),
 
 	globalSearchEntries: defineTable({
 		organizationId: v.id("organizations"),

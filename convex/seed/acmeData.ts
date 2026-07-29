@@ -21,6 +21,20 @@ export type AcmeCaseSeed = {
 	messages: SeedEmailMessage[];
 };
 
+export type AcmeSuggestionEmailSeed = {
+	key: string;
+	daysAgo: number;
+	contact: {
+		name: string;
+		address: string;
+	};
+	subject: string;
+	messages: {
+		body: string;
+		hoursAfterStart: number;
+	}[];
+};
+
 export const ACME_INBOX = {
 	displayName: "Acme AB — seeddata",
 	address: "kundservice@seed.acme.invalid",
@@ -459,6 +473,73 @@ export const ACME_CASES: AcmeCaseSeed[] = [
 				direction: "outbound",
 				hoursAfterStart: 46,
 				body: "Hej Sofia,\n\nDen normalårskorrigerade användningen har minskat med 11,8 procent. Prognosen var 10–12 procent, så utfallet ligger helt i linje med målet. Rapporten är arkiverad på ärendet.",
+			},
+		],
+	},
+];
+
+export const ACME_SUGGESTION_EMAILS: AcmeSuggestionEmailSeed[] = [
+	{
+		key: "uneven-radiators",
+		daysAgo: 1,
+		contact: {
+			name: "Sara Norén",
+			address: "sara.noren@seed-kund.invalid",
+		},
+		subject: "Bara två element blir varma",
+		messages: [
+			{
+				hoursAfterStart: 0,
+				body: "Hej,\n\nRadiatorerna i köket och hallen blir glödheta, men i sovrummen och vardagsrummet är de helt kalla. Manometern vid centralen ser normal ut. Vad kan göra att värmen bara når vissa delar av huset?\n\nSara",
+			},
+			{
+				hoursAfterStart: 5,
+				body: "Jag har nu luftat de kalla elementen utan att det kom någon luft och de är fortfarande kalla. Rören fram till dem känns också svala.",
+			},
+		],
+	},
+	{
+		key: "duplicate-payment",
+		daysAgo: 2,
+		contact: {
+			name: "Mats Hed",
+			address: "mats.hed@seed-kund.invalid",
+		},
+		subject: "Två uttag för samma räkning",
+		messages: [
+			{
+				hoursAfterStart: 0,
+				body: "Hej! Jag betalade månadens faktura manuellt i banken och missade att den även låg på autogiro. Nu ser jag två betalningar med samma OCR och belopp på kontot. Hur får jag tillbaka den extra inbetalningen?",
+			},
+		],
+	},
+	{
+		key: "offline-temperature-sensor",
+		daysAgo: 3,
+		contact: {
+			name: "Petra Söder",
+			address: "petra.soder@seed-forvaltning.invalid",
+		},
+		subject: "En givare har slutat rapportera",
+		messages: [
+			{
+				hoursAfterStart: 0,
+				body: "Hej support,\n\nSedan i fredags saknas framledningstemperaturen i vår energiöversikt. Alla andra mätpunkter uppdateras och gatewayen är online, men just sensor T1 står som frånkopplad. Går den att starta om på distans?",
+			},
+		],
+	},
+	{
+		key: "evening-hot-water",
+		daysAgo: 4,
+		contact: {
+			name: "Amir Saleh",
+			address: "amir.saleh@seed-brf.invalid",
+		},
+		subject: "Duscharna blir ljumma på kvällen",
+		messages: [
+			{
+				hoursAfterStart: 0,
+				body: "Hej,\n\nFlera boende säger att duschvattnet tappar temperaturen efter klockan åtta på kvällen. På morgonen är det ordentligt varmt, men under kvällens högsta belastning blir det bara ljummet i alla tre trapphus. Kan ni kontrollera våra driftvärden?\n\nAmir, Brf Fyren",
 			},
 		],
 	},

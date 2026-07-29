@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 
+import { register as registerActionCacheTest } from "@convex-dev/action-cache/test";
 import { register as registerMigrationsTest } from "@convex-dev/migrations/test";
 import workOSAuthKitTest from "@convex-dev/workos-authkit/test";
 import { register as registerWorkpoolTest } from "@convex-dev/workpool/test";
@@ -19,6 +20,7 @@ export function createTest() {
 	const test = convexTest(schema, modules);
 	workOSAuthKitTest.register(test);
 	registerMigrationsTest(test);
+	registerActionCacheTest(test);
 	registerWorkpoolTest(test, "emailIngestWorkpool");
 	registerWorkpoolTest(test, "emailOutboundWorkpool");
 	return test;
