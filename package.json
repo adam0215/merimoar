@@ -2,7 +2,9 @@
 	"name": "merimoar",
 	"private": true,
 	"type": "module",
-	"workspaces": ["packages/*"],
+	"workspaces": [
+		"packages/*"
+	],
 	"scripts": {
 		"dev": "bun run --cwd packages/web dev",
 		"dev:convex": "convex dev",
@@ -37,5 +39,6 @@
 	},
 	"engines": {
 		"node": ">=22.11.0"
-	}
+	},
+	"dependencies": {}
 }

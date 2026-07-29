@@ -1,5 +1,9 @@
 {
 	"name": "@merimoar/agent",
 	"private": true,
-	"type": "module"
+	"type": "module",
+	"dependencies": {
+		"@ai-sdk/google": "^4.0.28",
+		"ai": "^7.0.42"
+	}
 }
