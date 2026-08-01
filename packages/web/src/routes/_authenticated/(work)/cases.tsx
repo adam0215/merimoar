@@ -67,6 +67,7 @@ export const Route = createFileRoute("/_authenticated/(work)/cases")({
 function CasesPage() {
 	const prefetched = Route.useLoaderData();
 	const { case: selectedCaseId, view: selectedView } = Route.useSearch();
+	const hasOpenCase = Boolean(selectedCaseId);
 	const view: CaseView = selectedView ?? "all";
 	const [overdueCutoff] = useState(Date.now);
 	const navigate = useNavigate({ from: "/cases" });
@@ -100,19 +101,36 @@ function CasesPage() {
 		detail?.case._id === selectedCaseId ? detail : undefined;
 	const liveCreateOptions = useQuery(api.case.reader.getCreateOptions, {});
 	const createOptions = liveCreateOptions ?? prefetched.createOptions;
+	const closeCaseButton = (
+		<Button
+			nativeButton={false}
+			variant="ghost"
+			size="icon-sm"
+			render={
+				<Link
+					to="/cases"
+					search={{ view: selectedView }}
+					aria-label="Close case"
+					title="Close case"
+				/>
+			}
+		>
+			<IconX />
+		</Button>
+	);
 
 	return (
 		<div
 			className={cn(
 				"grid h-full min-h-0 grid-cols-1 overflow-hidden",
-				selectedCaseId &&
+				hasOpenCase &&
 					"md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]",
 			)}
 		>
 			<section
 				className={cn(
 					"min-h-0 overflow-hidden bg-background",
-					selectedCaseId && "hidden md:block md:border-r",
+					hasOpenCase && "hidden md:block md:border-r",
 				)}
 			>
 				<CaseList
@@ -145,7 +163,7 @@ function CasesPage() {
 				/>
 			</section>
 
-			{selectedCaseId && (
+			{hasOpenCase && (
 				<section className="min-h-0 min-w-0 overflow-hidden bg-background">
 					<div className="flex h-full min-h-0 flex-col">
 						<div className="flex h-12 shrink-0 items-center border-b px-3 md:hidden">
@@ -171,23 +189,7 @@ function CasesPage() {
 								key={selectedCaseId}
 								detail={selectedDetail}
 								createOptions={createOptions}
-								closeButton={
-									<Button
-										nativeButton={false}
-										variant="ghost"
-										size="icon-sm"
-										render={
-											<Link
-												to="/cases"
-												search={{ view: selectedView }}
-												aria-label="Close case"
-												title="Close case"
-											/>
-										}
-									>
-										<IconX />
-									</Button>
-								}
+								closeButton={closeCaseButton}
 							/>
 						</div>
 					</div>

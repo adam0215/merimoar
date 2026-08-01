@@ -44,6 +44,9 @@ function getPageTitle(pathname: string, agentView: AgentView) {
 	if (pathname === "/cases") {
 		return "Cases";
 	}
+	if (pathname === "/agent-inbox") {
+		return "Agent inbox";
+	}
 	if (pathname === "/contacts") {
 		return "Contacts";
 	}
@@ -70,7 +73,7 @@ export function AppShell({
 	const isAgentsArea = isAgentsPath(location.pathname);
 	const agentView = isAgentView(location.search.view)
 		? location.search.view
-		: "tasks";
+		: "overview";
 	const inboxes = useQuery(
 		api.email.reader.listInboxes,
 		isAgentsArea ? "skip" : {},
@@ -199,7 +202,7 @@ function AreaTabs({ activeArea }: { activeArea: "work" | "agents" }) {
 				</TabsTrigger>
 				<TabsTrigger value="agents">
 					<IconArtboard data-icon="inline-start" />
-					Agents
+					Agent
 				</TabsTrigger>
 			</TabsList>
 		</Tabs>

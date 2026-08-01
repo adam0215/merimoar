@@ -1,5 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import {
+	agentItemValidator,
+	agentRunValidator,
+	agentTaskValidator,
+	agentTurnValidator,
+} from "#/agent/model";
 import { CASE_EMBEDDING_DIMENSIONS } from "#/case/embeddingModel";
 import { caseEventValidator, caseStatusValidator } from "#/case/model";
 import {
@@ -273,6 +279,45 @@ export default defineSchema({
 			"organizationId",
 			"lastActivityAt",
 		]),
+
+	agentTasks: defineTable(agentTaskValidator)
+		.index("by_organization_id_and_requested_at", [
+			"organizationId",
+			"requestedAt",
+		])
+		.index("by_organization_id_and_status_and_requested_at", [
+			"organizationId",
+			"status",
+			"requestedAt",
+		])
+		.index("by_anchor_case_id_and_ownership_released_at", [
+			"anchorCaseId",
+			"ownershipReleasedAt",
+		])
+		.index("by_anchor_case_id_and_requested_at", [
+			"anchorCaseId",
+			"requestedAt",
+		])
+		.index("by_organization_id_and_requested_by_member_id_and_requested_at", [
+			"organizationId",
+			"requestedByMemberId",
+			"requestedAt",
+		]),
+
+	agentTurns: defineTable(agentTurnValidator).index("by_task_id_and_sequence", [
+		"taskId",
+		"sequence",
+	]),
+
+	agentRuns: defineTable(agentRunValidator)
+		.index("by_turn_id_and_requested_at", ["turnId", "requestedAt"])
+		.index("by_status_and_requested_at", ["status", "requestedAt"]),
+
+	agentItems: defineTable(agentItemValidator)
+		.index("by_turn_id_and_sequence", ["turnId", "sequence"])
+		.index("by_run_id_and_tool_call_id", ["runId", "toolCallId"])
+		.index("by_run_id_and_kind_and_sequence", ["runId", "kind", "sequence"])
+		.index("by_approval_id", ["approvalId"]),
 
 	caseEmbeddings: defineTable({
 		caseId: v.id("cases"),

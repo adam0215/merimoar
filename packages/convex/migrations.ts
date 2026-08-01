@@ -17,6 +17,44 @@ export const typeLegacyCaseEventsAsHumanNotes = migrations.define({
 	},
 });
 
+export const backfillAgentTaskOrganizationIds = migrations.define({
+	table: "agentTasks",
+	migrateOne: async (ctx, task) => {
+		const anchorCase = await ctx.db.get("cases", task.anchorCaseId);
+		if (!anchorCase) {
+			throw new Error(
+				`Agent task ${task._id} references missing case ${task.anchorCaseId}`,
+			);
+		}
+		if (task.organizationId === undefined) {
+			await ctx.db.patch("agentTasks", task._id, {
+				organizationId: anchorCase.organizationId,
+			});
+		} else if (task.organizationId !== anchorCase.organizationId) {
+			throw new Error(
+				`Agent task ${task._id} has a different organization than case ${task.anchorCaseId}`,
+			);
+		}
+	},
+});
+
+export const validateAgentTaskOrganizationIds = migrations.define({
+	table: "agentTasks",
+	migrateOne: async (ctx, task) => {
+		const anchorCase = await ctx.db.get("cases", task.anchorCaseId);
+		if (!anchorCase) {
+			throw new Error(
+				`Agent task ${task._id} references missing case ${task.anchorCaseId}`,
+			);
+		}
+		if (task.organizationId !== anchorCase.organizationId) {
+			throw new Error(
+				`Agent task ${task._id} has a different organization than case ${task.anchorCaseId}`,
+			);
+		}
+	},
+});
+
 export const verifyTypedCaseEvents = internalQuery({
 	args: {},
 	returns: v.object({

@@ -13,6 +13,9 @@ Resend accounts are connected through
 Email threads use Gemini embeddings and Convex vector search for
 [semantic case suggestions](docs/semantic-case-suggestions.md).
 
+The first portable agent runtime and its local worker setup are documented in
+[docs/agent-runtime.md](docs/agent-runtime.md).
+
 ## Workspace
 
 The repository is a Bun workspace with one shared lockfile. Dependencies use

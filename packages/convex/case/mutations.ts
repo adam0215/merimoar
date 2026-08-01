@@ -1,8 +1,13 @@
 import { ConvexError, v } from "convex/values";
 import * as validation from "valibot";
 import { requireActor } from "#/auth/access";
-import { requireCase, validateCaseOwner } from "#/case/access";
 import {
+	requireCase,
+	requireHumanCaseWriteAccess,
+	validateCaseOwner,
+} from "#/case/access";
+import {
+	getActiveCaseRelationForEmailThread,
 	linkEmailThreadToCase,
 	unlinkEmailThreadFromCase,
 } from "#/case/emailRelations";
@@ -26,12 +31,52 @@ import {
 import { dispatchDomainEvent } from "#/domainEvents";
 import { syncGlobalSearchEntry } from "#/globalSearch/model";
 import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { mutation } from "../_generated/server";
 
 function invalidCase(message: string) {
 	return new ConvexError({ code: "INVALID_CASE", message });
+}
+
+async function requireHumanWritableCase(
+	ctx: MutationCtx,
+	organizationId: Id<"organizations">,
+	caseId: Id<"cases">,
+) {
+	const caseRecord = await requireCase(ctx, organizationId, caseId);
+	await requireHumanCaseWriteAccess(ctx, caseRecord._id);
+	return caseRecord;
+}
+
+async function requireHumanWriteAccessIfCaseInOrganization(
+	ctx: MutationCtx,
+	organizationId: Id<"organizations">,
+	caseId: Id<"cases">,
+) {
+	const caseRecord = await ctx.db.get(caseId);
+	if (caseRecord?.organizationId === organizationId) {
+		await requireHumanCaseWriteAccess(ctx, caseRecord._id);
+	}
+}
+
+async function requireHumanWriteAccessForEmailMove(
+	ctx: MutationCtx,
+	organizationId: Id<"organizations">,
+	threadId: Id<"emailThreads">,
+	targetCase: Doc<"cases"> | undefined,
+) {
+	const currentRelation = await getActiveCaseRelationForEmailThread(
+		ctx,
+		threadId,
+	);
+	if (currentRelation && currentRelation.caseId !== targetCase?._id) {
+		await requireHumanWriteAccessIfCaseInOrganization(
+			ctx,
+			organizationId,
+			currentRelation.caseId,
+		);
+	}
 }
 
 async function generateCaseReference(
@@ -98,6 +143,19 @@ export const create = mutation({
 			),
 			generateCaseReference(ctx, actor.organization._id),
 		]);
+		await Promise.all(
+			relations.relatedCaseIds.map((caseId) =>
+				requireHumanCaseWriteAccess(ctx, caseId),
+			),
+		);
+		if (args.emailThreadId) {
+			await requireHumanWriteAccessForEmailMove(
+				ctx,
+				actor.organization._id,
+				args.emailThreadId,
+				undefined,
+			);
+		}
 
 		const now = Date.now();
 		const caseId = await ctx.db.insert("cases", {
@@ -148,7 +206,7 @@ export const create = mutation({
 				actor.organization._id,
 				caseRecord,
 				args.emailThreadId,
-				actor.member._id,
+				{ kind: "member", memberId: actor.member._id },
 			);
 		}
 		await ctx.scheduler.runAfter(0, internal.case.embedding.embedCase, {
@@ -177,7 +235,7 @@ export const update = mutation({
 			);
 		}
 
-		const caseRecord = await requireCase(
+		const caseRecord = await requireHumanWritableCase(
 			ctx,
 			actor.organization._id,
 			args.caseId,
@@ -254,7 +312,7 @@ export const addEvent = mutation({
 				message: body.issues[0]?.message ?? "Enter a valid event.",
 			});
 		}
-		const caseRecord = await requireCase(
+		const caseRecord = await requireHumanWritableCase(
 			ctx,
 			actor.organization._id,
 			args.caseId,
@@ -276,17 +334,23 @@ export const linkEmailThread = mutation({
 	returns: v.id("caseEmailThreadRelations"),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
-		const caseRecord = await requireCase(
+		const caseRecord = await requireHumanWritableCase(
 			ctx,
 			actor.organization._id,
 			args.caseId,
+		);
+		await requireHumanWriteAccessForEmailMove(
+			ctx,
+			actor.organization._id,
+			args.threadId,
+			caseRecord,
 		);
 		return await linkEmailThreadToCase(
 			ctx,
 			actor.organization._id,
 			caseRecord,
 			args.threadId,
-			actor.member._id,
+			{ kind: "member", memberId: actor.member._id },
 		);
 	},
 });
@@ -298,6 +362,14 @@ export const unlinkEmailThread = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
+		const relation = await ctx.db.get(args.relationId);
+		if (relation?.endedAt === null) {
+			await requireHumanWriteAccessIfCaseInOrganization(
+				ctx,
+				actor.organization._id,
+				relation.caseId,
+			);
+		}
 		await unlinkEmailThreadFromCase(
 			ctx,
 			actor.organization._id,
@@ -316,7 +388,7 @@ export const addContactRelation = mutation({
 	returns: v.id("caseContactRelations"),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
-		const caseRecord = await requireCase(
+		const caseRecord = await requireHumanWritableCase(
 			ctx,
 			actor.organization._id,
 			args.caseId,
@@ -326,7 +398,7 @@ export const addContactRelation = mutation({
 			actor.organization._id,
 			caseRecord,
 			args.contactId,
-			actor.member._id,
+			{ kind: "member", memberId: actor.member._id },
 		);
 	},
 });
@@ -338,6 +410,14 @@ export const removeContactRelation = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
+		const relation = await ctx.db.get(args.relationId);
+		if (relation?.endedAt === null) {
+			await requireHumanWriteAccessIfCaseInOrganization(
+				ctx,
+				actor.organization._id,
+				relation.caseId,
+			);
+		}
 		await removeContactCaseRelation(
 			ctx,
 			actor.organization._id,
@@ -356,7 +436,7 @@ export const addEntityRelation = mutation({
 	returns: v.id("caseEntityRelations"),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
-		const caseRecord = await requireCase(
+		const caseRecord = await requireHumanWritableCase(
 			ctx,
 			actor.organization._id,
 			args.caseId,
@@ -366,7 +446,7 @@ export const addEntityRelation = mutation({
 			actor.organization._id,
 			caseRecord,
 			args.entityId,
-			actor.member._id,
+			{ kind: "member", memberId: actor.member._id },
 		);
 	},
 });
@@ -378,6 +458,14 @@ export const removeEntityRelation = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
+		const relation = await ctx.db.get(args.relationId);
+		if (relation?.endedAt === null) {
+			await requireHumanWriteAccessIfCaseInOrganization(
+				ctx,
+				actor.organization._id,
+				relation.caseId,
+			);
+		}
 		await removeEntityCaseRelation(
 			ctx,
 			actor.organization._id,
@@ -396,17 +484,22 @@ export const addCaseRelation = mutation({
 	returns: v.id("caseCaseRelations"),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
-		const caseRecord = await requireCase(
+		const caseRecord = await requireHumanWritableCase(
 			ctx,
 			actor.organization._id,
 			args.caseId,
+		);
+		await requireHumanWriteAccessIfCaseInOrganization(
+			ctx,
+			actor.organization._id,
+			args.relatedCaseId,
 		);
 		return await addRelatedCaseRelation(
 			ctx,
 			actor.organization._id,
 			caseRecord,
 			args.relatedCaseId,
-			actor.member._id,
+			{ kind: "member", memberId: actor.member._id },
 		);
 	},
 });
@@ -418,6 +511,21 @@ export const removeCaseRelation = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const actor = await requireActor(ctx);
+		const relation = await ctx.db.get(args.relationId);
+		if (relation?.endedAt === null) {
+			await Promise.all([
+				requireHumanWriteAccessIfCaseInOrganization(
+					ctx,
+					actor.organization._id,
+					relation.caseId,
+				),
+				requireHumanWriteAccessIfCaseInOrganization(
+					ctx,
+					actor.organization._id,
+					relation.relatedCaseId,
+				),
+			]);
+		}
 		await removeRelatedCaseRelation(
 			ctx,
 			actor.organization._id,

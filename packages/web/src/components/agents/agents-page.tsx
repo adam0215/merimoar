@@ -1,19 +1,27 @@
 import type { AgentView } from "#/components/agents/agent-navigation.ts";
-import { getAgentNavItem } from "#/components/agents/agent-navigation.ts";
+import { AgentTaskInspector } from "#/components/agents/agent-task-inspector.tsx";
+import {
+	AgentOverview,
+	AgentTasks,
+	AgentToolsPage,
+} from "#/components/agents/agent-workspace.tsx";
 
-export function AgentsPage({ view }: { view: AgentView }) {
-	const item = getAgentNavItem(view);
+export function AgentsPage({
+	view,
+	taskId,
+}: {
+	view: AgentView;
+	taskId?: string;
+}) {
+	if (taskId) {
+		return <AgentTaskInspector key={taskId} taskId={taskId} />;
+	}
 
-	return (
-		<section className="flex h-full min-h-0 flex-col overflow-auto">
-			<div className="flex min-h-full items-center justify-center p-6">
-				<div className="flex flex-col items-center gap-3 text-center">
-					<div className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-						<item.icon className="size-5" />
-					</div>
-					<p className="text-sm font-medium">{item.emptyLabel}</p>
-				</div>
-			</div>
-		</section>
-	);
+	if (view === "tasks") {
+		return <AgentTasks />;
+	}
+	if (view === "tools") {
+		return <AgentToolsPage />;
+	}
+	return <AgentOverview />;
 }

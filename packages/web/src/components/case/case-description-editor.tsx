@@ -8,7 +8,7 @@ import {
 import { Color, TextStyle } from "@tiptap/extension-text-style";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "#/components/ui/button.tsx";
 import { cn } from "#/lib/utils.ts";
 import "#/components/case/case-description-editor.css";
@@ -25,24 +25,33 @@ export function CaseDescriptionEditor({
 	value,
 	onChange,
 	invalid,
+	readOnly,
 }: {
 	value: string;
 	onChange: (value: string) => void;
 	invalid: boolean;
+	readOnly: boolean;
 }) {
+	const readOnlyRef = useRef(readOnly);
+	readOnlyRef.current = readOnly;
 	const editor = useEditor({
 		extensions: editorExtensions,
 		content: toEditorContent(value),
 		immediatelyRender: false,
+		editable: !readOnly,
 		editorProps: {
 			attributes: {
 				id: "case-description",
 				role: "textbox",
 				"aria-label": "Description",
 				"aria-multiline": "true",
+				"aria-readonly": String(readOnly),
 			},
 		},
 		onUpdate: ({ editor: updatedEditor }) => {
+			if (readOnlyRef.current) {
+				return;
+			}
 			const html = updatedEditor.getHTML();
 			onChange(html === "<p></p>" ? "" : html);
 		},
@@ -85,22 +94,32 @@ export function CaseDescriptionEditor({
 		}
 	}, [editor, invalid]);
 
+	useEffect(() => {
+		editor?.setEditable(!readOnly);
+		if (readOnly) {
+			editor?.view.dom.setAttribute("aria-readonly", "true");
+		} else {
+			editor?.view.dom.setAttribute("aria-readonly", "false");
+		}
+	}, [editor, readOnly]);
+
 	return (
 		<div
 			className={cn(
 				"case-description-editor overflow-hidden rounded-lg border border-input bg-background shadow-xs has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
 				invalid && "border-destructive ring-3 ring-destructive/20",
+				readOnly && "bg-muted text-muted-foreground",
 			)}
 		>
 			<div
-				className="flex min-h-11 flex-wrap items-center gap-0.5 border-b bg-muted/20 px-2 py-1"
+				className="flex min-h-11 flex-wrap items-center gap-0.5 border-b bg-muted px-2 py-1"
 				role="toolbar"
 				aria-label="Description formatting"
 			>
 				<FormatButton
 					label="Bold"
 					pressed={editorState?.bold ?? false}
-					disabled={!editor}
+					disabled={!editor || readOnly}
 					onClick={() => editor?.chain().focus().toggleBold().run()}
 				>
 					<IconBold />
@@ -108,7 +127,7 @@ export function CaseDescriptionEditor({
 				<FormatButton
 					label="Italic"
 					pressed={editorState?.italic ?? false}
-					disabled={!editor}
+					disabled={!editor || readOnly}
 					onClick={() => editor?.chain().focus().toggleItalic().run()}
 				>
 					<IconItalic />
@@ -116,7 +135,7 @@ export function CaseDescriptionEditor({
 				<FormatButton
 					label="Underline"
 					pressed={editorState?.underline ?? false}
-					disabled={!editor}
+					disabled={!editor || readOnly}
 					onClick={() => editor?.chain().focus().toggleUnderline().run()}
 				>
 					<IconUnderline />
@@ -124,7 +143,7 @@ export function CaseDescriptionEditor({
 				<FormatButton
 					label="Bullet list"
 					pressed={editorState?.bulletList ?? false}
-					disabled={!editor}
+					disabled={!editor || readOnly}
 					onClick={() => editor?.chain().focus().toggleBulletList().run()}
 				>
 					<IconList />
@@ -139,7 +158,7 @@ export function CaseDescriptionEditor({
 							key={color.label}
 							label={`${color.label} text`}
 							pressed={pressed}
-							disabled={!editor}
+							disabled={!editor || readOnly}
 							onClick={() => {
 								if (!editor) {
 									return;

@@ -1,6 +1,10 @@
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
+export type CaseChangeActor =
+	| { kind: "member"; memberId: Id<"organizationMembers"> }
+	| { kind: "agent"; taskId: Id<"agentTasks"> };
+
 async function updateCaseActivity(
 	ctx: MutationCtx,
 	caseRecord: Doc<"cases">,
@@ -33,6 +37,27 @@ export async function appendHumanNoteCaseEvent(
 	return eventId;
 }
 
+export async function appendAgentChangeCaseEvent(
+	ctx: MutationCtx,
+	caseRecord: Doc<"cases">,
+	body: string,
+	agentTaskId: Id<"agentTasks">,
+	occurredAt = Date.now(),
+) {
+	const createdAt = Date.now();
+	const eventId = await ctx.db.insert("caseEvents", {
+		caseId: caseRecord._id,
+		type: "agent_change",
+		body,
+		agentTaskId,
+		occurredAt,
+		createdAt,
+		createdByMemberId: null,
+	});
+	await updateCaseActivity(ctx, caseRecord, occurredAt, createdAt);
+	return eventId;
+}
+
 export async function appendSystemChangeCaseEvent(
 	ctx: MutationCtx,
 	caseRecord: Doc<"cases">,
@@ -51,6 +76,31 @@ export async function appendSystemChangeCaseEvent(
 	});
 	await updateCaseActivity(ctx, caseRecord, occurredAt, createdAt);
 	return eventId;
+}
+
+export async function appendCaseChangeEvent(
+	ctx: MutationCtx,
+	caseRecord: Doc<"cases">,
+	body: string,
+	actor: CaseChangeActor,
+	occurredAt = Date.now(),
+) {
+	if (actor.kind === "agent") {
+		return await appendAgentChangeCaseEvent(
+			ctx,
+			caseRecord,
+			body,
+			actor.taskId,
+			occurredAt,
+		);
+	}
+	return await appendSystemChangeCaseEvent(
+		ctx,
+		caseRecord,
+		body,
+		actor.memberId,
+		occurredAt,
+	);
 }
 
 export async function appendInboundEmailCaseEvent(

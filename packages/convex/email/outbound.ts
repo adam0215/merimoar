@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { requireActor } from "#/auth/access";
+import { requireHumanEmailThreadWriteAccess } from "#/case/access";
 import { getActiveCaseRelationForEmailThread } from "#/case/emailRelations";
 import { appendOutboundEmailCaseEvent } from "#/case/events";
 import {
@@ -93,7 +94,16 @@ export const saveDraft = mutation({
 	}),
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
-		await requireOwnedThread(ctx, args.threadId, workspace.organization._id);
+		const thread = await requireOwnedThread(
+			ctx,
+			args.threadId,
+			workspace.organization._id,
+		);
+		await requireHumanEmailThreadWriteAccess(
+			ctx,
+			workspace.organization._id,
+			thread._id,
+		);
 		const existing = await ctx.db
 			.query("emailDrafts")
 			.withIndex("by_thread_id_and_author_member_id", (index) =>
@@ -184,6 +194,11 @@ export const queueReply = mutation({
 			ctx,
 			args.threadId,
 			workspace.organization._id,
+		);
+		await requireHumanEmailThreadWriteAccess(
+			ctx,
+			workspace.organization._id,
+			thread._id,
 		);
 		const inbox = await ctx.db.get(thread.inboxId);
 		if (
@@ -310,7 +325,16 @@ export const retryFailedSend = mutation({
 		if (!message || message.direction !== "outbound") {
 			throwDomainError("EMAIL_MESSAGE_NOT_FOUND", "The email was not found.");
 		}
-		await requireOwnedThread(ctx, message.threadId, workspace.organization._id);
+		const thread = await requireOwnedThread(
+			ctx,
+			message.threadId,
+			workspace.organization._id,
+		);
+		await requireHumanEmailThreadWriteAccess(
+			ctx,
+			workspace.organization._id,
+			thread._id,
+		);
 		const send = await ctx.db
 			.query("emailSends")
 			.withIndex("by_message_id", (index) => index.eq("messageId", message._id))

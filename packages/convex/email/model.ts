@@ -23,18 +23,31 @@ const emailMessageBaseValidator = v.object({
 	sentAt: v.number(),
 });
 
+const inboundEmailMessageValidator = emailMessageBaseValidator.extend({
+	direction: v.literal("inbound"),
+	senderContactId: v.id("contacts"),
+	externalMessageId: v.string(),
+	receivedAt: v.number(),
+});
+const outboundEmailMessageValidator = emailMessageBaseValidator.extend({
+	direction: v.literal("outbound"),
+	authoredByMemberId: v.id("organizationMembers"),
+	externalMessageId: v.optional(v.string()),
+});
+
 export const emailMessageValidator = v.union(
-	emailMessageBaseValidator.extend({
-		direction: v.literal("inbound"),
-		senderContactId: v.id("contacts"),
-		externalMessageId: v.string(),
-		receivedAt: v.number(),
-	}),
-	emailMessageBaseValidator.extend({
-		direction: v.literal("outbound"),
-		authoredByMemberId: v.id("organizationMembers"),
-		externalMessageId: v.optional(v.string()),
-	}),
+	inboundEmailMessageValidator,
+	outboundEmailMessageValidator,
+);
+
+const emailMessageSystemFields = {
+	_id: v.id("emailMessages"),
+	_creationTime: v.number(),
+};
+
+export const emailMessageDocumentValidator = v.union(
+	inboundEmailMessageValidator.extend(emailMessageSystemFields),
+	outboundEmailMessageValidator.extend(emailMessageSystemFields),
 );
 
 export const emailSendFailureValidator = v.union(

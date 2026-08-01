@@ -175,12 +175,7 @@ function OrganizationEmailSettings() {
 									</div>
 								</div>
 								<CardAction className="flex flex-col items-end gap-2 self-center">
-									<Badge
-										variant="outline"
-										className="border-accent bg-accent/10 text-accent"
-									>
-										Active
-									</Badge>
+									<Badge variant="success">Active</Badge>
 									<div className="flex items-center gap-1">
 										<EditEmailInboxDialog
 											inbox={inbox}
@@ -287,7 +282,11 @@ function FailedIngestEvents({
 								</CardDescription>
 							</div>
 							<CardAction>
-								<Badge variant="outline">
+								<Badge
+									variant={
+										failure.status === "failed" ? "destructive" : "outline"
+									}
+								>
 									{failure.status === "unroutable" ? "Unroutable" : "Failed"}
 								</Badge>
 							</CardAction>

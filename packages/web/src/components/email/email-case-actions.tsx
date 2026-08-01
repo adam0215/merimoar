@@ -24,11 +24,12 @@ import {
 	useState,
 } from "react";
 import { createStore } from "zustand/vanilla";
+import { useCurrentCaseInteractionPolicy } from "#/components/case/case-interaction-policy.tsx";
 import { CaseStatusDot } from "#/components/case/case-status.tsx";
 import { CreateCaseDialog } from "#/components/case/create-case-dialog.tsx";
-import { formatShortDate } from "#/components/case/format.ts";
 import type { CaseCreateOptions } from "#/components/case/types.ts";
 import { UnlinkEmailThreadButton } from "#/components/case/unlink-email-thread-button.tsx";
+import type { EmailThreadDetail } from "#/components/email/email-types.ts";
 import { Button } from "#/components/ui/button.tsx";
 import { ButtonGroup } from "#/components/ui/button-group.tsx";
 import {
@@ -52,11 +53,8 @@ import {
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
+import { formatShortDate } from "#/lib/date-format.ts";
 import { cn } from "#/lib/utils.ts";
-
-type ThreadDetails = NonNullable<
-	FunctionReturnType<typeof api.email.reader.getThread>
->;
 
 type CaseOption = {
 	caseId: Id<"cases">;
@@ -107,10 +105,11 @@ export function EmailCaseActions({
 	createOptions,
 	className,
 }: {
-	thread: ThreadDetails;
+	thread: EmailThreadDetail;
 	createOptions: CaseCreateOptions | undefined;
 	className?: string;
 }) {
+	const { readOnly, readOnlyReason } = useCurrentCaseInteractionPolicy();
 	const [createDialogOpen, setCreateDialogOpen] = useState(false);
 	const [linkDialogOpen, setLinkDialogOpen] = useState(false);
 	const [actionsAreTuckedAway, setActionsAreTuckedAway] = useState(false);
@@ -193,7 +192,7 @@ export function EmailCaseActions({
 						<Link
 							to="/cases"
 							search={{ case: thread.activeCase._id }}
-							className="flex min-w-0 items-center gap-2 rounded-full p-1 text-foreground no-underline transition-[padding,transform] group-focus-within/case-pill:pr-9 group-hover/case-pill:pr-9 active:scale-97"
+							className="flex min-w-0 items-center gap-2 rounded-full p-1 pr-9 text-foreground no-underline"
 							aria-label={`Open linked case ${thread.activeCase.reference}`}
 						>
 							<span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
@@ -211,7 +210,9 @@ export function EmailCaseActions({
 						<UnlinkEmailThreadButton
 							relationId={thread.activeCase.relationId}
 							label={`${thread.activeCase.reference}: ${thread.activeCase.title}`}
-							className="pointer-events-none absolute top-1/2 right-1 size-7 -translate-y-1/2 opacity-0 transition-opacity group-focus-within/case-pill:pointer-events-auto group-focus-within/case-pill:opacity-100 group-hover/case-pill:pointer-events-auto group-hover/case-pill:opacity-100"
+							disabled={readOnly}
+							disabledReason={readOnlyReason}
+							className="pointer-events-auto absolute top-1/2 right-1 size-7 -translate-y-1/2 active:-translate-y-1/2!"
 						/>
 					</div>
 				)}
@@ -228,6 +229,8 @@ export function EmailCaseActions({
 							render={
 								<Button
 									size="icon-sm"
+									disabled={readOnly}
+									title={readOnly ? readOnlyReason : undefined}
 									onClick={() => setLinkDialogOpen(true)}
 									aria-label="Länka till befintligt case"
 								/>
@@ -239,7 +242,12 @@ export function EmailCaseActions({
 							Länka till befintligt case
 						</TooltipContent>
 					</Tooltip>
-					<Button size="sm" onClick={() => setCreateDialogOpen(true)}>
+					<Button
+						size="sm"
+						disabled={readOnly}
+						title={readOnly ? readOnlyReason : undefined}
+						onClick={() => setCreateDialogOpen(true)}
+					>
 						<IconFolderPlus data-icon="inline-start" />
 						Create case
 					</Button>
@@ -288,7 +296,7 @@ export function EmailCaseActions({
 			<CreateCaseDialog
 				key={thread.thread._id}
 				options={createOptions}
-				open={createDialogOpen}
+				open={createDialogOpen && !readOnly}
 				onOpenChange={setCreateDialogOpen}
 				trigger={null}
 				initialTitle={firstMessage?.subject || "(No subject)"}
@@ -299,7 +307,7 @@ export function EmailCaseActions({
 				onCreated={() => setCreateDialogOpen(false)}
 			/>
 			<LinkEmailThreadDialog
-				open={linkDialogOpen}
+				open={linkDialogOpen && !readOnly}
 				onOpenChange={setLinkDialogOpen}
 				threadId={thread.thread._id}
 				activeCaseId={thread.activeCase?._id}

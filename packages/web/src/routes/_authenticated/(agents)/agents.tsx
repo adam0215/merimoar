@@ -7,17 +7,19 @@ import { AgentsPage } from "#/components/agents/agents-page.tsx";
 
 type AgentsSearch = {
 	view?: AgentView;
+	task?: string;
 };
 
 export const Route = createFileRoute("/_authenticated/(agents)/agents")({
 	validateSearch: (search: Record<string, unknown>): AgentsSearch => ({
 		view: isAgentView(search.view) ? search.view : undefined,
+		task: typeof search.task === "string" ? search.task : undefined,
 	}),
 	component: AgentsRoute,
 });
 
 function AgentsRoute() {
-	const { view = "tasks" } = Route.useSearch();
+	const { view = "overview", task } = Route.useSearch();
 
-	return <AgentsPage view={view} />;
+	return <AgentsPage view={view} taskId={task} />;
 }

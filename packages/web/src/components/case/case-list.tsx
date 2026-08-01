@@ -8,7 +8,6 @@ import {
 	CaseViewIndicator,
 } from "#/components/case/case-status.tsx";
 import { CreateCaseDialog } from "#/components/case/create-case-dialog.tsx";
-import { formatShortDate } from "#/components/case/format.ts";
 import type {
 	CaseCreateOptions,
 	CaseListItem,
@@ -23,6 +22,7 @@ import {
 	SelectValue,
 } from "#/components/ui/select.tsx";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
+import { formatShortDate } from "#/lib/date-format.ts";
 import { cn } from "#/lib/utils.ts";
 
 const LIST_SKELETONS = ["case-a", "case-b", "case-c", "case-d", "case-e"];

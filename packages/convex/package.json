@@ -40,6 +40,7 @@
 		"@types/node": "^22.10.2",
 		"convex-test": "^0.0.54",
 		"typescript": "^6.0.2",
+		"vite": "^8.0.0",
 		"vitest": "^4.1.10"
 	}
 }

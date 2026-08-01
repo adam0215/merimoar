@@ -1,7 +1,9 @@
 import { v } from "convex/values";
 import { upsertSenderContact } from "#/contact/model";
+import { normalizeEntityIdentifier } from "#/entity/constants";
 import { syncGlobalSearchEntry } from "#/globalSearch/model";
 import {
+	ACME_AGENT_DEMO_ENTITIES,
 	ACME_CASES,
 	ACME_INBOX,
 	ACME_SUGGESTION_EMAILS,
@@ -15,6 +17,16 @@ import { internalMutation } from "../_generated/server";
 
 const HOUR_MS = 60 * 60 * 1_000;
 const DAY_MS = 24 * HOUR_MS;
+const AGENT_DEMO_ENTITY_TYPE_KEY = "demo-anlaggning";
+const AGENT_DEMO_FIELDS = [
+	{ label: "Adress", position: 0, seedKey: "address" },
+	{ label: "Kund", position: 1, seedKey: "customer" },
+	{
+		label: "Driftinformation",
+		position: 2,
+		seedKey: "operationalContext",
+	},
+] as const;
 
 function formatSeedMessageSubject(subject: string, messageIndex: number) {
 	return messageIndex === 0 || subject.startsWith("Re:")
@@ -108,6 +120,186 @@ async function getOrCreateSeedInbox(
 		status: "active",
 		unreadThreadCount: 0,
 	});
+}
+
+async function getOrCreateAgentDemoEntityType(
+	ctx: MutationCtx,
+	organizationId: Id<"organizations">,
+) {
+	const existing = await ctx.db
+		.query("entityTypes")
+		.withIndex("by_organization_id_and_key", (index) =>
+			index
+				.eq("organizationId", organizationId)
+				.eq("key", AGENT_DEMO_ENTITY_TYPE_KEY),
+		)
+		.unique();
+	if (existing) {
+		await ctx.db.patch(existing._id, {
+			name: "Demoanläggning",
+			pluralName: "Demoanläggningar",
+			identifierLabel: "Anläggningsnummer",
+			description: "Anläggningsdata för agentens manuella demoscenario.",
+			icon: "building",
+			archivedAt: null,
+		});
+		return existing._id;
+	}
+
+	return await ctx.db.insert("entityTypes", {
+		organizationId,
+		key: AGENT_DEMO_ENTITY_TYPE_KEY,
+		name: "Demoanläggning",
+		pluralName: "Demoanläggningar",
+		identifierLabel: "Anläggningsnummer",
+		description: "Anläggningsdata för agentens manuella demoscenario.",
+		icon: "building",
+		archivedAt: null,
+	});
+}
+
+async function getOrCreateAgentDemoFields(
+	ctx: MutationCtx,
+	entityTypeId: Id<"entityTypes">,
+) {
+	const existingFields = await ctx.db
+		.query("entityFieldDefinitions")
+		.withIndex("by_entity_type_id_and_position", (index) =>
+			index.eq("entityTypeId", entityTypeId),
+		)
+		.take(AGENT_DEMO_FIELDS.length);
+	const fields: Array<{
+		id: Id<"entityFieldDefinitions">;
+		seedKey: (typeof AGENT_DEMO_FIELDS)[number]["seedKey"];
+	}> = [];
+
+	for (const expected of AGENT_DEMO_FIELDS) {
+		const existing = existingFields.find(
+			(field) => field.position === expected.position,
+		);
+		if (existing) {
+			if (existing.valueType !== "text") {
+				throw new Error(
+					`Demo field ${expected.label} has an incompatible value type`,
+				);
+			}
+			await ctx.db.patch(existing._id, {
+				label: expected.label,
+				required: true,
+				archivedAt: null,
+			});
+			fields.push({ id: existing._id, seedKey: expected.seedKey });
+			continue;
+		}
+		fields.push({
+			id: await ctx.db.insert("entityFieldDefinitions", {
+				entityTypeId,
+				label: expected.label,
+				valueType: "text",
+				required: true,
+				position: expected.position,
+				archivedAt: null,
+			}),
+			seedKey: expected.seedKey,
+		});
+	}
+
+	return fields;
+}
+
+async function upsertAgentDemoTextValue(
+	ctx: MutationCtx,
+	entityId: Id<"entities">,
+	fieldDefinitionId: Id<"entityFieldDefinitions">,
+	value: string,
+) {
+	const existing = await ctx.db
+		.query("entityTextFieldValues")
+		.withIndex("by_entity_id_and_field_definition_id", (index) =>
+			index.eq("entityId", entityId).eq("fieldDefinitionId", fieldDefinitionId),
+		)
+		.unique();
+	if (existing) {
+		await ctx.db.patch(existing._id, { value });
+		return;
+	}
+	await ctx.db.insert("entityTextFieldValues", {
+		entityId,
+		fieldDefinitionId,
+		value,
+	});
+}
+
+async function upsertAgentDemoEntity(
+	ctx: MutationCtx,
+	args: {
+		organizationId: Id<"organizations">;
+		entityTypeId: Id<"entityTypes">;
+		fields: Array<{
+			id: Id<"entityFieldDefinitions">;
+			seedKey: (typeof AGENT_DEMO_FIELDS)[number]["seedKey"];
+		}>;
+		seed: (typeof ACME_AGENT_DEMO_ENTITIES)[number];
+		now: number;
+	},
+) {
+	const normalizedIdentifier = normalizeEntityIdentifier(args.seed.identifier);
+	const existing = await ctx.db
+		.query("entities")
+		.withIndex("by_entity_type_id_and_normalized_identifier", (index) =>
+			index
+				.eq("entityTypeId", args.entityTypeId)
+				.eq("normalizedIdentifier", normalizedIdentifier),
+		)
+		.unique();
+	const entityId =
+		existing?._id ??
+		(await ctx.db.insert("entities", {
+			entityTypeId: args.entityTypeId,
+			identifier: args.seed.identifier,
+			normalizedIdentifier,
+			displayName: args.seed.displayName,
+			createdAt: args.now,
+			updatedAt: args.now,
+			archivedAt: null,
+		}));
+	if (existing) {
+		await ctx.db.patch(existing._id, {
+			identifier: args.seed.identifier,
+			displayName: args.seed.displayName,
+			updatedAt: args.now,
+			archivedAt: null,
+		});
+	}
+
+	for (const field of args.fields) {
+		await upsertAgentDemoTextValue(
+			ctx,
+			entityId,
+			field.id,
+			args.seed[field.seedKey],
+		);
+	}
+
+	const globalSearchEntryId = await syncGlobalSearchEntry(
+		ctx,
+		existing?.globalSearchEntryId,
+		{
+			organizationId: args.organizationId,
+			target: {
+				kind: "entity",
+				entityId,
+				entityTypeId: args.entityTypeId,
+			},
+			identifier: args.seed.identifier,
+			label: args.seed.displayName,
+			descriptor: "Demoanläggning",
+		},
+	);
+	if (globalSearchEntryId !== existing?.globalSearchEntryId) {
+		await ctx.db.patch(entityId, { globalSearchEntryId });
+	}
+	return existing === null ? "created" : "existing";
 }
 
 async function findSeedCase(
@@ -468,8 +660,12 @@ export const seedSuggestionEmails = internalMutation({
 						suggestionEmail.subject,
 						messageIndex,
 					);
-					if (message.subject !== subject) {
-						await ctx.db.patch(message._id, { subject });
+					const textBody = suggestionEmail.messages[messageIndex]?.body;
+					if (!textBody) {
+						throw new Error("Suggestion seed message is missing");
+					}
+					if (message.subject !== subject || message.textBody !== textBody) {
+						await ctx.db.patch(message._id, { subject, textBody });
 					}
 				}
 				existingThreads += 1;
@@ -489,5 +685,45 @@ export const seedSuggestionEmails = internalMutation({
 			unreadThreadCount: await countUnreadThreads(ctx, inboxId),
 		});
 		return { createdThreads, existingThreads, inboxId };
+	},
+});
+
+export const seedAgentDemoEntities = internalMutation({
+	args: {
+		organizationId: v.id("organizations"),
+		confirmation: v.literal("seed-agent-demo-entities"),
+	},
+	returns: v.object({
+		createdEntities: v.number(),
+		existingEntities: v.number(),
+		entityTypeId: v.id("entityTypes"),
+	}),
+	handler: async (ctx, args) => {
+		const organization = await requireOrganization(ctx, args.organizationId);
+		const entityTypeId = await getOrCreateAgentDemoEntityType(
+			ctx,
+			organization._id,
+		);
+		const fields = await getOrCreateAgentDemoFields(ctx, entityTypeId);
+		const now = Date.now();
+		let createdEntities = 0;
+		let existingEntities = 0;
+
+		for (const seed of ACME_AGENT_DEMO_ENTITIES) {
+			const outcome = await upsertAgentDemoEntity(ctx, {
+				organizationId: organization._id,
+				entityTypeId,
+				fields,
+				seed,
+				now,
+			});
+			if (outcome === "created") {
+				createdEntities += 1;
+			} else {
+				existingEntities += 1;
+			}
+		}
+
+		return { createdEntities, existingEntities, entityTypeId };
 	},
 });

@@ -48,26 +48,59 @@ const caseEventBaseValidator = v.object({
 	createdByMemberId: v.union(v.id("organizationMembers"), v.null()),
 });
 
+// Deprecated legacy shape. Keep it readable until the production backfill
+// has completed, then narrow the schema to the typed variants below.
+const legacyCaseEventValidator = caseEventBaseValidator.extend({
+	body: v.string(),
+});
+const humanNoteCaseEventValidator = caseEventBaseValidator.extend({
+	type: v.literal("human_note"),
+	body: v.string(),
+});
+const inboundEmailCaseEventValidator = caseEventBaseValidator.extend({
+	type: v.literal("inbound_email"),
+	emailMessageId: v.id("emailMessages"),
+});
+const outboundEmailCaseEventValidator = caseEventBaseValidator.extend({
+	type: v.literal("outbound_email"),
+	emailMessageId: v.id("emailMessages"),
+});
+const systemChangeCaseEventValidator = caseEventBaseValidator.extend({
+	type: v.literal("system_change"),
+	body: v.string(),
+});
+const agentNoteCaseEventValidator = caseEventBaseValidator.extend({
+	type: v.literal("agent_note"),
+	body: v.string(),
+	agentTaskId: v.id("agentTasks"),
+});
+const agentChangeCaseEventValidator = caseEventBaseValidator.extend({
+	type: v.literal("agent_change"),
+	body: v.string(),
+	agentTaskId: v.id("agentTasks"),
+});
+
 export const caseEventValidator = v.union(
-	// Deprecated legacy shape. Keep it readable until the production backfill
-	// has completed, then narrow the schema to the typed variants below.
-	caseEventBaseValidator.extend({
-		body: v.string(),
-	}),
-	caseEventBaseValidator.extend({
-		type: v.literal("human_note"),
-		body: v.string(),
-	}),
-	caseEventBaseValidator.extend({
-		type: v.literal("inbound_email"),
-		emailMessageId: v.id("emailMessages"),
-	}),
-	caseEventBaseValidator.extend({
-		type: v.literal("outbound_email"),
-		emailMessageId: v.id("emailMessages"),
-	}),
-	caseEventBaseValidator.extend({
-		type: v.literal("system_change"),
-		body: v.string(),
-	}),
+	legacyCaseEventValidator,
+	humanNoteCaseEventValidator,
+	inboundEmailCaseEventValidator,
+	outboundEmailCaseEventValidator,
+	systemChangeCaseEventValidator,
+	agentNoteCaseEventValidator,
+	agentChangeCaseEventValidator,
+);
+
+const caseEventSystemFields = {
+	_id: v.id("caseEvents"),
+	_creationTime: v.number(),
+};
+
+export const caseEventDocumentValidator = v.union(
+	legacyCaseEventValidator.extend(caseEventSystemFields),
+	humanNoteCaseEventValidator.extend(caseEventSystemFields),
+	inboundEmailCaseEventValidator.extend(caseEventSystemFields),
+	outboundEmailCaseEventValidator.extend(caseEventSystemFields),
+	systemChangeCaseEventValidator.extend(caseEventSystemFields),
+	agentNoteCaseEventValidator.extend(caseEventSystemFields),
+	agentChangeCaseEventValidator.extend(caseEventSystemFields),
 );

@@ -8,9 +8,23 @@
  * @module
  */
 
+import type * as agent_access from "../agent/access.js";
+import type * as agent_auditModel from "../agent/auditModel.js";
+import type * as agent_leases from "../agent/leases.js";
+import type * as agent_model from "../agent/model.js";
+import type * as agent_reader from "../agent/reader.js";
+import type * as agent_runFinalization from "../agent/runFinalization.js";
+import type * as agent_runtime from "../agent/runtime.js";
+import type * as agent_runtimeValues from "../agent/runtimeValues.js";
+import type * as agent_tasks from "../agent/tasks.js";
+import type * as agent_toolLedger from "../agent/toolLedger.js";
+import type * as agent_toolReadModel from "../agent/toolReadModel.js";
+import type * as agent_tools from "../agent/tools.js";
+import type * as agent_transcript from "../agent/transcript.js";
 import type * as auth_access from "../auth/access.js";
 import type * as auth_members from "../auth/members.js";
 import type * as case_access from "../case/access.js";
+import type * as case_agentOwnership from "../case/agentOwnership.js";
 import type * as case_emailRelations from "../case/emailRelations.js";
 import type * as case_embedding from "../case/embedding.js";
 import type * as case_embeddingData from "../case/embeddingData.js";
@@ -72,9 +86,23 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "agent/access": typeof agent_access;
+  "agent/auditModel": typeof agent_auditModel;
+  "agent/leases": typeof agent_leases;
+  "agent/model": typeof agent_model;
+  "agent/reader": typeof agent_reader;
+  "agent/runFinalization": typeof agent_runFinalization;
+  "agent/runtime": typeof agent_runtime;
+  "agent/runtimeValues": typeof agent_runtimeValues;
+  "agent/tasks": typeof agent_tasks;
+  "agent/toolLedger": typeof agent_toolLedger;
+  "agent/toolReadModel": typeof agent_toolReadModel;
+  "agent/tools": typeof agent_tools;
+  "agent/transcript": typeof agent_transcript;
   "auth/access": typeof auth_access;
   "auth/members": typeof auth_members;
   "case/access": typeof case_access;
+  "case/agentOwnership": typeof case_agentOwnership;
   "case/emailRelations": typeof case_emailRelations;
   "case/embedding": typeof case_embedding;
   "case/embeddingData": typeof case_embeddingData;

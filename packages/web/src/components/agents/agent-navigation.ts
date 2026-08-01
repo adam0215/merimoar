@@ -1,23 +1,24 @@
-import { IconListCheck, IconRobot, IconTools } from "@tabler/icons-react";
+import {
+	IconLayoutDashboard,
+	IconListCheck,
+	IconTool,
+} from "@tabler/icons-react";
 
 export const AGENT_NAV_ITEMS = [
 	{
-		view: "tasks",
-		label: "Tasks",
-		emptyLabel: "No tasks yet",
-		icon: IconListCheck,
+		view: "overview",
+		label: "Overview",
+		icon: IconLayoutDashboard,
 	},
 	{
-		view: "agents",
-		label: "Agents",
-		emptyLabel: "No agents yet",
-		icon: IconRobot,
+		view: "tasks",
+		label: "Tasks",
+		icon: IconListCheck,
 	},
 	{
 		view: "tools",
 		label: "Tools",
-		emptyLabel: "No tools yet",
-		icon: IconTools,
+		icon: IconTool,
 	},
 ] as const;
 

@@ -1,5 +1,9 @@
 import { ConvexError } from "convex/values";
-import { appendSystemChangeCaseEvent } from "#/case/events";
+import {
+	appendCaseChangeEvent,
+	appendSystemChangeCaseEvent,
+	type CaseChangeActor,
+} from "#/case/events";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -9,7 +13,7 @@ export const MAX_CASE_CASE_RELATIONS = 100;
 
 type DatabaseContext = Pick<MutationCtx | QueryCtx, "db">;
 
-function canonicalCasePair(
+export function canonicalCasePair(
 	firstCaseId: Id<"cases">,
 	secondCaseId: Id<"cases">,
 ) {
@@ -41,6 +45,19 @@ export async function listActiveCaseRelations(
 		0,
 		MAX_CASE_CASE_RELATIONS,
 	);
+}
+
+export async function requireCaseCanAddRelatedCase(
+	ctx: DatabaseContext,
+	caseId: Id<"cases">,
+) {
+	const activeRelations = await listActiveCaseRelations(ctx, caseId);
+	if (activeRelations.length >= MAX_CASE_CASE_RELATIONS) {
+		throw new ConvexError({
+			code: "TOO_MANY_RELATIONS",
+			message: `A case can have at most ${MAX_CASE_CASE_RELATIONS} related cases.`,
+		});
+	}
 }
 
 async function requireContact(
@@ -138,9 +155,10 @@ export async function validateInitialRelations(
 			requireContact(ctx, organizationId, contactId),
 		),
 		...entities.map((entityId) => requireEntity(ctx, organizationId, entityId)),
-		...relatedCases.map((relatedCaseId) =>
-			requireRelatedCase(ctx, organizationId, relatedCaseId),
-		),
+		...relatedCases.map(async (relatedCaseId) => {
+			await requireRelatedCase(ctx, organizationId, relatedCaseId);
+			await requireCaseCanAddRelatedCase(ctx, relatedCaseId);
+		}),
 	]);
 	return {
 		contactIds: contacts,
@@ -195,7 +213,7 @@ export async function addContactCaseRelation(
 	organizationId: Id<"organizations">,
 	caseRecord: Doc<"cases">,
 	contactId: Id<"contacts">,
-	actorMemberId: Id<"organizationMembers">,
+	actor: CaseChangeActor,
 ) {
 	const contact = await requireContact(ctx, organizationId, contactId);
 	const existing = await ctx.db
@@ -230,14 +248,14 @@ export async function addContactCaseRelation(
 		contactId: contact._id,
 		startedAt: now,
 		endedAt: null,
-		addedByMemberId: actorMemberId,
+		addedByMemberId: actor.kind === "member" ? actor.memberId : null,
 		removedByMemberId: null,
 	});
-	await appendSystemChangeCaseEvent(
+	await appendCaseChangeEvent(
 		ctx,
 		caseRecord,
 		`Added ${contact.name || contact.address} as a contact.`,
-		actorMemberId,
+		actor,
 		now,
 	);
 	return relationId;
@@ -280,7 +298,7 @@ export async function addEntityCaseRelation(
 	organizationId: Id<"organizations">,
 	caseRecord: Doc<"cases">,
 	entityId: Id<"entities">,
-	actorMemberId: Id<"organizationMembers">,
+	actor: CaseChangeActor,
 ) {
 	const entity = await requireEntity(ctx, organizationId, entityId);
 	const existing = await ctx.db
@@ -315,14 +333,14 @@ export async function addEntityCaseRelation(
 		entityId: entity._id,
 		startedAt: now,
 		endedAt: null,
-		addedByMemberId: actorMemberId,
+		addedByMemberId: actor.kind === "member" ? actor.memberId : null,
 		removedByMemberId: null,
 	});
-	await appendSystemChangeCaseEvent(
+	await appendCaseChangeEvent(
 		ctx,
 		caseRecord,
 		`Added ${entity.displayName} as a related entity.`,
-		actorMemberId,
+		actor,
 		now,
 	);
 	return relationId;
@@ -365,7 +383,7 @@ export async function addRelatedCaseRelation(
 	organizationId: Id<"organizations">,
 	caseRecord: Doc<"cases">,
 	relatedCaseId: Id<"cases">,
-	actorMemberId: Id<"organizationMembers">,
+	actor: CaseChangeActor,
 ) {
 	if (caseRecord._id === relatedCaseId) {
 		throw new ConvexError({
@@ -393,34 +411,31 @@ export async function addRelatedCaseRelation(
 		return existing._id;
 	}
 
-	const activeRelations = await listActiveCaseRelations(ctx, caseRecord._id);
-	if (activeRelations.length >= MAX_CASE_CASE_RELATIONS) {
-		throw new ConvexError({
-			code: "TOO_MANY_RELATIONS",
-			message: `A case can have at most ${MAX_CASE_CASE_RELATIONS} related cases.`,
-		});
-	}
+	await Promise.all([
+		requireCaseCanAddRelatedCase(ctx, caseRecord._id),
+		requireCaseCanAddRelatedCase(ctx, relatedCase._id),
+	]);
 
 	const now = Date.now();
 	const relationId = await ctx.db.insert("caseCaseRelations", {
 		...casePair,
 		startedAt: now,
 		endedAt: null,
-		addedByMemberId: actorMemberId,
+		addedByMemberId: actor.kind === "member" ? actor.memberId : null,
 		removedByMemberId: null,
 	});
-	await appendSystemChangeCaseEvent(
+	await appendCaseChangeEvent(
 		ctx,
 		caseRecord,
 		`Added ${relatedCase.reference}: ${relatedCase.title} as a related case.`,
-		actorMemberId,
+		actor,
 		now,
 	);
-	await appendSystemChangeCaseEvent(
+	await appendCaseChangeEvent(
 		ctx,
 		relatedCase,
 		`Added ${caseRecord.reference}: ${caseRecord.title} as a related case.`,
-		actorMemberId,
+		actor,
 		now,
 	);
 	return relationId;

@@ -1,12 +1,16 @@
 import { Link } from "@tanstack/react-router";
-import { formatShortDate } from "#/components/case/format.ts";
+import { useCurrentCaseInteractionPolicy } from "#/components/case/case-interaction-policy.tsx";
 import type { CaseDetail } from "#/components/case/types.ts";
 import { UnlinkEmailThreadButton } from "#/components/case/unlink-email-thread-button.tsx";
 import { parseEmailReply } from "#/components/email/parse-email-reply.ts";
 import { ThreadUnreadDot } from "#/components/email/thread-unread-dot.tsx";
+import { formatShortDate } from "#/lib/date-format.ts";
 import { cn } from "#/lib/utils.ts";
 
 export function CaseEmailThreads({ detail }: { detail: CaseDetail }) {
+	const { readOnly, readOnlyReason } = useCurrentCaseInteractionPolicy();
+	const hasLinkedThread = detail.emailThreads.some(({ thread }) => thread);
+
 	return (
 		<section className="mt-10 border-t pt-8">
 			<h2 className="text-sm font-semibold">Email threads</h2>
@@ -24,6 +28,7 @@ export function CaseEmailThreads({ detail }: { detail: CaseDetail }) {
 					const participant = latestMessage
 						? latestMessage.from.name || latestMessage.from.address
 						: "Email thread";
+					const subject = latestMessage?.subject || "(No subject)";
 
 					return (
 						<div
@@ -57,7 +62,7 @@ export function CaseEmailThreads({ detail }: { detail: CaseDetail }) {
 											thread.isUnread ? "font-semibold" : "font-medium"
 										}
 									>
-										{latestMessage?.subject || "(No subject)"}
+										{subject}
 									</span>
 									{preview && (
 										<span
@@ -85,14 +90,16 @@ export function CaseEmailThreads({ detail }: { detail: CaseDetail }) {
 							</Link>
 							<UnlinkEmailThreadButton
 								relationId={relation._id}
-								label={latestMessage?.subject || "email thread"}
+								label={subject}
+								disabled={readOnly}
+								disabledReason={readOnlyReason}
 								className="mr-1"
 							/>
 						</div>
 					);
 				})}
 
-				{detail.emailThreads.length === 0 && (
+				{!hasLinkedThread && (
 					<p className="text-sm text-muted-foreground">
 						No email threads linked yet.
 					</p>

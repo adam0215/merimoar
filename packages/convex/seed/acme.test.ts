@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ACME_INBOX, ACME_SUGGESTION_EMAILS } from "#/seed/acmeData";
+import {
+	ACME_AGENT_DEMO_ENTITIES,
+	ACME_INBOX,
+	ACME_SUGGESTION_EMAILS,
+} from "#/seed/acmeData";
 import { createTest } from "#/test.setup";
 import { internal } from "../_generated/api";
 
@@ -35,6 +39,7 @@ describe("Acme AB seed data", () => {
 			for await (const message of ctx.db.query("emailMessages")) {
 				await ctx.db.patch(message._id, {
 					subject: `Testförslag: ${message.subject}`,
+					textBody: `Testförslag: ${message.textBody}`,
 				});
 			}
 		});
@@ -78,13 +83,86 @@ describe("Acme AB seed data", () => {
 			state.messages.every(
 				(message) =>
 					message.direction === "inbound" &&
-					!message.subject.includes("Testförslag:"),
+					!message.subject.includes("Testförslag:") &&
+					!message.textBody.includes("Testförslag:"),
 			),
 		).toBe(true);
 		expect(state.relations).toEqual([]);
 		expect(state.inbox).toMatchObject({
 			unreadThreadCount: ACME_SUGGESTION_EMAILS.length,
 		});
+	});
+
+	it("creates idempotent, searchable entities for the agent demo", async () => {
+		const test = createTest();
+		const organizationId = await test.run(async (ctx) => {
+			const organizationId = await ctx.db.insert("organizations", {
+				name: "Test organization",
+				workosOrganizationId: "org_agent_demo_seed",
+				active: true,
+			});
+			return organizationId;
+		});
+
+		const firstRun = await test.mutation(
+			internal.seed.acme.seedAgentDemoEntities,
+			{
+				organizationId,
+				confirmation: "seed-agent-demo-entities",
+			},
+		);
+		const secondRun = await test.mutation(
+			internal.seed.acme.seedAgentDemoEntities,
+			{
+				organizationId,
+				confirmation: "seed-agent-demo-entities",
+			},
+		);
+		expect(firstRun).toMatchObject({
+			createdEntities: ACME_AGENT_DEMO_ENTITIES.length,
+			existingEntities: 0,
+		});
+		expect(secondRun).toMatchObject({
+			createdEntities: 0,
+			existingEntities: ACME_AGENT_DEMO_ENTITIES.length,
+			entityTypeId: firstRun.entityTypeId,
+		});
+
+		const state = await test.run(async (ctx) => ({
+			entityType: await ctx.db.get(firstRun.entityTypeId),
+			fields: await ctx.db
+				.query("entityFieldDefinitions")
+				.withIndex("by_entity_type_id_and_position", (index) =>
+					index.eq("entityTypeId", firstRun.entityTypeId),
+				)
+				.collect(),
+			entities: await ctx.db
+				.query("entities")
+				.withIndex(
+					"by_entity_type_id_and_archived_at_and_display_name",
+					(index) =>
+						index
+							.eq("entityTypeId", firstRun.entityTypeId)
+							.eq("archivedAt", null),
+				)
+				.collect(),
+			values: await ctx.db.query("entityTextFieldValues").collect(),
+			searchEntries: (
+				await ctx.db.query("globalSearchEntries").collect()
+			).filter((entry) => entry.organizationId === organizationId),
+		}));
+		expect(state.entityType).toMatchObject({
+			name: "Demoanläggning",
+			pluralName: "Demoanläggningar",
+		});
+		expect(state.fields.map((field) => field.label)).toEqual([
+			"Adress",
+			"Kund",
+			"Driftinformation",
+		]);
+		expect(state.entities).toHaveLength(ACME_AGENT_DEMO_ENTITIES.length);
+		expect(state.values).toHaveLength(ACME_AGENT_DEMO_ENTITIES.length * 3);
+		expect(state.searchEntries).toHaveLength(ACME_AGENT_DEMO_ENTITIES.length);
 	});
 
 	it("creates a coherent, idempotent demo inbox without an outbound route", async () => {

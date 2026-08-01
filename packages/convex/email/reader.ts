@@ -1,11 +1,38 @@
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import { requireActor } from "#/auth/access";
+import { requireHumanEmailThreadWriteAccess } from "#/case/access";
+import {
+	activeAgentTaskSummaryValidator,
+	getActiveAgentTaskSummaryForCase,
+} from "#/case/agentOwnership";
 import { getActiveCaseRelationForEmailThread } from "#/case/emailRelations";
+import {
+	emailMessageDocumentValidator,
+	emailSendFailureValidator,
+	emailSendStatusValidator,
+} from "#/email/model";
 import { setThreadUnread } from "#/email/unreadCounts";
-import type { Id } from "../_generated/dataModel";
+import type { Id, TableNames } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
+import schema from "../schema";
+
+function systemFields<TableName extends TableNames>(tableName: TableName) {
+	return { _id: v.id(tableName), _creationTime: v.number() };
+}
+
+const emailThreadDocumentValidator =
+	schema.tables.emailThreads.validator.extend(systemFields("emailThreads"));
+const emailInboxDocumentValidator = schema.tables.emailInboxes.validator.extend(
+	systemFields("emailInboxes"),
+);
+const emailDraftDocumentValidator = schema.tables.emailDrafts.validator.extend(
+	systemFields("emailDrafts"),
+);
+const caseDocumentValidator = schema.tables.cases.validator.extend(
+	systemFields("cases"),
+);
 
 async function listLatestThreadMessages(
 	ctx: QueryCtx,
@@ -141,6 +168,29 @@ export const getThread = query({
 	args: {
 		threadId: v.string(),
 	},
+	returns: v.union(
+		v.object({
+			thread: emailThreadDocumentValidator,
+			inbox: emailInboxDocumentValidator,
+			messages: v.array(emailMessageDocumentValidator),
+			sendStatuses: v.array(
+				v.object({
+					messageId: v.id("emailMessages"),
+					status: emailSendStatusValidator,
+					failure: v.optional(emailSendFailureValidator),
+				}),
+			),
+			draft: v.union(emailDraftDocumentValidator, v.null()),
+			activeCase: v.union(
+				caseDocumentValidator.extend({
+					relationId: v.id("caseEmailThreadRelations"),
+					activeAgentTask: v.union(activeAgentTaskSummaryValidator, v.null()),
+				}),
+				v.null(),
+			),
+		}),
+		v.null(),
+	),
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
 		const threadId = ctx.db.normalizeId("emailThreads", args.threadId);
@@ -172,33 +222,46 @@ export const getThread = query({
 		const activeCase = activeCaseRelation
 			? await ctx.db.get(activeCaseRelation.caseId)
 			: null;
-
-		const sendStatuses = await Promise.all(
-			messages.flatMap((message) =>
-				message.direction === "outbound"
-					? [
-							ctx.db
-								.query("emailSends")
-								.withIndex("by_message_id", (index) =>
-									index.eq("messageId", message._id),
-								)
-								.unique()
-								.then((send) => {
-									if (!send) {
-										throw new Error(
-											"Outbound email message is missing send state",
-										);
-									}
-									return {
-										messageId: message._id,
-										status: send.status,
-										failure: send.failure,
-									};
-								}),
-						]
-					: [],
+		const visibleActiveCase =
+			activeCaseRelation &&
+			activeCase?.organizationId === workspace.organization._id
+				? { caseRecord: activeCase, relationId: activeCaseRelation._id }
+				: null;
+		const [activeAgentTask, sendStatuses] = await Promise.all([
+			visibleActiveCase
+				? getActiveAgentTaskSummaryForCase(
+						ctx,
+						visibleActiveCase.caseRecord._id,
+						workspace.organization._id,
+					)
+				: null,
+			Promise.all(
+				messages.flatMap((message) =>
+					message.direction === "outbound"
+						? [
+								ctx.db
+									.query("emailSends")
+									.withIndex("by_message_id", (index) =>
+										index.eq("messageId", message._id),
+									)
+									.unique()
+									.then((send) => {
+										if (!send) {
+											throw new Error(
+												"Outbound email message is missing send state",
+											);
+										}
+										return {
+											messageId: message._id,
+											status: send.status,
+											failure: send.failure,
+										};
+									}),
+							]
+						: [],
+				),
 			),
-		);
+		]);
 
 		return {
 			thread,
@@ -206,14 +269,13 @@ export const getThread = query({
 			messages,
 			sendStatuses,
 			draft,
-			activeCase:
-				activeCaseRelation &&
-				activeCase?.organizationId === workspace.organization._id
-					? {
-							...activeCase,
-							relationId: activeCaseRelation._id,
-						}
-					: null,
+			activeCase: visibleActiveCase
+				? {
+						...visibleActiveCase.caseRecord,
+						relationId: visibleActiveCase.relationId,
+						activeAgentTask,
+					}
+				: null,
 		};
 	},
 });
@@ -238,6 +300,11 @@ export const setUnread = mutation({
 			return null;
 		}
 
+		await requireHumanEmailThreadWriteAccess(
+			ctx,
+			workspace.organization._id,
+			thread._id,
+		);
 		await setThreadUnread(ctx, thread, args.isUnread);
 		return null;
 	},

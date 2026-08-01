@@ -13,7 +13,8 @@ import { useKeyHold } from "@tanstack/react-hotkeys";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useCurrentCaseInteractionPolicy } from "#/components/case/case-interaction-policy.tsx";
 import { initials } from "#/components/case/format.ts";
 import type { CaseDetail } from "#/components/case/types.ts";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
@@ -29,7 +30,26 @@ import {
 } from "#/components/ui/dialog.tsx";
 import { SearchCombobox } from "#/components/ui/search-combobox.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
-import { EntityIcon } from "#/lib/entity-icons.tsx";
+import { EntityIcon, type EntityIconKey } from "#/lib/entity-icons.tsx";
+
+type RelationshipRemoval =
+	| { kind: "contact"; relationId: Id<"caseContactRelations"> }
+	| { kind: "entity"; relationId: Id<"caseEntityRelations"> }
+	| { kind: "case"; relationId: Id<"caseCaseRelations"> };
+
+type CaseRelationship = {
+	id: string;
+	title: string;
+	detail: string;
+	visual:
+		| { kind: "avatar"; fallback: string }
+		| { kind: "entity"; icon: EntityIconKey }
+		| { kind: "folder" };
+	target?: { kind: "contact"; id: string } | { kind: "case"; id: string };
+	roomy?: boolean;
+	removeLabel: string;
+	removal: RelationshipRemoval;
+};
 
 export function CaseRelationships({ detail }: { detail: CaseDetail }) {
 	const currentContactIds = new Set(
@@ -44,125 +64,146 @@ export function CaseRelationships({ detail }: { detail: CaseDetail }) {
 		),
 	);
 
+	const items: CaseRelationship[] = [
+		...detail.contacts.flatMap(({ relation, contact }): CaseRelationship[] =>
+			contact
+				? [
+						{
+							id: relation._id,
+							title: contact.name || contact.address,
+							detail: contact.name ? contact.address : "Contact",
+							visual: {
+								kind: "avatar",
+								fallback: initials(contact.name || contact.address),
+							},
+							target: { kind: "contact", id: contact._id },
+							removeLabel: contact.name || contact.address,
+							removal: { kind: "contact", relationId: relation._id },
+						},
+					]
+				: [],
+		),
+		...detail.entities.flatMap(
+			({ relation, entity, entityType }): CaseRelationship[] =>
+				entity && entityType
+					? [
+							{
+								id: relation._id,
+								title: entity.displayName,
+								detail: `${entityType.name} · ${entity.identifier}`,
+								visual: { kind: "entity", icon: entityType.icon },
+								roomy: true,
+								removeLabel: entity.displayName,
+								removal: { kind: "entity", relationId: relation._id },
+							},
+						]
+					: [],
+		),
+		...detail.relatedCases.flatMap(
+			({ relation, relatedCase }): CaseRelationship[] =>
+				relatedCase
+					? [
+							{
+								id: relation._id,
+								title: relatedCase.title,
+								detail: `${relatedCase.reference} · Case`,
+								visual: { kind: "folder" },
+								target: { kind: "case", id: relatedCase._id },
+								removeLabel: `${relatedCase.reference}: ${relatedCase.title}`,
+								removal: { kind: "case", relationId: relation._id },
+							},
+						]
+					: [],
+		),
+	];
+
 	return (
 		<section className="mt-10 border-t pt-8">
 			<h2 className="text-sm font-semibold">Relationships</h2>
-
 			<div className="mt-4 grid gap-2 sm:grid-cols-2">
-				{detail.contacts.map(({ relation, contact }) =>
-					contact ? (
-						<div
-							key={relation._id}
-							className="flex min-w-0 items-center gap-2 rounded-xl border bg-background p-2"
-						>
-							<Link
-								to="/contacts"
-								search={{ contact: contact._id }}
-								className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-foreground no-underline transition-colors hover:bg-muted"
-							>
-								<Avatar className="size-9">
-									<AvatarFallback>
-										{initials(contact.name || contact.address)}
-									</AvatarFallback>
-								</Avatar>
-								<span className="min-w-0">
-									<span className="block truncate text-sm font-medium">
-										{contact.name || contact.address}
-									</span>
-									<span className="block truncate text-xs text-muted-foreground">
-										{contact.name ? contact.address : "Contact"}
-									</span>
-								</span>
-							</Link>
-							<RemoveRelationshipButton
-								label={contact.name || contact.address}
-								relation={{
-									kind: "contact",
-									relationId: relation._id,
-								}}
-							/>
-						</div>
-					) : null,
-				)}
-				{detail.entities.map(({ relation, entity, entityType }) =>
-					entity && entityType ? (
-						<div
-							key={relation._id}
-							className="flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3"
-						>
-							<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-								<EntityIcon icon={entityType.icon} className="size-4" />
-							</span>
-							<span className="min-w-0 flex-1">
-								<span className="block truncate text-sm font-medium">
-									{entity.displayName}
-								</span>
-								<span className="block truncate text-xs text-muted-foreground">
-									{entityType.name} · {entity.identifier}
-								</span>
-							</span>
-							<RemoveRelationshipButton
-								label={entity.displayName}
-								relation={{
-									kind: "entity",
-									relationId: relation._id,
-								}}
-							/>
-						</div>
-					) : null,
-				)}
-				{detail.relatedCases.map(({ relation, relatedCase }) =>
-					relatedCase ? (
-						<div
-							key={relation._id}
-							className="flex min-w-0 items-center gap-2 rounded-xl border bg-background p-2"
-						>
-							<Link
-								to="/cases"
-								search={{ case: relatedCase._id }}
-								className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-foreground no-underline transition-colors hover:bg-muted"
-							>
-								<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-									<IconFolder className="size-4" />
-								</span>
-								<span className="min-w-0">
-									<span className="block truncate text-sm font-medium">
-										{relatedCase.title}
-									</span>
-									<span className="block truncate text-xs text-muted-foreground">
-										{relatedCase.reference} · Case
-									</span>
-								</span>
-							</Link>
-							<RemoveRelationshipButton
-								label={`${relatedCase.reference}: ${relatedCase.title}`}
-								relation={{
-									kind: "case",
-									relationId: relation._id,
-								}}
-							/>
-						</div>
-					) : null,
-				)}
+				{items.map((item) => (
+					<RelationshipRow key={item.id} item={item} />
+				))}
 				<AddRelationshipDialog
 					caseId={detail.case._id}
 					currentContactIds={currentContactIds}
 					currentEntityIds={currentEntityIds}
 					currentRelatedCaseIds={currentRelatedCaseIds}
-					trigger={
-						<button
-							type="button"
-							className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-dashed p-3 text-left text-muted-foreground transition-[color,background-color,transform] hover:bg-muted/50 hover:text-foreground active:scale-99"
-						>
-							<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted">
-								<IconPlus className="size-4" />
-							</span>
-							<span className="text-sm font-medium">Add relationship</span>
-						</button>
-					}
 				/>
 			</div>
 		</section>
+	);
+}
+
+function RelationshipRow({ item }: { item: CaseRelationship }) {
+	const content = (
+		<>
+			<RelationshipVisual visual={item.visual} />
+			<span className="min-w-0 flex-1">
+				<span className="block truncate text-sm font-medium">{item.title}</span>
+				<span className="block truncate text-xs text-muted-foreground">
+					{item.detail}
+				</span>
+			</span>
+		</>
+	);
+
+	return (
+		<div
+			className={
+				item.roomy
+					? "flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3"
+					: "flex min-w-0 items-center gap-2 rounded-xl border bg-background p-2"
+			}
+		>
+			{item.target?.kind === "contact" ? (
+				<Link
+					to="/contacts"
+					search={{ contact: item.target.id }}
+					className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-foreground no-underline transition-colors hover:bg-muted"
+				>
+					{content}
+				</Link>
+			) : item.target?.kind === "case" ? (
+				<Link
+					to="/cases"
+					search={{ case: item.target.id }}
+					className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-1 text-foreground no-underline transition-colors hover:bg-muted"
+				>
+					{content}
+				</Link>
+			) : (
+				content
+			)}
+			<RemoveRelationshipButton
+				label={item.removeLabel}
+				relation={item.removal}
+			/>
+		</div>
+	);
+}
+
+function RelationshipVisual({
+	visual,
+}: {
+	visual: CaseRelationship["visual"];
+}) {
+	if (visual.kind === "avatar") {
+		return (
+			<Avatar className="size-9 shrink-0">
+				<AvatarFallback>{visual.fallback}</AvatarFallback>
+			</Avatar>
+		);
+	}
+
+	return (
+		<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+			{visual.kind === "entity" ? (
+				<EntityIcon icon={visual.icon} className="size-4" />
+			) : (
+				<IconFolder className="size-4" />
+			)}
+		</span>
 	);
 }
 
@@ -171,11 +212,9 @@ function RemoveRelationshipButton({
 	relation,
 }: {
 	label: string;
-	relation:
-		| { kind: "contact"; relationId: Id<"caseContactRelations"> }
-		| { kind: "entity"; relationId: Id<"caseEntityRelations"> }
-		| { kind: "case"; relationId: Id<"caseCaseRelations"> };
+	relation: RelationshipRemoval;
 }) {
+	const { readOnly, readOnlyReason } = useCurrentCaseInteractionPolicy();
 	const removeContact = useMutation(api.case.mutations.removeContactRelation);
 	const removeEntity = useMutation(api.case.mutations.removeEntityRelation);
 	const removeCase = useMutation(api.case.mutations.removeCaseRelation);
@@ -183,6 +222,10 @@ function RemoveRelationshipButton({
 	const [error, setError] = useState<string | null>(null);
 
 	async function remove() {
+		if (readOnly) {
+			return;
+		}
+
 		setIsRemoving(true);
 		setError(null);
 
@@ -210,10 +253,10 @@ function RemoveRelationshipButton({
 		<button
 			type="button"
 			onClick={remove}
-			disabled={isRemoving}
-			className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[color,background-color,transform] hover:bg-muted hover:text-foreground active:scale-97 disabled:opacity-50"
+			disabled={readOnly || isRemoving}
+			className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-97 disabled:opacity-50"
 			aria-label={`${error ? "Retry removing" : "Remove"} ${label}`}
-			title={error ?? `Remove ${label}`}
+			title={readOnly ? readOnlyReason : (error ?? `Remove ${label}`)}
 		>
 			{isRemoving ? (
 				<IconLoader2 className="size-3.5 animate-spin" />
@@ -231,14 +274,13 @@ function AddRelationshipDialog({
 	currentContactIds,
 	currentEntityIds,
 	currentRelatedCaseIds,
-	trigger,
 }: {
 	caseId: Id<"cases">;
 	currentContactIds: Set<Id<"contacts">>;
 	currentEntityIds: Set<Id<"entities">>;
 	currentRelatedCaseIds: Set<Id<"cases">>;
-	trigger: React.ReactElement;
 }) {
+	const { readOnly, readOnlyReason } = useCurrentCaseInteractionPolicy();
 	const addContact = useMutation(api.case.mutations.addContactRelation);
 	const addEntity = useMutation(api.case.mutations.addEntityRelation);
 	const addCase = useMutation(api.case.mutations.addCaseRelation);
@@ -262,28 +304,18 @@ function AddRelationshipDialog({
 		api.globalSearch.reader.listRecentRelationshipCandidates,
 		recentRelationshipsRequested && !normalizedQuery ? {} : "skip",
 	);
-	const results = useMemo(() => {
-		const candidates: RelationshipSearchCandidate[] = debouncedQuery
-			? (searchResults ?? [])
-			: (recentRelationships ?? []);
-		return candidates.map((result) => ({
-			...result,
-			unavailableReason: getUnavailableReason(result, {
-				caseId,
-				currentContactIds,
-				currentEntityIds,
-				currentRelatedCaseIds,
-			}),
-		}));
-	}, [
-		caseId,
-		currentContactIds,
-		currentEntityIds,
-		currentRelatedCaseIds,
-		debouncedQuery,
-		recentRelationships,
-		searchResults,
-	]);
+	const candidates: RelationshipSearchCandidate[] = debouncedQuery
+		? (searchResults ?? [])
+		: (recentRelationships ?? []);
+	const results = candidates.map((result) => ({
+		...result,
+		unavailableReason: getUnavailableReason(result, {
+			caseId,
+			currentContactIds,
+			currentEntityIds,
+			currentRelatedCaseIds,
+		}),
+	}));
 	const isWaitingForResults = normalizedQuery
 		? normalizedQuery !== debouncedQuery || searchResults === undefined
 		: recentRelationshipsRequested && recentRelationships === undefined;
@@ -311,7 +343,7 @@ function AddRelationshipDialog({
 	}
 
 	async function addSelectedRelationship() {
-		if (!selectedResult || isAdding) {
+		if (readOnly || !selectedResult || isAdding) {
 			return;
 		}
 
@@ -349,11 +381,29 @@ function AddRelationshipDialog({
 		<Dialog
 			open={open}
 			onOpenChange={(nextOpen) => {
+				if (nextOpen && readOnly) {
+					return;
+				}
 				setOpen(nextOpen);
 				resetDialog();
 			}}
 		>
-			<DialogTrigger render={trigger} />
+			<DialogTrigger
+				render={
+					<button
+						type="button"
+						aria-label="Add relationship"
+						disabled={readOnly}
+						title={readOnly ? readOnlyReason : undefined}
+						className="flex min-h-16 w-full items-center gap-3 rounded-xl border border-dashed p-3 text-left text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-99 disabled:cursor-not-allowed disabled:bg-muted disabled:opacity-60 disabled:hover:text-muted-foreground"
+					/>
+				}
+			>
+				<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted">
+					<IconPlus className="size-4" />
+				</span>
+				<span className="text-sm font-medium">Add relationship</span>
+			</DialogTrigger>
 			<DialogContent ref={dialogRef} className="overflow-visible sm:max-w-lg">
 				<DialogHeader>
 					<DialogTitle>Add relationship</DialogTitle>
@@ -423,7 +473,7 @@ function AddRelationshipDialog({
 					<Button
 						type="button"
 						onClick={() => void addSelectedRelationship()}
-						disabled={!selectedResult || isAdding}
+						disabled={readOnly || !selectedResult || isAdding}
 						aria-keyshortcuts="Meta+Enter Control+Enter"
 					>
 						{isAdding && <IconLoader2 className="animate-spin" />}

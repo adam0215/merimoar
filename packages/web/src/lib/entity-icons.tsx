@@ -1,4 +1,7 @@
 import type { EntityIconKey } from "@merimoar/convex/entity/constants";
+
+export type { EntityIconKey };
+
 import {
 	IconBox,
 	IconBriefcase,

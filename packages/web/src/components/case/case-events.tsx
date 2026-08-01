@@ -14,11 +14,13 @@ import { Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { useEffect, useRef, useState } from "react";
 import * as v from "valibot";
-import { formatEventDate } from "#/components/case/format.ts";
+import { formatAgentTaskLabel } from "#/components/agents/agent-task-label.ts";
+import { useCurrentCaseInteractionPolicy } from "#/components/case/case-interaction-policy.tsx";
 import type { CaseDetail } from "#/components/case/types.ts";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
+import { formatDateTime } from "#/lib/date-format.ts";
 
 export function CaseEvents({
 	caseId,
@@ -28,6 +30,7 @@ export function CaseEvents({
 	events: CaseDetail["events"];
 }) {
 	const addEvent = useMutation(api.case.mutations.addEvent);
+	const { readOnly, readOnlyReason } = useCurrentCaseInteractionPolicy();
 	const [composerOpen, setComposerOpen] = useState(false);
 	const [body, setBody] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,12 +38,19 @@ export function CaseEvents({
 	const inputRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
+		if (readOnly) {
+			setComposerOpen(false);
+			setBody("");
+			setError(null);
+			return;
+		}
 		if (composerOpen) {
 			inputRef.current?.focus();
 		}
-	}, [composerOpen]);
+	}, [composerOpen, readOnly]);
 
 	async function submit() {
+		if (readOnly) return;
 		const result = v.safeParse(caseEventBodySchema, body);
 
 		if (!result.success) {
@@ -54,7 +64,6 @@ export function CaseEvents({
 		try {
 			await addEvent({ caseId, body: result.output });
 			setBody("");
-			requestAnimationFrame(() => inputRef.current?.focus());
 		} catch (caughtError) {
 			setError(getConvexErrorMessage(caughtError));
 		} finally {
@@ -69,6 +78,8 @@ export function CaseEvents({
 				<Button
 					variant="secondary"
 					size="sm"
+					disabled={readOnly}
+					title={readOnly ? readOnlyReason : undefined}
 					onClick={() => setComposerOpen(true)}
 				>
 					<IconPlus />
@@ -78,10 +89,11 @@ export function CaseEvents({
 
 			{composerOpen && (
 				<div className="mt-3">
-					<div className="flex items-center gap-2 rounded-xl border bg-muted/20 p-2">
+					<div className="flex items-center gap-2 rounded-xl border bg-muted p-2">
 						<Input
 							ref={inputRef}
 							value={body}
+							disabled={readOnly}
 							onChange={(event) => {
 								setBody(event.target.value);
 								setError(null);
@@ -108,7 +120,7 @@ export function CaseEvents({
 								setBody("");
 								setError(null);
 							}}
-							disabled={isSubmitting}
+							disabled={readOnly || isSubmitting}
 							aria-label="Cancel"
 							title="Cancel"
 						>
@@ -117,7 +129,7 @@ export function CaseEvents({
 						<Button
 							size="icon-sm"
 							onClick={submit}
-							disabled={isSubmitting}
+							disabled={readOnly || isSubmitting}
 							aria-label="Add event"
 							title="Add event"
 						>
@@ -194,9 +206,29 @@ export function CaseEvents({
 									{event.body}
 								</p>
 							)}
-							<p className="mt-1 text-xs text-muted-foreground">
-								{formatEventDate(event.occurredAt)}
-								{author ? ` · ${author.name}` : ""}
+							<p className="mt-1 inline-flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+								<span>{formatDateTime(event.occurredAt)}</span>
+								{author && (
+									<>
+										<span className="size-1 rounded-full bg-border" />
+										<span>{author.name}</span>
+									</>
+								)}
+								{"type" in event &&
+									(event.type === "agent_note" ||
+										event.type === "agent_change") && (
+										<>
+											<span className="size-1 rounded-full bg-border" />
+											<Link
+												to="/agents"
+												search={{ view: "tasks", task: event.agentTaskId }}
+												title={event.agentTaskId}
+												className="font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+											>
+												{formatAgentTaskLabel(event.agentTaskId)}
+											</Link>
+										</>
+									)}
 							</p>
 						</div>
 					</article>

@@ -1,5 +1,9 @@
 import { ConvexError } from "convex/values";
-import { appendSystemChangeCaseEvent } from "#/case/events";
+import {
+	appendCaseChangeEvent,
+	appendSystemChangeCaseEvent,
+	type CaseChangeActor,
+} from "#/case/events";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -37,7 +41,7 @@ export async function linkEmailThreadToCase(
 	organizationId: Id<"organizations">,
 	caseRecord: Doc<"cases">,
 	threadId: Id<"emailThreads">,
-	actorMemberId: Id<"organizationMembers">,
+	actor: CaseChangeActor,
 ) {
 	const thread = await ctx.db.get(threadId);
 	if (!thread || thread.organizationId !== organizationId) {
@@ -72,13 +76,13 @@ export async function linkEmailThreadToCase(
 	if (activeRelation && previousCase) {
 		await ctx.db.patch("caseEmailThreadRelations", activeRelation._id, {
 			endedAt: now,
-			unlinkedByMemberId: actorMemberId,
+			unlinkedByMemberId: actor.kind === "member" ? actor.memberId : null,
 		});
-		await appendSystemChangeCaseEvent(
+		await appendCaseChangeEvent(
 			ctx,
 			previousCase,
 			`Email thread moved to ${caseRecord.reference}: ${caseRecord.title}.`,
-			actorMemberId,
+			actor,
 			now,
 		);
 	}
@@ -88,16 +92,16 @@ export async function linkEmailThreadToCase(
 		threadId: thread._id,
 		startedAt: now,
 		endedAt: null,
-		linkedByMemberId: actorMemberId,
+		linkedByMemberId: actor.kind === "member" ? actor.memberId : null,
 		unlinkedByMemberId: null,
 	});
-	await appendSystemChangeCaseEvent(
+	await appendCaseChangeEvent(
 		ctx,
 		caseRecord,
 		previousCase
 			? `Email thread moved from ${previousCase.reference}: ${previousCase.title}.`
 			: "Email thread linked.",
-		actorMemberId,
+		actor,
 		now,
 	);
 	return relationId;

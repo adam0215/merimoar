@@ -2,15 +2,18 @@ import { api } from "@merimoar/convex/api";
 import {
 	IconAddressBook,
 	IconArrowRight,
+	IconClock,
 	IconFolder,
 	IconInbox,
+	IconRobot,
 } from "@tabler/icons-react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { usePaginatedQuery, useQuery } from "convex-helpers/react/cache";
 import { CaseStatusDot } from "#/components/case/case-status.tsx";
-import { formatShortDate } from "#/components/case/format.ts";
+import { OverviewMetric } from "#/components/overview-metric.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
+import { formatShortDate } from "#/lib/date-format.ts";
 
 const ASSIGNED_CASES_PAGE_SIZE = 8;
 
@@ -65,20 +68,16 @@ function MyOverviewPage() {
 							</h2>
 
 							<div className="mt-3 grid grid-cols-2 gap-3">
-								<div className="rounded-2xl border p-4">
-									<p className="text-xs text-muted-foreground">
-										Assigned cases
-									</p>
-									<p className="mt-1 text-xl font-semibold tabular-nums">
-										{assignedCaseCount}
-									</p>
-								</div>
-								<div className="rounded-2xl border p-4">
-									<p className="text-xs text-muted-foreground">
-										Latest case activity
-									</p>
-									<p className="mt-1 text-xl font-semibold">{latestActivity}</p>
-								</div>
+								<OverviewMetric
+									label="Assigned cases"
+									value={assignedCaseCount}
+									icon={<IconFolder />}
+								/>
+								<OverviewMetric
+									label="Latest case activity"
+									value={latestActivity}
+									icon={<IconClock />}
+								/>
 							</div>
 						</section>
 
@@ -98,14 +97,35 @@ function MyOverviewPage() {
 									label="Contacts"
 									icon={<IconAddressBook />}
 								/>
+								<Link
+									to="/agents"
+									search={{ view: "tasks" }}
+									className={OVERVIEW_LINK_CLASS_NAME}
+								>
+									<span className="text-muted-foreground [&>svg]:size-4">
+										<IconRobot />
+									</span>
+									<span>Agent tasks</span>
+									<IconArrowRight className="ml-auto size-4 text-muted-foreground" />
+								</Link>
 							</nav>
 						</section>
 					</div>
 
 					<section aria-labelledby="assigned-cases-heading">
-						<h2 id="assigned-cases-heading" className="font-semibold">
-							Assigned to me
-						</h2>
+						<div className="flex items-center justify-between gap-4">
+							<h2 id="assigned-cases-heading" className="font-semibold">
+								Assigned to me
+							</h2>
+							<Link
+								to="/cases"
+								search={{ view: "assigned_to_me" }}
+								className="inline-flex shrink-0 items-center gap-1.5 text-sm font-medium text-muted-foreground no-underline hover:text-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+							>
+								View all
+								<IconArrowRight className="size-4" />
+							</Link>
+						</div>
 
 						<div className="mt-3 overflow-hidden rounded-2xl border">
 							{cases.length === 0 && (
@@ -140,21 +160,15 @@ function MyOverviewPage() {
 								</Link>
 							))}
 						</div>
-
-						<Link
-							to="/cases"
-							search={{ view: "assigned_to_me" }}
-							className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground no-underline hover:text-foreground focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-						>
-							View all assigned cases
-							<IconArrowRight className="size-4" />
-						</Link>
 					</section>
 				</div>
 			</div>
 		</div>
 	);
 }
+
+const OVERVIEW_LINK_CLASS_NAME =
+	"flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium text-foreground no-underline outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring";
 
 function OverviewLink({
 	to,
@@ -166,11 +180,7 @@ function OverviewLink({
 	icon: React.ReactNode;
 }) {
 	return (
-		<Link
-			to={to}
-			search={{}}
-			className="flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium text-foreground no-underline outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-		>
+		<Link to={to} search={{}} className={OVERVIEW_LINK_CLASS_NAME}>
 			<span className="text-muted-foreground [&>svg]:size-4">{icon}</span>
 			<span>{label}</span>
 			<IconArrowRight className="ml-auto size-4 text-muted-foreground" />

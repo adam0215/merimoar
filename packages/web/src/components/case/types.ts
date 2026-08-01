@@ -15,6 +15,10 @@ export type CaseDetail = NonNullable<
 	FunctionReturnType<typeof api.case.reader.get>
 >;
 
+export type ActiveAgentTaskSummary = CaseDetail["activeAgentTask"];
+
+export type CaseAgentTaskSummary = CaseDetail["agentTasks"][number];
+
 export type CaseCreateOptions = FunctionReturnType<
 	typeof api.case.reader.getCreateOptions
 >;

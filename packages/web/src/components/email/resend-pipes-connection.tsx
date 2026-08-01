@@ -63,7 +63,7 @@ export function ResendPipesConnection({
 
 	return (
 		<Card>
-			<CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-center">
+			<CardHeader className="grid-cols-1 items-center gap-4 sm:grid-cols-[minmax(0,1fr)_auto]">
 				<div className="flex min-w-0 items-center gap-4">
 					<div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted">
 						<ProviderMark provider="resend" />
@@ -75,14 +75,9 @@ export function ResendPipesConnection({
 						</CardDescription>
 					</div>
 				</div>
-				<CardAction className="flex items-center gap-2">
+				<CardAction className="col-start-1 row-start-auto flex flex-wrap items-center gap-2 justify-self-start sm:col-start-2 sm:row-start-1 sm:justify-self-end">
 					<Badge
-						variant="outline"
-						className={
-							connectionState === "connected"
-								? "border-accent bg-accent/10 text-accent"
-								: undefined
-						}
+						variant={connectionState === "connected" ? "success" : "outline"}
 					>
 						{copy.badge}
 					</Badge>

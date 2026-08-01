@@ -1,7 +1,9 @@
 import { IconFolder } from "@tabler/icons-react";
+import { CaseAgentPanel } from "#/components/agents/case-agent-panel.tsx";
 import { CaseEmailThreads } from "#/components/case/case-email-threads.tsx";
 import { CaseEvents } from "#/components/case/case-events.tsx";
 import { CaseHeader } from "#/components/case/case-header.tsx";
+import { CaseInteractionPolicyProvider } from "#/components/case/case-interaction-policy.tsx";
 import { CaseRelationships } from "#/components/case/case-relationships.tsx";
 import type { CaseCreateOptions, CaseDetail } from "#/components/case/types.ts";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
@@ -32,15 +34,32 @@ export function CaseView({
 	}
 
 	return (
-		<div className="h-full overflow-y-auto overscroll-none">
-			<div className="mx-auto w-full max-w-6xl px-5 pt-2 pb-6 md:px-8 md:pb-8">
-				<div className="mb-2 flex justify-end">{closeButton}</div>
-				<CaseHeader detail={detail} members={createOptions?.members ?? []} />
-				<CaseRelationships detail={detail} />
-				<CaseEmailThreads detail={detail} />
-				<CaseEvents caseId={detail.case._id} events={detail.events} />
+		<CaseInteractionPolicyProvider activeAgentTask={detail.activeAgentTask}>
+			<div className="relative h-full">
+				<div className="h-full overflow-y-auto overscroll-none">
+					<div className="relative mx-auto w-full max-w-6xl p-6 pb-28">
+						<div className="mb-2 hidden h-8 items-center justify-end sm:flex">
+							{closeButton}
+						</div>
+						<div aria-readonly={detail.activeAgentTask ? true : undefined}>
+							<CaseHeader
+								detail={detail}
+								members={createOptions?.members ?? []}
+							/>
+							<CaseRelationships detail={detail} />
+							<CaseEmailThreads detail={detail} />
+							<CaseEvents caseId={detail.case._id} events={detail.events} />
+						</div>
+					</div>
+				</div>
+				<CaseAgentPanel
+					caseId={detail.case._id}
+					caseReference={detail.case.reference}
+					activeAgentTask={detail.activeAgentTask}
+					agentTasks={detail.agentTasks}
+				/>
 			</div>
-		</div>
+		</CaseInteractionPolicyProvider>
 	);
 }
 

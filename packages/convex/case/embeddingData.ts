@@ -4,7 +4,7 @@ import {
 	buildEmailThreadEmbeddingInput,
 	caseSuggestionValidator,
 } from "#/case/embeddingModel";
-import { getWorkosUser } from "#/workos";
+import { getWorkosUser, getWorkosUserDisplayName } from "#/workos";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { internalMutation, internalQuery } from "../_generated/server";
@@ -24,11 +24,7 @@ async function getCaseOwnerName(
 		return null;
 	}
 	const user = await getWorkosUser(ctx, member.workosUserId);
-	return user
-		? user.name?.trim() ||
-				[user.firstName, user.lastName].filter(Boolean).join(" ") ||
-				user.email
-		: "Former member";
+	return user ? getWorkosUserDisplayName(user) : "Former member";
 }
 
 export async function removeCaseEmbedding(

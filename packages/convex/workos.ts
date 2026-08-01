@@ -47,6 +47,16 @@ export async function getWorkosUser(
 	});
 }
 
+export function getWorkosUserDisplayName(
+	user: NonNullable<Awaited<ReturnType<typeof getWorkosUser>>>,
+) {
+	return (
+		user.name?.trim() ||
+		[user.firstName, user.lastName].filter(Boolean).join(" ") ||
+		user.email
+	);
+}
+
 async function findOrganization(
 	ctx: WorkosMutationCtx,
 	workosOrganizationId: string,

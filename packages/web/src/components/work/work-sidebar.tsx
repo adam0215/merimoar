@@ -6,11 +6,13 @@ import {
 	IconFolderFilled,
 	IconHome,
 	IconInbox,
+	IconRobot,
 	IconSettings,
 	IconSettingsFilled,
 } from "@tabler/icons-react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import type { FunctionReturnType } from "convex/server";
+import { useQuery } from "convex-helpers/react/cache";
 import {
 	CASE_VIEW_FILTER_OPTIONS,
 	CaseViewIndicator,
@@ -50,17 +52,25 @@ function PrimaryNavigationSidebarGroup({
 	selectedInboxId,
 	overviewIsActive,
 	emailIsActive,
+	agentInboxIsActive,
+	agentInboxCount,
 }: {
 	inboxes: EmailInbox[];
 	selectedInboxId?: string;
 	overviewIsActive: boolean;
 	emailIsActive: boolean;
+	agentInboxIsActive: boolean;
+	agentInboxCount: number;
 }) {
 	const hasInboxes = inboxes.length > 0;
 	const totalUnreadCount = inboxes.reduce(
 		(total, inbox) => total + inbox.unreadCount,
 		0,
 	);
+	const agentInboxAttentionLabel =
+		agentInboxCount === 1
+			? "1 item needs attention"
+			: `${agentInboxCount} items need attention`;
 
 	return (
 		<SidebarGroup>
@@ -79,7 +89,11 @@ function PrimaryNavigationSidebarGroup({
 							<span>My overview</span>
 						</SidebarMenuButton>
 					</SidebarMenuItem>
-					<Collapsible defaultOpen={emailIsActive} render={<SidebarMenuItem />}>
+					<Collapsible
+						key={emailIsActive ? "email-active" : "email-inactive"}
+						defaultOpen={emailIsActive}
+						render={<SidebarMenuItem />}
+					>
 						<div className="relative">
 							<SidebarMenuButton
 								isActive={emailIsActive}
@@ -152,6 +166,30 @@ function PrimaryNavigationSidebarGroup({
 							</CollapsibleContent>
 						)}
 					</Collapsible>
+					<SidebarMenuItem>
+						<SidebarMenuButton
+							isActive={agentInboxIsActive}
+							tooltip={`Agent inbox (${agentInboxAttentionLabel})`}
+							className={cn(
+								"pr-8",
+								agentInboxIsActive
+									? "text-foreground"
+									: "text-muted-foreground",
+							)}
+							render={<Link to="/agent-inbox" search={{}} />}
+						>
+							<IconRobot />
+							<span>Agent inbox</span>
+						</SidebarMenuButton>
+						{agentInboxCount > 0 && (
+							<SidebarMenuBadge
+								className="right-2 top-1/2! translate-x-px -translate-y-1/2 justify-end px-0 font-normal text-muted-foreground text-xs"
+								aria-label={agentInboxAttentionLabel}
+							>
+								{agentInboxCount}
+							</SidebarMenuBadge>
+						)}
+					</SidebarMenuItem>
 				</SidebarMenu>
 			</SidebarGroupContent>
 		</SidebarGroup>
@@ -171,6 +209,7 @@ export function WorkSidebar({
 	const pathname = location.pathname;
 	const overviewIsActive = pathname === "/";
 	const emailIsActive = pathname === "/email";
+	const agentInboxIsActive = pathname === "/agent-inbox";
 	const contactsIsActive = pathname === "/contacts";
 	const casesIsActive = pathname === "/cases";
 	const settingsEmailIsActive = pathname === "/settings/organization/email";
@@ -182,6 +221,12 @@ export function WorkSidebar({
 	const selectedCaseView = isCaseViewFilter(location.search.view)
 		? location.search.view
 		: "all";
+	const pendingApprovals = useQuery(api.agent.reader.listPendingApprovals, {});
+	const agentInboxCount =
+		pendingApprovals?.reduce(
+			(total, group) => total + group.approvals.length,
+			0,
+		) ?? 0;
 
 	return (
 		<Sidebar variant="sidebar" collapsible="icon">
@@ -191,6 +236,8 @@ export function WorkSidebar({
 					selectedInboxId={selectedInboxId}
 					overviewIsActive={overviewIsActive}
 					emailIsActive={emailIsActive}
+					agentInboxIsActive={agentInboxIsActive}
+					agentInboxCount={agentInboxCount}
 				/>
 
 				<SidebarGroup className="pt-4">
@@ -198,6 +245,7 @@ export function WorkSidebar({
 					<SidebarGroupContent>
 						<SidebarMenu>
 							<Collapsible
+								key={casesIsActive ? "cases-active" : "cases-inactive"}
 								defaultOpen={casesIsActive}
 								render={<SidebarMenuItem />}
 							>
@@ -277,6 +325,7 @@ export function WorkSidebar({
 					<SidebarGroupContent>
 						<SidebarMenu>
 							<Collapsible
+								key={settingsIsActive ? "settings-active" : "settings-inactive"}
 								defaultOpen={settingsIsActive}
 								render={<SidebarMenuItem />}
 							>

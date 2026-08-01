@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { CASE_EMBEDDING_DIMENSIONS } from "#/case/embeddingModel";
 import type { CaseViewFilter } from "#/case/model";
+import { canonicalCasePair, MAX_CASE_CASE_RELATIONS } from "#/case/relations";
 import { createTest, syncWorkosUser } from "#/test.setup";
 import { api } from "../_generated/api";
 
@@ -564,6 +565,70 @@ describe("cases", () => {
 			endedAt: expect.any(Number),
 			removedByMemberId: actorMemberId,
 		});
+	});
+
+	it("enforces the related-case limit on both sides of a relation", async () => {
+		const {
+			actor,
+			actorMemberId,
+			base,
+			organizationId,
+			ownerMemberId,
+			relatedCaseId,
+		} = await createFixture();
+		const caseId = await actor.mutation(api.case.mutations.create, {
+			title: "Capacity source",
+			description: "",
+			ownerMemberId,
+			dueAt: null,
+			initialEventBody: "",
+			contactIds: [],
+			entityIds: [],
+			relatedCaseIds: [],
+		});
+		await base.run(async (ctx) => {
+			for (let index = 0; index < MAX_CASE_CASE_RELATIONS; index += 1) {
+				const capacityCaseId = await ctx.db.insert("cases", {
+					organizationId,
+					reference: `CASE-FULL-${index}`,
+					title: `Full-side relation ${index}`,
+					description: "",
+					ownerMemberId,
+					dueAt: null,
+					status: "open",
+					lastActivityAt: index,
+					createdAt: index,
+					updatedAt: index,
+				});
+				await ctx.db.insert("caseCaseRelations", {
+					...canonicalCasePair(relatedCaseId, capacityCaseId),
+					startedAt: index,
+					endedAt: null,
+					addedByMemberId: actorMemberId,
+					removedByMemberId: null,
+				});
+			}
+		});
+
+		const limitMessage = `A case can have at most ${MAX_CASE_CASE_RELATIONS} related cases`;
+		await expect(
+			actor.mutation(api.case.mutations.addCaseRelation, {
+				caseId,
+				relatedCaseId,
+			}),
+		).rejects.toThrow(limitMessage);
+		await expect(
+			actor.mutation(api.case.mutations.create, {
+				title: "Initial relation over capacity",
+				description: "",
+				ownerMemberId,
+				dueAt: null,
+				initialEventBody: "",
+				contactIds: [],
+				entityIds: [],
+				relatedCaseIds: [relatedCaseId],
+			}),
+		).rejects.toThrow(limitMessage);
 	});
 
 	it("preserves relation history and records the removing actor", async () => {

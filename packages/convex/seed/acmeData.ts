@@ -35,6 +35,14 @@ export type AcmeSuggestionEmailSeed = {
 	}[];
 };
 
+export type AcmeAgentDemoEntitySeed = {
+	identifier: string;
+	displayName: string;
+	address: string;
+	customer: string;
+	operationalContext: string;
+};
+
 export const ACME_INBOX = {
 	displayName: "Acme AB — seeddata",
 	address: "kundservice@seed.acme.invalid",
@@ -490,7 +498,7 @@ export const ACME_SUGGESTION_EMAILS: AcmeSuggestionEmailSeed[] = [
 		messages: [
 			{
 				hoursAfterStart: 0,
-				body: "Hej,\n\nRadiatorerna i köket och hallen blir glödheta, men i sovrummen och vardagsrummet är de helt kalla. Manometern vid centralen ser normal ut. Vad kan göra att värmen bara når vissa delar av huset?\n\nSara",
+				body: "Hej,\n\nRadiatorerna i köket och hallen blir glödheta, men i sovrummen och vardagsrummet är de helt kalla. Manometern vid centralen ser normal ut. Det gäller Tallstigen 8, anläggning FV-1172. Vad kan göra att värmen bara når vissa delar av huset?\n\nSara",
 			},
 			{
 				hoursAfterStart: 5,
@@ -524,7 +532,7 @@ export const ACME_SUGGESTION_EMAILS: AcmeSuggestionEmailSeed[] = [
 		messages: [
 			{
 				hoursAfterStart: 0,
-				body: "Hej support,\n\nSedan i fredags saknas framledningstemperaturen i vår energiöversikt. Alla andra mätpunkter uppdateras och gatewayen är online, men just sensor T1 står som frånkopplad. Går den att starta om på distans?",
+				body: "Hej support,\n\nSedan i fredags saknas framledningstemperaturen i vår energiöversikt. Alla andra mätpunkter uppdateras och gatewayen är online, men just sensor T1 står som frånkopplad. Det gäller Kv. Kronan, anläggning FV-3901. Går den att starta om på distans?",
 			},
 		],
 	},
@@ -539,8 +547,35 @@ export const ACME_SUGGESTION_EMAILS: AcmeSuggestionEmailSeed[] = [
 		messages: [
 			{
 				hoursAfterStart: 0,
-				body: "Hej,\n\nFlera boende säger att duschvattnet tappar temperaturen efter klockan åtta på kvällen. På morgonen är det ordentligt varmt, men under kvällens högsta belastning blir det bara ljummet i alla tre trapphus. Kan ni kontrollera våra driftvärden?\n\nAmir, Brf Fyren",
+				body: "Hej,\n\nFlera boende säger att duschvattnet tappar temperaturen efter klockan åtta på kvällen. På morgonen är det ordentligt varmt, men under kvällens högsta belastning blir det bara ljummet i alla tre trapphus. Det gäller Brf Fyren, anläggning FV-2048. Kan ni kontrollera våra driftvärden?\n\nAmir, Brf Fyren",
 			},
 		],
+	},
+];
+
+export const ACME_AGENT_DEMO_ENTITIES: AcmeAgentDemoEntitySeed[] = [
+	{
+		identifier: "FV-1172",
+		displayName: "Tallstigen 8",
+		address: "Tallstigen 8, 123 45 Sundhamn",
+		customer: "Sara Norén",
+		operationalContext:
+			"Leveransvärdena är normala. Ojämn radiatorvärme ligger sannolikt i fastighetens sekundärsystem efter avlämningspunkten.",
+	},
+	{
+		identifier: "FV-3901",
+		displayName: "Kv. Kronan",
+		address: "Kronvägen 14, 123 47 Sundhamn",
+		customer: "Kuststad Förvaltning",
+		operationalContext:
+			"Gateway GW-39 är online. Sensor T1 slutade rapportera 16:42 i fredags och senaste batterivarningen var 8 procent.",
+	},
+	{
+		identifier: "FV-2048",
+		displayName: "Brf Fyren",
+		address: "Fyrgatan 12–18, 123 48 Sundhamn",
+		customer: "Brf Fyren",
+		operationalContext:
+			"Tre trapphus delar varmvattenberedning. Kvällens effekttopp sammanfaller med att varmvattenprioriteringen inte aktiveras i reglercentral RC-2.",
 	},
 ];

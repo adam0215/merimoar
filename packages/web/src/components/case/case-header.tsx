@@ -9,18 +9,20 @@ import {
 	IconCalendar,
 	IconCheck,
 	IconClock,
+	IconInfoCircle,
 	IconLoader2,
+	IconLock,
 } from "@tabler/icons-react";
 import { useMutation } from "convex/react";
 import { sv } from "date-fns/locale";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as v from "valibot";
 import { CaseDescriptionEditor } from "#/components/case/case-description-editor.tsx";
+import { useCurrentCaseInteractionPolicy } from "#/components/case/case-interaction-policy.tsx";
 import {
 	CASE_STATUS_OPTIONS,
 	CaseStatusDot,
 } from "#/components/case/case-status.tsx";
-import { formatShortDate } from "#/components/case/format.ts";
 import type { CaseCreateOptions, CaseDetail } from "#/components/case/types.ts";
 import { Button } from "#/components/ui/button.tsx";
 import { Calendar } from "#/components/ui/calendar.tsx";
@@ -40,6 +42,7 @@ import {
 import { Textarea } from "#/components/ui/textarea.tsx";
 import { showAppNotification } from "#/lib/app-notifications.ts";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
+import { formatShortDate } from "#/lib/date-format.ts";
 import { formatDateInput, parseDateInput } from "#/lib/date-input.ts";
 
 const editableCaseFieldsSchema = v.object({
@@ -73,8 +76,8 @@ export function CaseHeader({
 	members: CaseCreateOptions["members"];
 }) {
 	const updateCase = useMutation(api.case.mutations.update);
-	const initialForm = useMemo(() => caseToForm(detail.case), [detail.case]);
-	const [form, setForm] = useState(initialForm);
+	const { readOnly, readOnlyReason } = useCurrentCaseInteractionPolicy();
+	const [form, setForm] = useState(() => caseToForm(detail.case));
 	const [saveState, setSaveState] = useState<SaveState>({ kind: "saved" });
 	const latestFormRef = useRef(form);
 	const lastSavedFormRef = useRef(form);
@@ -97,20 +100,23 @@ export function CaseHeader({
 
 	useEffect(() => {
 		const serverForm = caseToForm(detail.case);
-		if (
-			formsMatch(latestFormRef.current, lastSavedFormRef.current) &&
-			!formsMatch(serverForm, lastSavedFormRef.current)
-		) {
+		const localFormIsPristine = formsMatch(
+			latestFormRef.current,
+			lastSavedFormRef.current,
+		);
+		const serverFormChanged = !formsMatch(serverForm, lastSavedFormRef.current);
+		if (readOnly || (localFormIsPristine && serverFormChanged)) {
 			latestFormRef.current = serverForm;
 			lastSavedFormRef.current = serverForm;
 			lastQueuedSignatureRef.current = formSignature(serverForm);
 			setForm(serverForm);
 			setSaveState({ kind: "saved" });
 		}
-	}, [detail.case]);
+	}, [detail.case, readOnly]);
 
 	const queueSave = useCallback(
 		(snapshot: CaseForm) => {
+			if (readOnly) return;
 			const signature = formSignature(snapshot);
 			if (signature === lastQueuedSignatureRef.current) {
 				return;
@@ -194,7 +200,7 @@ export function CaseHeader({
 				}
 			});
 		},
-		[detail.case._id, detail.case.reference, updateCase],
+		[detail.case._id, detail.case.reference, readOnly, updateCase],
 	);
 
 	useEffect(() => {
@@ -207,15 +213,17 @@ export function CaseHeader({
 				description: pendingForm.description,
 			});
 			if (
+				!readOnly &&
 				pendingValidation.success &&
 				!formsMatch(pendingForm, lastSavedFormRef.current)
 			) {
 				queueSave(pendingForm);
 			}
 		};
-	}, [queueSave]);
+	}, [queueSave, readOnly]);
 
 	useEffect(() => {
+		if (readOnly) return;
 		if (formsMatch(form, lastSavedFormRef.current)) {
 			if (
 				lastQueuedSignatureRef.current !== null &&
@@ -240,7 +248,7 @@ export function CaseHeader({
 		}, 700);
 
 		return () => window.clearTimeout(timeout);
-	}, [form, queueSave, validation]);
+	}, [form, queueSave, readOnly, validation]);
 
 	function retrySave() {
 		if (!validation.success) {
@@ -270,8 +278,27 @@ export function CaseHeader({
 						<IconClock className="size-3.5" />
 						Updated {formatShortDate(detail.case.lastActivityAt)}
 					</span>
+					{detail.agentTasks.length > 0 && (
+						<>
+							<span className="hidden size-1 rounded-full bg-border sm:block" />
+							<span className="inline-flex items-center gap-1.5">
+								<IconInfoCircle className="size-3.5" />
+								Worked on by agent
+							</span>
+						</>
+					)}
 				</div>
-				<SaveStatus state={saveState} onRetry={retrySave} />
+				{readOnly ? (
+					<span
+						className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+						title={readOnlyReason}
+					>
+						<IconLock className="size-3.5" />
+						Agent owned · read only
+					</span>
+				) : (
+					<SaveStatus state={saveState} onRetry={retrySave} />
+				)}
 			</div>
 
 			<Field
@@ -297,8 +324,9 @@ export function CaseHeader({
 					}}
 					placeholder="Case title"
 					aria-invalid={Boolean(titleError) || undefined}
+					disabled={readOnly}
 					rows={1}
-					className="-mx-2 min-h-0 resize-none overflow-hidden rounded-lg border-transparent bg-transparent px-2 py-1 text-2xl leading-tight font-semibold tracking-tight shadow-none hover:bg-muted/40 focus-visible:bg-background md:text-3xl"
+					className="-mx-2 min-h-0 resize-none overflow-hidden rounded-lg border-transparent bg-transparent px-2 py-1 text-2xl leading-tight font-semibold tracking-tight shadow-none hover:bg-muted focus-visible:bg-background disabled:cursor-not-allowed disabled:opacity-70 md:text-3xl"
 				/>
 				{titleError && <FieldError>{titleError}</FieldError>}
 			</Field>
@@ -315,6 +343,7 @@ export function CaseHeader({
 							})),
 						]}
 						value={form.ownerMemberId ?? "unassigned"}
+						disabled={readOnly}
 						onValueChange={(value) =>
 							setForm((current) => ({
 								...current,
@@ -340,6 +369,7 @@ export function CaseHeader({
 				</Field>
 				<DeadlineField
 					value={form.dueDate}
+					disabled={readOnly}
 					onChange={(dueDate) =>
 						setForm((current) => ({ ...current, dueDate }))
 					}
@@ -349,6 +379,7 @@ export function CaseHeader({
 					<Select
 						items={CASE_STATUS_SELECT_ITEMS}
 						value={form.status}
+						disabled={readOnly}
 						onValueChange={(value) => {
 							if (value) {
 								setForm((current) => ({
@@ -385,6 +416,7 @@ export function CaseHeader({
 							}))
 						}
 						invalid={Boolean(descriptionError)}
+						readOnly={readOnly}
 					/>
 					{descriptionError && <FieldError>{descriptionError}</FieldError>}
 				</Field>
@@ -448,9 +480,11 @@ function SaveStatus({
 function DeadlineField({
 	value,
 	onChange,
+	disabled,
 }: {
 	value: string;
 	onChange: (value: string) => void;
+	disabled: boolean;
 }) {
 	const [open, setOpen] = useState(false);
 	const timestamp = value ? parseDateInput(value) : Number.NaN;
@@ -468,6 +502,7 @@ function DeadlineField({
 						<Button
 							type="button"
 							variant="outline"
+							disabled={disabled}
 							className="w-full justify-start text-left font-normal"
 						/>
 					}

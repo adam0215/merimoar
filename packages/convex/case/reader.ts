@@ -4,55 +4,101 @@ import {
 	paginationOptsValidator,
 } from "convex/server";
 import { v } from "convex/values";
+import { agentTaskStatusValidator } from "#/agent/model";
 import { requireActor } from "#/auth/access";
+import {
+	activeAgentTaskSummaryValidator,
+	getActiveAgentTaskSummaryForCase,
+} from "#/case/agentOwnership";
 import {
 	listActiveEmailThreadRelationsForCase,
 	MAX_EMAIL_THREADS_PER_CASE,
 } from "#/case/emailRelations";
-import { type CaseView, caseViewFilterValidator } from "#/case/model";
+import {
+	type CaseView,
+	caseEventDocumentValidator,
+	caseViewFilterValidator,
+} from "#/case/model";
 import {
 	listActiveCaseRelations,
 	MAX_CASE_CONTACT_RELATIONS,
 	MAX_CASE_ENTITY_RELATIONS,
 } from "#/case/relations";
+import { emailMessageDocumentValidator } from "#/email/model";
 import {
 	MAX_ENTITIES_PER_TYPE,
 	MAX_ENTITY_TYPES_PER_ORGANIZATION,
 } from "#/entity/constants";
-import { getWorkosUser } from "#/workos";
-import type { Doc, Id } from "../_generated/dataModel";
+import { getWorkosUser, getWorkosUserDisplayName } from "#/workos";
+import type { Doc, Id, TableNames } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { query } from "../_generated/server";
+import schema from "../schema";
+
+function systemFields<TableName extends TableNames>(tableName: TableName) {
+	return { _id: v.id(tableName), _creationTime: v.number() };
+}
+
+const caseDocumentValidator = schema.tables.cases.validator.extend(
+	systemFields("cases"),
+);
+const organizationMemberDocumentValidator =
+	schema.tables.organizationMembers.validator.extend(
+		systemFields("organizationMembers"),
+	);
+const resolvedMemberValidator = organizationMemberDocumentValidator.extend({
+	name: v.string(),
+	email: v.string(),
+});
+const contactDocumentValidator = schema.tables.contacts.validator.extend(
+	systemFields("contacts"),
+);
+const entityDocumentValidator = schema.tables.entities.validator.extend(
+	systemFields("entities"),
+);
+const entityTypeDocumentValidator = schema.tables.entityTypes.validator.extend(
+	systemFields("entityTypes"),
+);
+const caseContactRelationDocumentValidator =
+	schema.tables.caseContactRelations.validator.extend(
+		systemFields("caseContactRelations"),
+	);
+const caseEntityRelationDocumentValidator =
+	schema.tables.caseEntityRelations.validator.extend(
+		systemFields("caseEntityRelations"),
+	);
+const caseCaseRelationDocumentValidator =
+	schema.tables.caseCaseRelations.validator.extend(
+		systemFields("caseCaseRelations"),
+	);
+const caseEmailThreadRelationDocumentValidator =
+	schema.tables.caseEmailThreadRelations.validator.extend(
+		systemFields("caseEmailThreadRelations"),
+	);
+const emailThreadDocumentValidator =
+	schema.tables.emailThreads.validator.extend(systemFields("emailThreads"));
 
 const MAX_CASE_EVENTS = 100;
+const MAX_AGENT_TASKS_PER_CASE = 100;
 const MAX_ORGANIZATION_MEMBERS = 50;
 const MAX_CONTACT_OPTIONS = 50;
 const MAX_CASE_OPTIONS = 100;
 const RECENT_CASES_LIMIT = 5;
 const OVERVIEW_ASSIGNED_CASE_COUNT_LIMIT = 100;
 
-function getUserName(
-	user: NonNullable<Awaited<ReturnType<typeof getWorkosUser>>>,
-) {
-	return (
-		user.name?.trim() ||
-		[user.firstName, user.lastName].filter(Boolean).join(" ") ||
-		user.email
-	);
-}
-
 async function resolveMember(
 	ctx: Pick<QueryCtx, "db" | "runQuery">,
+	organizationId: Id<"organizations">,
 	memberId: Id<"organizationMembers">,
 ) {
 	const member = await ctx.db.get(memberId);
-	if (!member) {
+	if (!member || member.organizationId !== organizationId) {
 		return null;
 	}
 	const user = await getWorkosUser(ctx, member.workosUserId);
 	return {
 		...member,
-		name: user ? getUserName(user) : "Former member",
+		name: user ? getWorkosUserDisplayName(user) : "Former member",
 		email: user?.email ?? "",
 	};
 }
@@ -67,9 +113,22 @@ async function resolveActiveMember(
 	}
 	return {
 		...member,
-		name: getUserName(user),
+		name: getWorkosUserDisplayName(user),
 		email: user.email,
 	};
+}
+
+async function resolveEmailMessage(
+	ctx: Pick<QueryCtx, "db">,
+	organizationId: Id<"organizations">,
+	messageId: Id<"emailMessages">,
+) {
+	const message = await ctx.db.get(messageId);
+	const thread = message ? await ctx.db.get(message.threadId) : null;
+	return thread?.organizationId === organizationId &&
+		message?.inboxId === thread.inboxId
+		? message
+		: null;
 }
 
 async function paginateCasesForView(
@@ -166,7 +225,11 @@ export const list = query({
 				result.page.map(async (caseRecord) => ({
 					case: caseRecord,
 					owner: caseRecord.ownerMemberId
-						? await resolveMember(ctx, caseRecord.ownerMemberId)
+						? await resolveMember(
+								ctx,
+								workspace.organization._id,
+								caseRecord.ownerMemberId,
+							)
 						: null,
 				})),
 			),
@@ -217,6 +280,54 @@ export const get = query({
 	args: {
 		caseId: v.string(),
 	},
+	returns: v.union(
+		v.object({
+			case: caseDocumentValidator,
+			owner: v.union(resolvedMemberValidator, v.null()),
+			events: v.array(
+				v.object({
+					event: caseEventDocumentValidator,
+					author: v.union(resolvedMemberValidator, v.null()),
+					emailMessage: v.union(emailMessageDocumentValidator, v.null()),
+				}),
+			),
+			contacts: v.array(
+				v.object({
+					relation: caseContactRelationDocumentValidator,
+					contact: contactDocumentValidator,
+				}),
+			),
+			entities: v.array(
+				v.object({
+					relation: caseEntityRelationDocumentValidator,
+					entity: entityDocumentValidator,
+					entityType: entityTypeDocumentValidator,
+				}),
+			),
+			relatedCases: v.array(
+				v.object({
+					relation: caseCaseRelationDocumentValidator,
+					relatedCase: caseDocumentValidator,
+				}),
+			),
+			emailThreads: v.array(
+				v.object({
+					relation: caseEmailThreadRelationDocumentValidator,
+					thread: emailThreadDocumentValidator,
+					latestMessage: v.union(emailMessageDocumentValidator, v.null()),
+				}),
+			),
+			agentTasks: v.array(
+				v.object({
+					taskId: v.id("agentTasks"),
+					status: agentTaskStatusValidator,
+					requestedAt: v.number(),
+				}),
+			),
+			activeAgentTask: v.union(activeAgentTaskSummaryValidator, v.null()),
+		}),
+		v.null(),
+	),
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
 		const caseId = ctx.db.normalizeId("cases", args.caseId);
@@ -233,6 +344,13 @@ export const get = query({
 		}
 
 		const caseRelationsPromise = listActiveCaseRelations(ctx, caseRecord._id);
+		const agentTasksPromise = ctx.db
+			.query("agentTasks")
+			.withIndex("by_anchor_case_id_and_requested_at", (index) =>
+				index.eq("anchorCaseId", caseRecord._id),
+			)
+			.order("desc")
+			.take(MAX_AGENT_TASKS_PER_CASE);
 
 		const [
 			owner,
@@ -240,9 +358,14 @@ export const get = query({
 			contactRelations,
 			entityRelations,
 			emailThreadRelations,
+			activeAgentTask,
 		] = await Promise.all([
 			caseRecord.ownerMemberId
-				? resolveMember(ctx, caseRecord.ownerMemberId)
+				? resolveMember(
+						ctx,
+						workspace.organization._id,
+						caseRecord.ownerMemberId,
+					)
 				: null,
 			ctx.db
 				.query("caseEvents")
@@ -264,6 +387,11 @@ export const get = query({
 				)
 				.take(MAX_CASE_ENTITY_RELATIONS),
 			listActiveEmailThreadRelationsForCase(ctx, caseRecord._id),
+			getActiveAgentTaskSummaryForCase(
+				ctx,
+				caseRecord._id,
+				workspace.organization._id,
+			),
 		]);
 		const caseRelations = await caseRelationsPromise;
 		const relatedCasesPromise = Promise.all(
@@ -284,29 +412,64 @@ export const get = query({
 					if (!thread || thread.organizationId !== workspace.organization._id) {
 						return { relation, thread: null, latestMessage: null };
 					}
+					const latestMessage = thread.latestMessageId
+						? await ctx.db.get(thread.latestMessageId)
+						: null;
 					return {
 						relation,
 						thread,
-						latestMessage: thread?.latestMessageId
-							? await ctx.db.get(thread.latestMessageId)
-							: null,
+						latestMessage:
+							latestMessage?.threadId === thread._id &&
+							latestMessage.inboxId === thread.inboxId
+								? latestMessage
+								: null,
 					};
 				}),
 		);
 
 		const [resolvedEvents, contacts, entities] = await Promise.all([
 			Promise.all(
-				events.map(async (event) => ({
-					event,
-					author: event.createdByMemberId
-						? await resolveMember(ctx, event.createdByMemberId)
-						: null,
-					emailMessage:
+				events.map(async (event) => {
+					if (
 						"type" in event &&
-						(event.type === "inbound_email" || event.type === "outbound_email")
-							? await ctx.db.get(event.emailMessageId)
+						(event.type === "agent_note" || event.type === "agent_change")
+					) {
+						const task = await ctx.db.get(event.agentTaskId);
+						const anchorCase = task
+							? await ctx.db.get(task.anchorCaseId)
+							: null;
+						if (
+							!task ||
+							task.organizationId !== workspace.organization._id ||
+							!anchorCase ||
+							anchorCase.organizationId !== task.organizationId
+						) {
+							throw new Error(
+								"Case event references an agent task from another organization",
+							);
+						}
+					}
+					return {
+						event,
+						author: event.createdByMemberId
+							? await resolveMember(
+									ctx,
+									workspace.organization._id,
+									event.createdByMemberId,
+								)
 							: null,
-				})),
+						emailMessage:
+							"type" in event &&
+							(event.type === "inbound_email" ||
+								event.type === "outbound_email")
+								? await resolveEmailMessage(
+										ctx,
+										workspace.organization._id,
+										event.emailMessageId,
+									)
+								: null,
+					};
+				}),
 			),
 			Promise.all(
 				contactRelations.map(async (relation) => ({
@@ -324,21 +487,46 @@ export const get = query({
 				}),
 			),
 		]);
-		const [relatedCases, emailThreads] = await Promise.all([
+		const [relatedCases, emailThreads, agentTasks] = await Promise.all([
 			relatedCasesPromise,
 			emailThreadsPromise,
+			agentTasksPromise,
 		]);
 
 		return {
 			case: caseRecord,
 			owner,
 			events: resolvedEvents,
-			contacts: contacts.filter((item) => item.contact !== null),
-			entities: entities.filter(
-				(item) => item.entity !== null && item.entityType !== null,
+			contacts: contacts.flatMap(({ relation, contact }) =>
+				contact?.organizationId === workspace.organization._id
+					? [{ relation, contact }]
+					: [],
 			),
-			relatedCases: relatedCases.filter((item) => item.relatedCase !== null),
-			emailThreads: emailThreads.filter((item) => item.thread !== null),
+			entities: entities.flatMap(({ relation, entity, entityType }) => {
+				if (
+					!entity ||
+					!entityType ||
+					entityType.organizationId !== workspace.organization._id
+				) {
+					return [];
+				}
+				return [{ relation, entity, entityType }];
+			}),
+			relatedCases: relatedCases.flatMap(({ relation, relatedCase }) =>
+				relatedCase?.organizationId === workspace.organization._id
+					? [{ relation, relatedCase }]
+					: [],
+			),
+			emailThreads: emailThreads.flatMap(
+				({ relation, thread, latestMessage }) =>
+					thread ? [{ relation, thread, latestMessage }] : [],
+			),
+			agentTasks: agentTasks.map((task) => ({
+				taskId: task._id,
+				status: task.status,
+				requestedAt: task.requestedAt,
+			})),
+			activeAgentTask,
 		};
 	},
 });

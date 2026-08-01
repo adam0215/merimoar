@@ -14,6 +14,7 @@ import { Route as AuthErrorRouteImport } from './routes/auth-error'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
 import { Route as AuthenticatedagentsAgentsRouteImport } from './routes/_authenticated/(agents)/agents'
+import { Route as AuthenticatedworkAgentInboxRouteImport } from './routes/_authenticated/(work)/agent-inbox'
 import { Route as AuthenticatedworkCasesRouteImport } from './routes/_authenticated/(work)/cases'
 import { Route as AuthenticatedworkContactsRouteImport } from './routes/_authenticated/(work)/contacts'
 import { Route as AuthenticatedworkEmailRouteImport } from './routes/_authenticated/(work)/email'
@@ -46,6 +47,12 @@ const AuthenticatedagentsAgentsRoute =
   AuthenticatedagentsAgentsRouteImport.update({
     id: '/(agents)/agents',
     path: '/agents',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedworkAgentInboxRoute =
+  AuthenticatedworkAgentInboxRouteImport.update({
+    id: '/(work)/agent-inbox',
+    path: '/agent-inbox',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedworkCasesRoute = AuthenticatedworkCasesRouteImport.update({
@@ -97,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/auth-error': typeof AuthErrorRoute
   '/profile': typeof AuthenticatedProfileRoute
   '/agents': typeof AuthenticatedagentsAgentsRoute
+  '/agent-inbox': typeof AuthenticatedworkAgentInboxRoute
   '/cases': typeof AuthenticatedworkCasesRoute
   '/contacts': typeof AuthenticatedworkContactsRoute
   '/email': typeof AuthenticatedworkEmailRoute
@@ -111,6 +119,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/': typeof AuthenticatedIndexRoute
   '/agents': typeof AuthenticatedagentsAgentsRoute
+  '/agent-inbox': typeof AuthenticatedworkAgentInboxRoute
   '/cases': typeof AuthenticatedworkCasesRoute
   '/contacts': typeof AuthenticatedworkContactsRoute
   '/email': typeof AuthenticatedworkEmailRoute
@@ -127,6 +136,7 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/(agents)/agents': typeof AuthenticatedagentsAgentsRoute
+  '/_authenticated/(work)/agent-inbox': typeof AuthenticatedworkAgentInboxRoute
   '/_authenticated/(work)/cases': typeof AuthenticatedworkCasesRoute
   '/_authenticated/(work)/contacts': typeof AuthenticatedworkContactsRoute
   '/_authenticated/(work)/email': typeof AuthenticatedworkEmailRoute
@@ -143,6 +153,7 @@ export interface FileRouteTypes {
     | '/auth-error'
     | '/profile'
     | '/agents'
+    | '/agent-inbox'
     | '/cases'
     | '/contacts'
     | '/email'
@@ -157,6 +168,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/'
     | '/agents'
+    | '/agent-inbox'
     | '/cases'
     | '/contacts'
     | '/email'
@@ -172,6 +184,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/'
     | '/_authenticated/(agents)/agents'
+    | '/_authenticated/(work)/agent-inbox'
     | '/_authenticated/(work)/cases'
     | '/_authenticated/(work)/contacts'
     | '/_authenticated/(work)/email'
@@ -225,6 +238,13 @@ declare module '@tanstack/react-router' {
       path: '/agents'
       fullPath: '/agents'
       preLoaderRoute: typeof AuthenticatedagentsAgentsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/(work)/agent-inbox': {
+      id: '/_authenticated/(work)/agent-inbox'
+      path: '/agent-inbox'
+      fullPath: '/agent-inbox'
+      preLoaderRoute: typeof AuthenticatedworkAgentInboxRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/(work)/cases': {
@@ -290,6 +310,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedagentsAgentsRoute: typeof AuthenticatedagentsAgentsRoute
+  AuthenticatedworkAgentInboxRoute: typeof AuthenticatedworkAgentInboxRoute
   AuthenticatedworkCasesRoute: typeof AuthenticatedworkCasesRoute
   AuthenticatedworkContactsRoute: typeof AuthenticatedworkContactsRoute
   AuthenticatedworkEmailRoute: typeof AuthenticatedworkEmailRoute
@@ -301,6 +322,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedagentsAgentsRoute: AuthenticatedagentsAgentsRoute,
+  AuthenticatedworkAgentInboxRoute: AuthenticatedworkAgentInboxRoute,
   AuthenticatedworkCasesRoute: AuthenticatedworkCasesRoute,
   AuthenticatedworkContactsRoute: AuthenticatedworkContactsRoute,
   AuthenticatedworkEmailRoute: AuthenticatedworkEmailRoute,

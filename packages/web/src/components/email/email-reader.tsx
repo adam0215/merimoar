@@ -20,9 +20,14 @@ import {
 import type { FunctionReturnType } from "convex/server";
 import { useQuery } from "convex-helpers/react/cache";
 import { useEffect, useMemo, useState } from "react";
+import {
+	CaseInteractionPolicyProvider,
+	useCurrentCaseInteractionPolicy,
+} from "#/components/case/case-interaction-policy.tsx";
 import type { CaseCreateOptions } from "#/components/case/types.ts";
 import { EmailCaseActions } from "#/components/email/email-case-actions.tsx";
 import { EmailComposer } from "#/components/email/email-composer.tsx";
+import type { EmailThreadDetail } from "#/components/email/email-types.ts";
 import { parseEmailReply } from "#/components/email/parse-email-reply";
 import { ThreadUnreadDot } from "#/components/email/thread-unread-dot.tsx";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
@@ -46,12 +51,9 @@ import { cn } from "#/lib/utils.ts";
 type ThreadListItem = FunctionReturnType<
 	typeof api.email.reader.listThreads
 >["page"][number];
-type ThreadDetails = NonNullable<
-	FunctionReturnType<typeof api.email.reader.getThread>
->;
-type Message = ThreadDetails["messages"][number];
+type Message = EmailThreadDetail["messages"][number];
 type Participant = Message["from"];
-type SendStatus = ThreadDetails["sendStatuses"][number];
+type SendStatus = EmailThreadDetail["sendStatuses"][number];
 
 function optimisticallySetThreadUnread(
 	localStore: OptimisticLocalStore,
@@ -205,7 +207,8 @@ function findRepliedToMessage(message: Message, messages: Message[]) {
 	return undefined;
 }
 
-function ThreadEmailComposer({ thread }: { thread: ThreadDetails }) {
+function ThreadEmailComposer({ thread }: { thread: EmailThreadDetail }) {
+	const { readOnly } = useCurrentCaseInteractionPolicy();
 	const saveDraft = useMutation(api.email.outbound.saveDraft);
 	const queueReply = useMutation(api.email.outbound.queueReply);
 	const outboundConfiguration = thread.inbox.outbound;
@@ -222,7 +225,7 @@ function ThreadEmailComposer({ thread }: { thread: ThreadDetails }) {
 	const [isSending, setIsSending] = useState(false);
 
 	async function sendReply() {
-		if (!body.trim() || isSending) {
+		if (readOnly || !body.trim() || isSending) {
 			return;
 		}
 
@@ -267,6 +270,11 @@ function ThreadEmailComposer({ thread }: { thread: ThreadDetails }) {
 
 	return (
 		<div className="pointer-events-auto flex w-full flex-col">
+			{readOnly && (
+				<div className="mx-4 rounded-t-xl border-x border-t border-foreground/5 bg-muted px-3 py-1.5 text-xs text-muted-foreground dark:border-foreground/10">
+					Take over the linked case to reply or edit its draft.
+				</div>
+			)}
 			{!outboundConfigured && (
 				<div className="mx-4 flex items-center justify-between gap-3 rounded-t-xl border-x border-t border-foreground/5 bg-popover/60 px-3 py-1 text-xs backdrop-blur-sm dark:border-foreground/10">
 					<span className="text-muted-foreground">
@@ -292,12 +300,14 @@ function ThreadEmailComposer({ thread }: { thread: ThreadDetails }) {
 				}}
 				onSend={() => void sendReply()}
 				senderAddress={outboundConfiguration?.address}
-				disabled={!outboundConfigured || isSending}
+				disabled={readOnly || !outboundConfigured || isSending}
 				isSending={isSending}
 				placeholder={
-					outboundConfigured
-						? "Write a reply…"
-						: "Choose an outbound integration to reply"
+					readOnly
+						? "Take over the linked case to reply"
+						: outboundConfigured
+							? "Write a reply…"
+							: "Choose an outbound integration to reply"
 				}
 				className="w-full"
 			/>
@@ -312,6 +322,7 @@ function OutboundSendFailure({
 	messageId: Id<"emailMessages">;
 	send: SendStatus;
 }) {
+	const { readOnly } = useCurrentCaseInteractionPolicy();
 	const retryFailedSend = useMutation(api.email.outbound.retryFailedSend);
 	const [isRetrying, setIsRetrying] = useState(false);
 	const canRetry =
@@ -320,6 +331,10 @@ function OutboundSendFailure({
 		send.failure.kind !== "permanent";
 
 	async function retry() {
+		if (readOnly) {
+			return;
+		}
+
 		setIsRetrying(true);
 		try {
 			await retryFailedSend({ messageId });
@@ -355,7 +370,10 @@ function OutboundSendFailure({
 					type="button"
 					variant="outline"
 					size="xs"
-					disabled={isRetrying}
+					disabled={readOnly || isRetrying}
+					title={
+						readOnly ? "Take over the linked case before retrying" : undefined
+					}
 					className="border-destructive/20 bg-background/50 text-destructive hover:bg-background"
 					onClick={() => void retry()}
 				>
@@ -589,7 +607,7 @@ export function ThreadView({
 	createOptions,
 	closeButton,
 }: {
-	thread: ThreadDetails | null | undefined;
+	thread: EmailThreadDetail | null | undefined;
 	createOptions: CaseCreateOptions | undefined;
 	closeButton: React.ReactNode;
 }) {
@@ -656,170 +674,176 @@ export function ThreadView({
 	);
 
 	return (
-		<div className="relative h-full">
-			<div
-				role="toolbar"
-				aria-label="Thread actions"
-				className="absolute inset-x-0 top-0 z-30 flex h-8 items-center justify-between border-b bg-background px-4"
-			>
-				<Tooltip>
-					<TooltipTrigger
-						render={
-							<Button
-								variant="ghost"
-								size="icon-sm"
-								onClick={() => void toggleUnread()}
-								aria-label={
-									thread.thread.isUnread
-										? "Mark thread as read"
-										: "Mark thread as unread"
-								}
-							/>
-						}
-					>
-						{thread.thread.isUnread ? <IconMailOpened /> : <IconMail />}
-					</TooltipTrigger>
-					<TooltipContent side="bottom">
-						{thread.thread.isUnread ? "Mark as read" : "Mark as unread"}
-					</TooltipContent>
-				</Tooltip>
-				{closeButton}
-			</div>
-			<ScrollArea
-				className="h-full"
-				viewportProps={{ className: "overscroll-none" }}
-			>
+		<CaseInteractionPolicyProvider
+			activeAgentTask={thread.activeCase?.activeAgentTask ?? null}
+		>
+			<div className="relative h-full">
 				<div
-					className={cn(
-						"w-full px-6 pt-14",
-						thread.inbox.outbound ? "pb-28 md:pb-32" : "pb-36 md:pb-40",
-					)}
+					role="toolbar"
+					aria-label="Thread actions"
+					className="absolute inset-x-0 top-0 z-30 flex h-8 items-center justify-between border-b bg-background px-4"
 				>
-					<div className="divide-y">
-						{thread.messages.map((message) => {
-							const repliedToMessage = findRepliedToMessage(
-								message,
-								thread.messages,
-							);
-							const { authoredText, quotedText } = parseEmailReply(
-								message.textBody,
-							);
-							const sendStatus = sendStatusByMessageId.get(message._id);
-
-							return (
-								<article
-									key={message._id}
-									id={`email-message-${message._id}`}
-									className="scroll-mt-6 py-8 first:pt-0 last:pb-0"
-								>
-									<header className="min-w-0">
-										<div className="min-w-0">
-											<div className="flex min-w-0 items-center justify-between gap-4">
-												<div className="flex min-w-0 items-center">
-													<p className="truncate text-sm font-medium">
-														{participantLabel(message.from)}
-													</p>
-													{message.direction === "inbound" && (
-														<Tooltip>
-															<TooltipTrigger
-																render={
-																	<Button
-																		nativeButton={false}
-																		variant="ghost"
-																		size="icon-xs"
-																		className="text-muted-foreground"
-																		render={
-																			<Link
-																				to="/contacts"
-																				search={{
-																					contact: message.senderContactId,
-																				}}
-																				aria-label={`Open contact ${participantLabel(message.from)}`}
-																			/>
-																		}
-																	/>
-																}
-															>
-																<IconAddressBook />
-															</TooltipTrigger>
-															<TooltipContent side="top">
-																Open contact
-															</TooltipContent>
-														</Tooltip>
-													)}
-												</div>
-												<time className="shrink-0 text-xs text-muted-foreground">
-													{formatMessageDate(message.sentAt)}
-												</time>
-											</div>
-											<p className="truncate text-xs text-muted-foreground">
-												{message.from.address}
-											</p>
-											<p className="text-xs">
-												<span className="text-foreground">To: </span>
-												<span className="break-all text-muted-foreground">
-													{message.to.map(participantLabel).join(", ")}
-													{message.cc.length > 0 &&
-														`, cc ${message.cc.map(participantLabel).join(", ")}`}
-												</span>
-											</p>
-										</div>
-									</header>
-									<h1 className="mt-5 text-balance text-xl font-semibold tracking-tight">
-										{message.subject || "(No subject)"}
-									</h1>
-									{repliedToMessage && (
-										<a
-											href={`#email-message-${repliedToMessage._id}`}
-											className="mt-1 inline-block text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-										>
-											Reply to {participantLabel(repliedToMessage.from)} at{" "}
-											{formatMessageDate(repliedToMessage.sentAt)}
-										</a>
-									)}
-									<div className="mt-6 text-sm leading-7 text-foreground/90">
-										{authoredText && (
-											<div className="whitespace-pre-wrap">{authoredText}</div>
-										)}
-										{quotedText && (
-											<Collapsible>
-												<CollapsibleTrigger
-													type="button"
-													className="group mt-4 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-												>
-													<IconChevronDown className="size-3.5 transition-transform group-data-panel-open:rotate-180" />
-													<span className="group-data-panel-open:hidden">
-														Show quoted text
-													</span>
-													<span className="hidden group-data-panel-open:inline">
-														Hide quoted text
-													</span>
-												</CollapsibleTrigger>
-												<CollapsibleContent>
-													<div className="mt-3 whitespace-pre-wrap border-l pl-4 text-xs leading-6 text-muted-foreground">
-														{quotedText}
-													</div>
-												</CollapsibleContent>
-											</Collapsible>
-										)}
-									</div>
-									{message.direction === "outbound" &&
-										sendStatus?.status === "failed" && (
-											<OutboundSendFailure
-												messageId={message._id}
-												send={sendStatus}
-											/>
-										)}
-								</article>
-							);
-						})}
-					</div>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button
+									variant="ghost"
+									size="icon-sm"
+									onClick={() => void toggleUnread()}
+									aria-label={
+										thread.thread.isUnread
+											? "Mark thread as read"
+											: "Mark thread as unread"
+									}
+								/>
+							}
+						>
+							{thread.thread.isUnread ? <IconMailOpened /> : <IconMail />}
+						</TooltipTrigger>
+						<TooltipContent side="bottom">
+							{thread.thread.isUnread ? "Mark as read" : "Mark as unread"}
+						</TooltipContent>
+					</Tooltip>
+					{closeButton}
 				</div>
-			</ScrollArea>
-			<div className="pointer-events-none absolute inset-x-4 bottom-4 z-30 mx-auto flex max-w-3xl flex-col items-end gap-3 sm:inset-x-6 sm:bottom-6">
-				<EmailCaseActions thread={thread} createOptions={createOptions} />
-				<ThreadEmailComposer key={thread.thread._id} thread={thread} />
+				<ScrollArea
+					className="h-full"
+					viewportProps={{ className: "overscroll-none" }}
+				>
+					<div
+						className={cn(
+							"w-full px-6 pt-14",
+							thread.inbox.outbound ? "pb-28 md:pb-32" : "pb-36 md:pb-40",
+						)}
+					>
+						<div className="divide-y">
+							{thread.messages.map((message) => {
+								const repliedToMessage = findRepliedToMessage(
+									message,
+									thread.messages,
+								);
+								const { authoredText, quotedText } = parseEmailReply(
+									message.textBody,
+								);
+								const sendStatus = sendStatusByMessageId.get(message._id);
+
+								return (
+									<article
+										key={message._id}
+										id={`email-message-${message._id}`}
+										className="scroll-mt-6 py-8 first:pt-0 last:pb-0"
+									>
+										<header className="min-w-0">
+											<div className="min-w-0">
+												<div className="flex min-w-0 items-center justify-between gap-4">
+													<div className="flex min-w-0 items-center">
+														<p className="truncate text-sm font-medium">
+															{participantLabel(message.from)}
+														</p>
+														{message.direction === "inbound" && (
+															<Tooltip>
+																<TooltipTrigger
+																	render={
+																		<Button
+																			nativeButton={false}
+																			variant="ghost"
+																			size="icon-xs"
+																			className="text-muted-foreground"
+																			render={
+																				<Link
+																					to="/contacts"
+																					search={{
+																						contact: message.senderContactId,
+																					}}
+																					aria-label={`Open contact ${participantLabel(message.from)}`}
+																				/>
+																			}
+																		/>
+																	}
+																>
+																	<IconAddressBook />
+																</TooltipTrigger>
+																<TooltipContent side="top">
+																	Open contact
+																</TooltipContent>
+															</Tooltip>
+														)}
+													</div>
+													<time className="shrink-0 text-xs text-muted-foreground">
+														{formatMessageDate(message.sentAt)}
+													</time>
+												</div>
+												<p className="truncate text-xs text-muted-foreground">
+													{message.from.address}
+												</p>
+												<p className="text-xs">
+													<span className="text-foreground">To: </span>
+													<span className="break-all text-muted-foreground">
+														{message.to.map(participantLabel).join(", ")}
+														{message.cc.length > 0 &&
+															`, cc ${message.cc.map(participantLabel).join(", ")}`}
+													</span>
+												</p>
+											</div>
+										</header>
+										<h1 className="mt-5 text-balance text-xl font-semibold tracking-tight">
+											{message.subject || "(No subject)"}
+										</h1>
+										{repliedToMessage && (
+											<a
+												href={`#email-message-${repliedToMessage._id}`}
+												className="mt-1 inline-block text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+											>
+												Reply to {participantLabel(repliedToMessage.from)} at{" "}
+												{formatMessageDate(repliedToMessage.sentAt)}
+											</a>
+										)}
+										<div className="mt-6 text-sm leading-7 text-foreground/90">
+											{authoredText && (
+												<div className="whitespace-pre-wrap">
+													{authoredText}
+												</div>
+											)}
+											{quotedText && (
+												<Collapsible>
+													<CollapsibleTrigger
+														type="button"
+														className="group mt-4 inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+													>
+														<IconChevronDown className="size-3.5 transition-transform group-data-panel-open:rotate-180" />
+														<span className="group-data-panel-open:hidden">
+															Show quoted text
+														</span>
+														<span className="hidden group-data-panel-open:inline">
+															Hide quoted text
+														</span>
+													</CollapsibleTrigger>
+													<CollapsibleContent>
+														<div className="mt-3 whitespace-pre-wrap border-l pl-4 text-xs leading-6 text-muted-foreground">
+															{quotedText}
+														</div>
+													</CollapsibleContent>
+												</Collapsible>
+											)}
+										</div>
+										{message.direction === "outbound" &&
+											sendStatus?.status === "failed" && (
+												<OutboundSendFailure
+													messageId={message._id}
+													send={sendStatus}
+												/>
+											)}
+									</article>
+								);
+							})}
+						</div>
+					</div>
+				</ScrollArea>
+				<div className="pointer-events-none absolute inset-x-4 bottom-4 z-30 mx-auto flex max-w-3xl flex-col items-end gap-3 sm:inset-x-6 sm:bottom-6">
+					<EmailCaseActions thread={thread} createOptions={createOptions} />
+					<ThreadEmailComposer key={thread.thread._id} thread={thread} />
+				</div>
 			</div>
-		</div>
+		</CaseInteractionPolicyProvider>
 	);
 }

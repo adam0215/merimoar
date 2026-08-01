@@ -25,6 +25,7 @@ import type { DataModel } from "./dataModel.js";
  * Typesafe environment variables declared in `convex.config.ts`.
  */
 type Env = {
+  readonly AGENT_RUNTIME_SECRET: string | undefined;
   readonly GEMINI_API_KEY: string;
   readonly WORKOS_API_HOSTNAME: string | undefined;
   readonly WORKOS_API_KEY: string;
