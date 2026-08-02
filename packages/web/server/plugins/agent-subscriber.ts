@@ -1,12 +1,9 @@
 import { getDiagnosticErrorMessage, startAgentRunSubscriber } from "@merimoar/agent";
 import { definePlugin } from "nitro";
 import { createConvexAgentSubscriberHost } from "../agent/convex-runtime";
+import { agentRuntimeProcessState as processState } from "../agent/runtime-state";
 
 type AgentRunSubscriber = ReturnType<typeof startAgentRunSubscriber>;
-
-const processState = globalThis as typeof globalThis & {
-	merimoarAgentRunSubscriber?: AgentRunSubscriber;
-};
 
 export default definePlugin(async (nitro) => {
 	await processState.merimoarAgentRunSubscriber?.stop();

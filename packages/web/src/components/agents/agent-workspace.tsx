@@ -1,13 +1,14 @@
 import { defaultAgentDefinition } from "@merimoar/agent/manifest";
 import { api } from "@merimoar/convex/api";
 import {
+	IconAlertCircle,
 	IconAlertTriangle,
 	IconCircleCheck,
 	IconClock,
 	IconHandStop,
 	IconPlayerPlay,
 } from "@tabler/icons-react";
-import { Link } from "@tanstack/react-router";
+import { getRouteApi, Link } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { useState } from "react";
 import {
@@ -23,6 +24,7 @@ import {
 } from "#/components/agents/agent-types.ts";
 import { TakeOverTaskDialog } from "#/components/agents/take-over-task-dialog.tsx";
 import { OverviewMetric } from "#/components/overview-metric.tsx";
+import { Alert, AlertDescription } from "#/components/ui/alert.tsx";
 import {
 	Select,
 	SelectContent,
@@ -42,6 +44,8 @@ const TASK_FILTERS: { value: TaskFilter; label: string }[] = [
 	{ value: "finished", label: "Finished" },
 ];
 
+const authenticatedRoute = getRouteApi("/_authenticated");
+
 function taskMatchesFilter(status: AgentTaskStatus, filter: TaskFilter) {
 	if (filter === "current") return status === "active";
 	if (filter === "attention") {
@@ -56,13 +60,23 @@ function taskMatchesFilter(status: AgentTaskStatus, filter: TaskFilter) {
 }
 
 export function AgentOverview() {
+	const { agentRuntimeAvailable } = authenticatedRoute.useLoaderData();
 	const tasks = useQuery(api.agent.reader.listWorkspaceTasks, {});
 	const currentTasks =
 		tasks?.filter((task) => taskRetainsAgentOwnership(task.task.status)) ?? [];
 	const counts = getTaskCounts(tasks ?? []);
 
 	return (
-		<AgentWorkspacePage title="Overview">
+		<AgentWorkspacePage>
+			{!agentRuntimeAvailable && (
+				<Alert variant="destructive" className="max-w-xl" role="status">
+					<IconAlertCircle />
+					<AlertDescription>
+						Agent is temporarily unavailable. Try again later.
+					</AlertDescription>
+				</Alert>
+			)}
+			<h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
 			<section aria-labelledby="task-overview-heading">
 				<h2 id="task-overview-heading" className="font-semibold">
 					At a glance
@@ -130,7 +144,8 @@ export function AgentTasks() {
 			.sort(compareWorkspaceTasks) ?? [];
 
 	return (
-		<AgentWorkspacePage title="Tasks">
+		<AgentWorkspacePage>
+			<h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
 			<section aria-label="Tasks">
 				<div className="flex justify-end">
 					<Select
@@ -165,7 +180,8 @@ export function AgentTasks() {
 
 export function AgentToolsPage() {
 	return (
-		<AgentWorkspacePage title="Tools">
+		<AgentWorkspacePage>
+			<h1 className="text-2xl font-semibold tracking-tight">Tools</h1>
 			<AgentTools />
 		</AgentWorkspacePage>
 	);
@@ -191,19 +207,10 @@ function AgentTools() {
 	);
 }
 
-function AgentWorkspacePage({
-	title,
-	children,
-}: {
-	title: string;
-	children: React.ReactNode;
-}) {
+function AgentWorkspacePage({ children }: { children: React.ReactNode }) {
 	return (
 		<div className="h-full overflow-y-auto">
-			<div className="w-full space-y-8 p-6">
-				<h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-				{children}
-			</div>
+			<div className="w-full space-y-8 p-6">{children}</div>
 		</div>
 	);
 }
