@@ -24,7 +24,7 @@
 		"@biomejs/biome": "2.4.5",
 		"@edge-runtime/vm": "^5.0.0",
 		"@types/node": "^22.10.2",
-		"convex": "^1.42.3",
+		"convex": "^1.43.0",
 		"oxlint": "^1.75.0",
 		"oxlint-tailwindcss": "^1.6.0",
 		"typescript": "^6.0.2",
