@@ -108,7 +108,22 @@ export async function finalizeClaimedRun(
 			now,
 		});
 	}
+	if (update?.status === "waiting_for_approval") {
+		console.info("agent_task_waiting_for_approval", {
+			taskId: args.task._id,
+			runId: args.run._id,
+			agentKey: args.task.agentKey,
+			approvalKind: "task",
+		});
+	}
 	const currentTask = await ctx.db.get(taskAfterApprovalReplay._id);
+	console.info("agent_run_finished", {
+		runId: args.run._id,
+		taskId: args.task._id,
+		agentKey: args.task.agentKey,
+		runStatus: "completed",
+		taskStatus: update?.status ?? currentTask?.status ?? args.task.status,
+	});
 	if (
 		currentTask?.status === "waiting_for_approval" &&
 		currentTask.activeApprovalIds.length > 0

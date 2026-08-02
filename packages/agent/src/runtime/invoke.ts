@@ -106,7 +106,6 @@ export async function invokeAgentRun(input: {
 	};
 
 	try {
-		console.log("Invoking agent task with key:", input.claim.agentKey);
 		const transcript = await input.runtime.getTranscript();
 		if (transcript.selectedStatusItemId) {
 			await input.runtime.finishRun();

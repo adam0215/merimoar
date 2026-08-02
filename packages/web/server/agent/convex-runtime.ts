@@ -8,7 +8,7 @@ import {
 } from "@merimoar/agent";
 import { api } from "@merimoar/convex/api";
 import type { Id, TableNames } from "@merimoar/convex/data-model";
-import { ConvexClient } from "convex/browser";
+import { ConvexClient, type ConnectionState } from "convex/browser";
 
 const RUN_LEASE_DURATION_MS = 60_000;
 
@@ -42,12 +42,45 @@ export function createConvexAgentSubscriberHost(
 
 	return {
 		subscribeToRunnableRuns(onSnapshot, onSubscriptionError) {
-			return client.onUpdate(
+			let wasConnected: boolean | undefined;
+			let previousRetryCount = 0;
+			const reportConnectionState = (state: ConnectionState) => {
+				if (state.isWebSocketConnected && wasConnected !== true) {
+					console.info(
+						state.connectionCount > 1
+							? "agent_subscription_reconnected"
+							: "agent_subscription_connected",
+						{ connectionCount: state.connectionCount },
+					);
+				} else if (!state.isWebSocketConnected && wasConnected === true) {
+					console.warn("agent_subscription_disconnected", {
+						connectionCount: state.connectionCount,
+					});
+				}
+				if (
+					!state.isWebSocketConnected &&
+					state.connectionRetries > previousRetryCount
+				) {
+					console.warn("agent_subscription_reconnect_attempt", {
+						attempt: state.connectionRetries,
+					});
+				}
+				wasConnected = state.isWebSocketConnected;
+				previousRetryCount = state.connectionRetries;
+			};
+			const unsubscribeFromConnectionState =
+				client.subscribeToConnectionState(reportConnectionState);
+			reportConnectionState(client.connectionState());
+			const unsubscribeFromRuns = client.onUpdate(
 				api.agent.runtime.observeNextQueuedRun,
 				{ runtimeSecret: configuration.runtimeSecret },
 				onSnapshot,
 				onSubscriptionError,
 			);
+			return () => {
+				unsubscribeFromRuns();
+				unsubscribeFromConnectionState();
+			};
 		},
 		async claimNextRun(claimToken) {
 			const claim = await client.mutation(api.agent.runtime.claimNextRun, {

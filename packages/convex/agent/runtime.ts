@@ -140,9 +140,10 @@ export const claimNextRun = mutation({
 
 		const leaseExpiresAt = now + args.leaseDurationMs;
 		const leaseGeneration = candidate.run.leaseGeneration + 1;
+		const attempt = candidate.run.attemptCount + 1;
 		await ctx.db.replace("agentRuns", candidate.run._id, {
 			...agentRunBaseFields(candidate.run),
-			attemptCount: candidate.run.attemptCount + 1,
+			attemptCount: attempt,
 			leaseGeneration,
 			status: "running",
 			claimToken: args.claimToken,
@@ -158,6 +159,12 @@ export const claimNextRun = mutation({
 				leaseGeneration,
 			},
 		);
+		console.info("agent_run_claimed", {
+			runId: candidate.run._id,
+			taskId: candidate.task._id,
+			agentKey: candidate.task.agentKey,
+			attempt,
+		});
 		return {
 			runId: candidate.run._id,
 			turnId: candidate.turn._id,
@@ -665,6 +672,14 @@ export const recordToolApprovalRequest = mutation({
 			...(args.signature ? { signature: clampDebugText(args.signature) } : {}),
 		});
 		await addActiveApproval(ctx, task, approvalItemId, task.activeRunIds);
+		if (task.status !== "waiting_for_approval") {
+			console.info("agent_task_waiting_for_approval", {
+				taskId: task._id,
+				runId: args.runId,
+				agentKey: task.agentKey,
+				approvalKind: "tool",
+			});
+		}
 		return approvalItemId;
 	},
 });
@@ -855,6 +870,14 @@ export const failRun = mutation({
 				});
 			}
 		}
+		const currentTask = await ctx.db.get(taskAfterApprovalReplay._id);
+		console.error("agent_run_finished", {
+			runId: run._id,
+			taskId: task._id,
+			agentKey: task.agentKey,
+			runStatus: "failed",
+			taskStatus: currentTask?.status ?? taskAfterApprovalReplay.status,
+		});
 		return "failed";
 	},
 });

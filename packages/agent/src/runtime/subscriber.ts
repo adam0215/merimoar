@@ -91,7 +91,16 @@ export function startAgentRunSubscriber(
 		let invocation: Promise<void>;
 		invocation = Promise.resolve()
 			.then(() => host.invokeRun(claim, abortController.signal))
-			.catch(reportError)
+			.catch((error) => {
+				console.error("agent_runtime_error", {
+					operation: "invoke",
+					runId: claim.runId,
+					taskId: claim.taskId,
+					agentKey: claim.agentKey,
+					errorMessage: getDiagnosticErrorMessage(error),
+				});
+				reportError(error);
+			})
 			.finally(() => {
 				activeInvocations.delete(invocation);
 				if (drainRequested) requestDrain();
@@ -99,13 +108,19 @@ export function startAgentRunSubscriber(
 		activeInvocations.set(invocation, { abortController, claim });
 	};
 
-	const scheduleClaimRetry = () => {
+	const scheduleClaimRetry = (error: unknown) => {
 		if (stopped || claimRetry) return;
 		claimFailureCount += 1;
 		const delay = Math.min(
 			claimRetryInitialMs * 2 ** Math.min(claimFailureCount - 1, 20),
 			claimRetryMaxMs,
 		);
+		console.warn("agent_runtime_error", {
+			operation: "claim",
+			attempt: claimFailureCount,
+			retryInMs: delay,
+			errorMessage: getDiagnosticErrorMessage(error),
+		});
 		let resolveRetry = () => {};
 		const promise = new Promise<void>((resolve) => {
 			resolveRetry = resolve;
@@ -130,7 +145,7 @@ export function startAgentRunSubscriber(
 				} catch (error) {
 					reportError(error);
 					drainRequested = true;
-					scheduleClaimRetry();
+					scheduleClaimRetry(error);
 					return;
 				}
 				claimFailureCount = 0;

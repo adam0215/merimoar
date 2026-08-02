@@ -75,6 +75,15 @@ export const requeueExpiredRun = internalMutation({
 					endedAt: now,
 					outcome: { status: "failed", error },
 				});
+				console.error("agent_run_finished", {
+					runId: run._id,
+					taskId: task._id,
+					agentKey: task.agentKey,
+					runStatus: "failed",
+					taskStatus: "failed",
+					reason: "lease_exhausted",
+					attempt: run.attemptCount,
+				});
 				return null;
 			}
 			await ctx.db.replace("agentRuns", run._id, {

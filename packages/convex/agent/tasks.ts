@@ -372,6 +372,12 @@ export async function queueApprovalContinuationIfReady(
 			continuationRunId: continuation.runId,
 		});
 	}
+	console.info("agent_task_resumed_after_approval", {
+		taskId: task._id,
+		runId: continuation.runId,
+		agentKey: task.agentKey,
+		approvalCount: decisions.length,
+	});
 	return continuation;
 }
 
