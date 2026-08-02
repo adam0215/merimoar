@@ -32,7 +32,7 @@ describe("agent ownership and projections", () => {
 		}));
 		expect(state.task).toMatchObject({
 			anchorCaseId: fixture.caseId,
-			agentKey: "agentV1",
+			agentKey: "agent-v1",
 			status: "active",
 			requestedBy: "member",
 			requestedByMemberId: fixture.memberId,
@@ -108,7 +108,7 @@ describe("agent ownership and projections", () => {
 
 		const expectedSummary = {
 			taskId: claim.taskId,
-			agentKey: "agentV1",
+			agentKey: "agent-v1",
 			status: "active",
 			runStatus: "running",
 			activity: {
@@ -142,7 +142,7 @@ describe("agent ownership and projections", () => {
 			)?.activeAgentTask,
 		).toEqual({
 			taskId: claim.taskId,
-			agentKey: "agentV1",
+			agentKey: "agent-v1",
 			status: "waiting",
 			reason: "Waiting for the customer response.",
 		});
@@ -186,7 +186,7 @@ describe("agent ownership and projections", () => {
 			)?.activeAgentTask,
 		).toEqual({
 			taskId: claim.taskId,
-			agentKey: "agentV1",
+			agentKey: "agent-v1",
 			status: "waiting_for_approval",
 			pendingApprovalCount: 1,
 		});
@@ -520,7 +520,7 @@ describe("agent ownership and projections", () => {
 		});
 		expect(caseDetail?.activeAgentTask).toEqual({
 			taskId: second.taskId,
-			agentKey: "agentV1",
+			agentKey: "agent-v1",
 			status: "active",
 			runStatus: "queued",
 			activity: null,

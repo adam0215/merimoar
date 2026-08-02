@@ -434,7 +434,7 @@ describe("agent approvals", () => {
 		});
 		expect(task?.task).toMatchObject({
 			status: "waiting_for_approval",
-			agentKey: "agentV1",
+			agentKey: "agent-v1",
 		});
 		expect(task?.task).not.toHaveProperty("activeRunIds");
 		expect(task?.task).not.toHaveProperty("activeApprovalIds");

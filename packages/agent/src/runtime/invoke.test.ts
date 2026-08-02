@@ -143,7 +143,7 @@ describe("invokeAgentRun", () => {
 		});
 
 		await invokeAgentRun({
-			claim: createClaim(),
+			claim: createClaim("other-agent"),
 			runtime,
 			model,
 		});
@@ -430,13 +430,13 @@ describe("invokeAgentRun", () => {
 	});
 });
 
-function createClaim() {
+function createClaim(agentKey = "agent-v1") {
 	return {
 		runId: "run-1",
 		turnId: "turn-1",
 		taskId: "task-1",
 		anchorCaseId: "case-1",
-		agentKey: "agentV1",
+		agentKey,
 		claimToken: "claim-1",
 	};
 }

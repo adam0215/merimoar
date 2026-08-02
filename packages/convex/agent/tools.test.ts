@@ -368,35 +368,36 @@ describe("agent tools and projections", () => {
 		]);
 	});
 
-	it("terminalizes a persisted unsupported agent key instead of requeueing it", async () => {
+	it("claims a task with another persisted agent key", async () => {
 		const fixture = await createFixture();
 		const delegation = await fixture.actor.mutation(
 			api.agent.tasks.delegateCase,
 			{ caseId: fixture.caseId, input: "Run an old persisted agent." },
 		);
 		await fixture.base.run(async (ctx) => {
-			await ctx.db.patch(delegation.taskId, { agentKey: "agentV0" });
+			await ctx.db.patch(delegation.taskId, { agentKey: "other-agent" });
 		});
 
-		expect(
-			await fixture.base.mutation(api.agent.runtime.claimNextRun, {
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: crypto.randomUUID(),
-				leaseDurationMs: 60_000,
-			}),
-		).toBeNull();
+		const claim = await fixture.base.mutation(api.agent.runtime.claimNextRun, {
+			runtimeSecret: RUNTIME_SECRET,
+			claimToken: crypto.randomUUID(),
+			leaseDurationMs: 60_000,
+		});
 		const state = await fixture.base.run(async (ctx) => ({
 			task: await ctx.db.get(delegation.taskId),
 			run: await ctx.db.get(delegation.runId),
 		}));
+		expect(claim).toMatchObject({
+			runId: delegation.runId,
+			taskId: delegation.taskId,
+			agentKey: "other-agent",
+		});
 		expect(state.task).toMatchObject({
-			status: "failed",
-			error: expect.stringContaining("unsupported agent version"),
-			ownershipReleasedAt: expect.any(Number),
+			status: "active",
+			ownershipReleasedAt: null,
 		});
 		expect(state.run).toMatchObject({
-			status: "failed",
-			error: expect.stringContaining("unsupported agent version"),
+			status: "running",
 		});
 	});
 

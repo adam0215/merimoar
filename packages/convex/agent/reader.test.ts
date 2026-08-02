@@ -47,7 +47,7 @@ describe("agent workspace readers", () => {
 			await ctx.db.insert("agentTasks", {
 				organizationId: fixture.organizationId,
 				anchorCaseId: fixture.otherCaseId,
-				agentKey: "agentV1",
+				agentKey: "agent-v1",
 				status: "completed",
 				requestedAt: 300,
 				requestedBy: "member",
@@ -114,7 +114,7 @@ describe("agent workspace readers", () => {
 				await ctx.db.insert("agentTasks", {
 					organizationId,
 					anchorCaseId,
-					agentKey: "agentV1",
+					agentKey: "agent-v1",
 					status: "active",
 					requestedAt,
 					requestedBy: "member",

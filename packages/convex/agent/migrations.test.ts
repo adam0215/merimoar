@@ -35,7 +35,7 @@ async function createMigrationFixture(
 					? organizationId
 					: conflictingOrganizationId,
 			anchorCaseId,
-			agentKey: "agentV1",
+			agentKey: "agent-v1",
 			requestedAt: 100,
 			requestedBy: "member",
 			ownershipReleasedAt: 200,

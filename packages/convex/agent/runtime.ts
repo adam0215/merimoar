@@ -7,7 +7,6 @@ import {
 	agentRunBaseFields,
 	agentRunUsageValidator,
 	agentTaskStatusUpdateValidator,
-	DEFAULT_AGENT_KEY,
 } from "#/agent/model";
 import { finalizeClaimedRun } from "#/agent/runFinalization";
 import {
@@ -57,15 +56,6 @@ async function findClaimableRun(ctx: MutationCtx, now: number) {
 			await cancelUnclaimableRun(ctx, run, now);
 			continue;
 		}
-		if (owner.task.agentKey !== DEFAULT_AGENT_KEY) {
-			await failUnsupportedAgentRun(ctx, {
-				run,
-				task: owner.task,
-				turn: owner.turn,
-				now,
-			});
-			continue;
-		}
 		return { run, ...owner };
 	}
 	return null;
@@ -97,38 +87,6 @@ async function cancelUnclaimableRun(
 		status: "cancelled",
 		endedAt: now,
 		reason: "The task ended before this run could continue.",
-	});
-}
-
-async function failUnsupportedAgentRun(
-	ctx: MutationCtx,
-	args: {
-		run: Doc<"agentRuns">;
-		task: Doc<"agentTasks">;
-		turn: Doc<"agentTurns">;
-		now: number;
-	},
-) {
-	const error =
-		"This task uses an unsupported agent version. Delegate it again with the current agent.";
-	await ctx.db.insert("agentItems", {
-		turnId: args.turn._id,
-		sequence: await nextItemSequence(ctx, args.turn._id),
-		createdAt: args.now,
-		kind: "error",
-		runId: args.run._id,
-		message: error,
-	});
-	await ctx.db.replace("agentRuns", args.run._id, {
-		...agentRunBaseFields(args.run),
-		status: "failed",
-		endedAt: args.now,
-		error,
-	});
-	await terminalizeAgentTask(ctx, {
-		task: args.task,
-		endedAt: args.now,
-		outcome: { status: "failed", error },
 	});
 }
 

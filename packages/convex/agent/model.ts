@@ -1,6 +1,8 @@
 import { type Infer, v } from "convex/values";
 
-export const DEFAULT_AGENT_KEY = "agentV1";
+// Agent keys are metadata only. Runtime implementations must not use them as
+// compatibility or version gates.
+export const DEFAULT_AGENT_KEY = "agent-v1";
 
 export const agentTaskStatusValidator = v.union(
 	v.literal("active"),

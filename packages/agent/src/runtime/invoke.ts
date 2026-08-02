@@ -1,6 +1,5 @@
 import type { LanguageModel } from "ai";
 import { createMerimoarAgent } from "../agent";
-import { defaultAgentDefinition } from "../manifest";
 import {
 	AGENT_RUN_SHUTDOWN,
 	type AgentContext,
@@ -107,9 +106,7 @@ export async function invokeAgentRun(input: {
 	};
 
 	try {
-		if (input.claim.agentKey !== defaultAgentDefinition.key) {
-			throw new Error(`Unknown agent definition: ${input.claim.agentKey}`);
-		}
+		console.log("Invoking agent task with key:", input.claim.agentKey);
 		const transcript = await input.runtime.getTranscript();
 		if (transcript.selectedStatusItemId) {
 			await input.runtime.finishRun();

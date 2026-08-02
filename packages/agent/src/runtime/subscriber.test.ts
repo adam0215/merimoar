@@ -11,7 +11,7 @@ function createClaim(index: number): ClaimedRun {
 		turnId: `turn-${index}`,
 		taskId: `task-${index}`,
 		anchorCaseId: `case-${index}`,
-		agentKey: "agentV1",
+		agentKey: "agent-v1",
 		claimToken: `claim-${index}`,
 	};
 }
