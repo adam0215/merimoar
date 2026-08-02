@@ -4,6 +4,7 @@ import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 import { AppShell } from "#/components/app-shell";
 import { AppSplashScreen } from "#/components/app-splash-screen";
 import { TooltipProvider } from "#/components/ui/tooltip";
+import { loadAvailableOrganizations } from "#/integrations/workos/organization-functions.ts";
 import WorkspaceAccessGate from "#/integrations/workos/workspace-access-gate";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -14,18 +15,21 @@ export const Route = createFileRoute("/_authenticated")({
 				href: `/api/auth/sign-in?returnPathname=${encodeURIComponent(location.href)}`,
 			});
 		}
-		return auth;
+		const availableOrganizations = await loadAvailableOrganizations();
+		return { ...auth, availableOrganizations };
 	},
 	component: AuthenticatedLayout,
 });
 
 function AuthenticatedLayout() {
+	const { availableOrganizations } = Route.useLoaderData();
+
 	return (
 		<>
 			<Authenticated>
 				<WorkspaceAccessGate>
 					<TooltipProvider>
-						<AppShell>
+						<AppShell organizations={availableOrganizations}>
 							<Outlet />
 						</AppShell>
 					</TooltipProvider>

@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequestUrl } from "@tanstack/react-start/server";
 import { getAuth } from "@workos/authkit-tanstack-react-start";
-import { WorkOS } from "@workos-inc/node";
+import type { WorkOS } from "@workos-inc/node";
+import { createWorkOSClient } from "#/integrations/workos/client.ts";
 import {
 	createEmailSettingsReturnTo,
 	isResendAuthorizationRejected,
@@ -12,17 +13,6 @@ import {
 
 const RESEND_DOMAINS_URL = "https://api.resend.com/domains";
 const RESEND_HEALTH_CHECK_TIMEOUT_MS = 5_000;
-
-function createWorkOSClient() {
-	const apiKey = process.env.WORKOS_API_KEY;
-	if (!apiKey) {
-		throw new Error("Missing WORKOS_API_KEY");
-	}
-	return new WorkOS(apiKey, {
-		apiHostname: process.env.WORKOS_API_HOSTNAME,
-		clientId: process.env.WORKOS_CLIENT_ID,
-	});
-}
 
 async function getPipesSubject() {
 	const auth = await getAuth();

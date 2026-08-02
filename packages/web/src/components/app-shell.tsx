@@ -11,6 +11,7 @@ import {
 import { AgentsSidebar } from "#/components/agents/agents-sidebar.tsx";
 import { AppNotificationCenter } from "#/components/app-notification-center.tsx";
 import { MerimoarLogo } from "#/components/merimoar-logo.tsx";
+import { OrganizationSwitcher } from "#/components/organization-switcher.tsx";
 import {
 	SidebarInset,
 	SidebarProvider,
@@ -24,6 +25,7 @@ import {
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
 import { WorkSidebar } from "#/components/work/work-sidebar.tsx";
+import type { AvailableOrganization } from "#/integrations/workos/organizations.ts";
 import { cn } from "#/lib/utils.ts";
 
 function getPageTitle(pathname: string, agentView: AgentView) {
@@ -55,7 +57,13 @@ function isAgentsPath(pathname: string) {
 	return pathname === "/agents" || pathname.startsWith("/agents/");
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+	children,
+	organizations,
+}: {
+	children: React.ReactNode;
+	organizations: AvailableOrganization[];
+}) {
 	const location = useRouterState({
 		select: (state) => state.location,
 	});
@@ -89,6 +97,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 				pathname={location.pathname}
 				agentView={agentView}
 				inboxAddresses={inboxAddresses}
+				organizations={organizations}
 			/>
 			<SidebarInset className="h-[calc(100svh-3.5rem)] min-h-0 overflow-hidden">
 				{children}
@@ -101,10 +110,12 @@ function AppHeader({
 	pathname,
 	agentView,
 	inboxAddresses,
+	organizations,
 }: {
 	pathname: string;
 	agentView: AgentView;
 	inboxAddresses: string[];
+	organizations: AvailableOrganization[];
 }) {
 	const { state } = useSidebar();
 	const activeArea = isAgentsPath(pathname) ? "agents" : "work";
@@ -113,7 +124,7 @@ function AppHeader({
 		<header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center border-b bg-background">
 			<div
 				className={cn(
-					"flex h-full w-20 shrink-0 items-center justify-between pr-0 pl-4 transition-[width] duration-200",
+					"flex h-full w-20 shrink-0 items-center gap-1 pr-0 pl-2 transition-[width,padding] duration-200",
 					state === "expanded" && "md:w-(--sidebar-width) md:px-4",
 				)}
 			>
@@ -121,11 +132,16 @@ function AppHeader({
 					to="/"
 					search={{}}
 					aria-label="Merimoar"
-					className="flex size-8 items-center justify-center text-foreground"
+					className="flex size-8 shrink-0 items-center justify-center text-foreground"
 				>
 					<MerimoarLogo className="size-4" />
 				</Link>
-				<SidebarTrigger />
+				{state === "expanded" && (
+					<div className="hidden min-w-0 flex-1 md:block">
+						<OrganizationSwitcher organizations={organizations} />
+					</div>
+				)}
+				<SidebarTrigger className="ml-auto shrink-0" />
 			</div>
 			<div
 				className={cn(
