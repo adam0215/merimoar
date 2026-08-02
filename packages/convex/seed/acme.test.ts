@@ -1,423 +1,435 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { insertAcmeDataset } from "#/seed/acme";
 import {
-	ACME_AGENT_DEMO_ENTITIES,
-	ACME_INBOX,
-	ACME_SUGGESTION_EMAILS,
+	ACME_CASE_RELATIONS,
+	ACME_CASES,
+	ACME_CONTACTS,
+	ACME_DATASET_VERSION,
+	ACME_DEPLOYMENT_URL,
+	ACME_EMAIL_THREADS,
+	ACME_ENTITIES,
+	ACME_ENTITY_TYPES,
+	ACME_WORKOS_ORGANIZATION_ID,
+	assertAcmeDatasetIsInternallyConsistent,
+	calculateAcmeCreationCounts,
+	calculateAcmeDatasetFingerprint,
 } from "#/seed/acmeData";
 import { createTest } from "#/test.setup";
 import { internal } from "../_generated/api";
 
-describe("Acme AB seed data", () => {
-	it("creates idempotent unlinked email threads for suggestion testing", async () => {
-		const test = createTest();
-		const organizationId = await test.run(async (ctx) => {
-			const organizationId = await ctx.db.insert("organizations", {
-				name: "Test organization",
-				workosOrganizationId: "org_suggestion_seed",
-				active: true,
-			});
-			await ctx.db.insert("organizationMembers", {
-				organizationId,
-				workosUserId: "user_suggestion_seed_owner",
-				active: true,
-			});
-			return organizationId;
+const REPLACEMENT_CONFIRMATION =
+	"replace-acme-residential-management-v3-after-reviewed-preview" as const;
+
+beforeEach(() => {
+	vi.stubEnv("CONVEX_CLOUD_URL", ACME_DEPLOYMENT_URL);
+});
+
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
+
+async function createAcmeFixture() {
+	const test = createTest();
+	const ids = await test.run(async (ctx) => {
+		const organizationId = await ctx.db.insert("organizations", {
+			name: "Acme AB",
+			workosOrganizationId: ACME_WORKOS_ORGANIZATION_ID,
+			active: true,
+		});
+		const memberId = await ctx.db.insert("organizationMembers", {
+			organizationId,
+			workosUserId: "user_acme_seed_owner",
+			active: true,
+		});
+		const otherOrganizationId = await ctx.db.insert("organizations", {
+			name: "Other organization",
+			workosOrganizationId: "org_other_seed_fixture",
+			active: true,
+		});
+		const otherMemberId = await ctx.db.insert("organizationMembers", {
+			organizationId: otherOrganizationId,
+			workosUserId: "user_other_seed_owner",
+			active: true,
+		});
+		const otherCaseId = await ctx.db.insert("cases", {
+			organizationId: otherOrganizationId,
+			reference: "OTHER-001",
+			title: "Other organization case",
+			description: "This row must never be changed by the Acme replacement.",
+			ownerMemberId: otherMemberId,
+			dueAt: null,
+			status: "open",
+			lastActivityAt: 1,
+			createdAt: 1,
+			updatedAt: 1,
+		});
+		return {
+			organizationId,
+			memberId,
+			otherOrganizationId,
+			otherCaseId,
+		};
+	});
+
+	await test.run(async (ctx) => {
+		const [organization, owner] = await Promise.all([
+			ctx.db.get(ids.organizationId),
+			ctx.db.get(ids.memberId),
+		]);
+		if (!organization || !owner)
+			throw new Error("Test Acme fixture is missing");
+		await insertAcmeDataset(ctx, organization, owner);
+	});
+
+	return { test, ...ids };
+}
+
+describe("Acme residential management seed fixture", () => {
+	it("is deterministic, normalized, chronological, and internally complete", () => {
+		const counts = assertAcmeDatasetIsInternallyConsistent();
+		expect(counts).toEqual(calculateAcmeCreationCounts());
+		expect(counts).toMatchObject({
+			emailIntegrations: 1,
+			emailInboxes: 1,
+			emailThreads: 17,
+			emailThreadExternalReferences: 17,
+			contacts: 12,
+			entityTypes: 3,
+			entityFieldDefinitions: 16,
+			entities: 11,
+			entityTextFieldValues: 25,
+			entityNumberFieldValues: 12,
+			entityBooleanFieldValues: 11,
+			entityDateFieldValues: 11,
+			cases: 9,
+			agentTasks: 0,
+			agentTurns: 0,
+			agentRuns: 0,
+			agentItems: 0,
+			caseEmbeddings: 0,
+			globalSearchEntries: 32,
+			caseEvents: 68,
+			caseContactRelations: 24,
+			caseEntityRelations: 27,
+			caseCaseRelations: 3,
+			caseEmailThreadRelations: 14,
+			emailMessages: 48,
+			emailSends: 16,
+			emailDrafts: 0,
+			emailIngestEvents: 0,
+			emailIngestRecipients: 0,
 		});
 
-		const firstRun = await test.mutation(
-			internal.seed.acme.seedSuggestionEmails,
-			{
-				organizationId,
-				confirmation: "seed-suggestion-emails",
-			},
+		expect(new Set(ACME_CONTACTS.map((contact) => contact.address)).size).toBe(
+			ACME_CONTACTS.length,
 		);
-		expect(firstRun).toMatchObject({
-			createdThreads: ACME_SUGGESTION_EMAILS.length,
-			existingThreads: 0,
-		});
-		await test.run(async (ctx) => {
-			for await (const message of ctx.db.query("emailMessages")) {
-				await ctx.db.patch(message._id, {
-					subject: `Testförslag: ${message.subject}`,
-					textBody: `Testförslag: ${message.textBody}`,
-				});
-			}
-		});
-		const secondRun = await test.mutation(
-			internal.seed.acme.seedSuggestionEmails,
-			{
-				organizationId,
-				confirmation: "seed-suggestion-emails",
-			},
+		expect(new Set(ACME_ENTITIES.map((entity) => entity.key)).size).toBe(
+			ACME_ENTITIES.length,
 		);
-		expect(secondRun).toMatchObject({
-			createdThreads: 0,
-			existingThreads: ACME_SUGGESTION_EMAILS.length,
-			inboxId: firstRun.inboxId,
-		});
-
-		const state = await test.run(async (ctx) => {
-			const references = (
-				await ctx.db.query("emailThreadExternalReferences").collect()
-			).filter((reference) =>
-				reference.externalThreadId.startsWith("seed-suggestion-"),
-			);
-			const threadIds = new Set(
-				references.map((reference) => reference.threadId),
-			);
-			return {
-				references,
-				messages: (await ctx.db.query("emailMessages").collect()).filter(
-					(message) => threadIds.has(message.threadId),
-				),
-				relations: (
-					await ctx.db.query("caseEmailThreadRelations").collect()
-				).filter((relation) => threadIds.has(relation.threadId)),
-				inbox: await ctx.db.get(firstRun.inboxId),
-			};
-		});
-
-		expect(state.references).toHaveLength(ACME_SUGGESTION_EMAILS.length);
-		expect(state.messages).toHaveLength(5);
 		expect(
-			state.messages.every(
-				(message) =>
-					message.direction === "inbound" &&
-					!message.subject.includes("Testförslag:") &&
-					!message.textBody.includes("Testförslag:"),
+			ACME_CASES.every((caseSeed) =>
+				ACME_EMAIL_THREADS.some(
+					(thread) => thread.caseReference === caseSeed.reference,
+				),
 			),
 		).toBe(true);
-		expect(state.relations).toEqual([]);
-		expect(state.inbox).toMatchObject({
-			unreadThreadCount: ACME_SUGGESTION_EMAILS.length,
-		});
-	});
-
-	it("creates idempotent, searchable entities for the agent demo", async () => {
-		const test = createTest();
-		const organizationId = await test.run(async (ctx) => {
-			const organizationId = await ctx.db.insert("organizations", {
-				name: "Test organization",
-				workosOrganizationId: "org_agent_demo_seed",
-				active: true,
-			});
-			return organizationId;
-		});
-
-		const firstRun = await test.mutation(
-			internal.seed.acme.seedAgentDemoEntities,
-			{
-				organizationId,
-				confirmation: "seed-agent-demo-entities",
-			},
-		);
-		const secondRun = await test.mutation(
-			internal.seed.acme.seedAgentDemoEntities,
-			{
-				organizationId,
-				confirmation: "seed-agent-demo-entities",
-			},
-		);
-		expect(firstRun).toMatchObject({
-			createdEntities: ACME_AGENT_DEMO_ENTITIES.length,
-			existingEntities: 0,
-		});
-		expect(secondRun).toMatchObject({
-			createdEntities: 0,
-			existingEntities: ACME_AGENT_DEMO_ENTITIES.length,
-			entityTypeId: firstRun.entityTypeId,
-		});
-
-		const state = await test.run(async (ctx) => ({
-			entityType: await ctx.db.get(firstRun.entityTypeId),
-			fields: await ctx.db
-				.query("entityFieldDefinitions")
-				.withIndex("by_entity_type_id_and_position", (index) =>
-					index.eq("entityTypeId", firstRun.entityTypeId),
-				)
-				.collect(),
-			entities: await ctx.db
-				.query("entities")
-				.withIndex(
-					"by_entity_type_id_and_archived_at_and_display_name",
-					(index) =>
-						index
-							.eq("entityTypeId", firstRun.entityTypeId)
-							.eq("archivedAt", null),
-				)
-				.collect(),
-			values: await ctx.db.query("entityTextFieldValues").collect(),
-			searchEntries: (
-				await ctx.db.query("globalSearchEntries").collect()
-			).filter((entry) => entry.organizationId === organizationId),
-		}));
-		expect(state.entityType).toMatchObject({
-			name: "Demoanläggning",
-			pluralName: "Demoanläggningar",
-		});
-		expect(state.fields.map((field) => field.label)).toEqual([
-			"Adress",
-			"Kund",
-			"Driftinformation",
+		expect(
+			ACME_EMAIL_THREADS.every((thread) =>
+				thread.messages.every(
+					(message, index) =>
+						index === 0 ||
+						message.sentAt > (thread.messages[index - 1]?.sentAt ?? 0),
+				),
+			),
+		).toBe(true);
+		expect(ACME_CASE_RELATIONS).toEqual([
+			["ACM-26071", "ACM-26072"],
+			["ACM-26071", "ACM-26073"],
+			["ACM-26044", "ACM-26061"],
 		]);
-		expect(state.entities).toHaveLength(ACME_AGENT_DEMO_ENTITIES.length);
-		expect(state.values).toHaveLength(ACME_AGENT_DEMO_ENTITIES.length * 3);
-		expect(state.searchEntries).toHaveLength(ACME_AGENT_DEMO_ENTITIES.length);
+		expect(ACME_ENTITY_TYPES.map((entityType) => entityType.key)).toEqual([
+			"fastighetsagare",
+			"fastighet",
+			"leverantor",
+		]);
+		expect(
+			ACME_CONTACTS.filter((contact) =>
+				["maja-lind", "fredrik-holm"].includes(contact.key),
+			).map((contact) => contact.name),
+		).toEqual(["Maja Lind", "Fredrik Holm"]);
+		expect(
+			ACME_CASES.find((caseSeed) => caseSeed.reference === "ACM-26077"),
+		).toMatchObject({
+			status: "needs_attention",
+			contactKeys: ["maja-lind", "fredrik-holm", "oskar-nyberg", "daniel-berg"],
+			entityKeys: [
+				"owner-vasterhamn",
+				"property-ankaret",
+				"supplier-gotadrift",
+			],
+		});
+		expect(
+			ACME_EMAIL_THREADS.filter(
+				(thread) => thread.caseReference === "ACM-26077",
+			),
+		).toHaveLength(2);
+		const liftQuoteCase = ACME_CASES.find(
+			(caseSeed) => caseSeed.reference === "ACM-26069",
+		);
+		expect(liftQuoteCase).toMatchObject({ status: "needs_attention" });
+		expect(liftQuoteCase?.description).toContain(
+			"ingen offert har ännu begärts eller skapats",
+		);
+		expect(liftQuoteCase?.initialNote).toContain(
+			"begära en icke-bindande offert",
+		);
+		expect(
+			ACME_EMAIL_THREADS.find(
+				(thread) =>
+					thread.key === "hisspartner-door-operator-quote-request-basis",
+			)?.messages.at(-1)?.body,
+		).toContain("Ingen offert finns registrerad ännu");
+		expect(calculateAcmeDatasetFingerprint()).toMatch(/^[0-9a-f]{8}$/);
+		const entityTypeByKey = new Map(
+			ACME_ENTITIES.map((entity) => [entity.key, entity.entityTypeKey]),
+		);
+		expect(
+			ACME_CASES.every(
+				(caseSeed) =>
+					caseSeed.entityKeys.filter(
+						(key) => entityTypeByKey.get(key) === "fastighet",
+					).length === 1,
+			),
+		).toBe(true);
 	});
 
-	it("creates a coherent, idempotent demo inbox without an outbound route", async () => {
-		const test = createTest();
-		const organizationId = await test.run(async (ctx) => {
-			const organizationId = await ctx.db.insert("organizations", {
-				name: "Test organization",
-				workosOrganizationId: "org_test",
-				active: true,
-			});
-			await ctx.db.insert("organizationMembers", {
-				organizationId,
-				workosUserId: "user_seed_owner",
-				active: true,
-			});
-			return organizationId;
+	it("creates the complete graph without scheduling embeddings or external work", async () => {
+		const { test, organizationId } = await createAcmeFixture();
+		const preview = await test.query(internal.seed.acmeReplacement.preview, {
+			deploymentUrl: ACME_DEPLOYMENT_URL,
+			organizationId,
 		});
 
-		const firstRun = await test.mutation(internal.seed.acme.seed, {
-			organizationId,
-			confirmation: "seed-acme-ab",
-		});
-		const secondRun = await test.mutation(internal.seed.acme.seed, {
-			organizationId,
-			confirmation: "seed-acme-ab",
-		});
-
-		expect(firstRun).toMatchObject({
-			createdCases: 15,
-			existingCases: 0,
-			createdThreads: 15,
-		});
-		expect(secondRun).toMatchObject({
-			createdCases: 0,
-			existingCases: 15,
-			createdThreads: 0,
-			inboxId: firstRun.inboxId,
-		});
+		expect(preview.datasetVersion).toBe(ACME_DATASET_VERSION);
+		expect(preview.datasetFingerprint).toBe(calculateAcmeDatasetFingerprint());
+		expect(preview.removalCounts).toEqual(calculateAcmeCreationCounts());
+		expect(preview.creationCounts).toEqual(calculateAcmeCreationCounts());
+		expect(preview.previewToken).toMatch(
+			/^acme-preview-acme-residential-management-v3-[0-9a-f]{8}$/,
+		);
 
 		const state = await test.run(async (ctx) => ({
-			cases: await ctx.db.query("cases").collect(),
-			contacts: await ctx.db.query("contacts").collect(),
-			threads: await ctx.db.query("emailThreads").collect(),
-			messages: await ctx.db.query("emailMessages").collect(),
-			sends: await ctx.db.query("emailSends").collect(),
-			inbox: await ctx.db.get(firstRun.inboxId),
-			caseContactRelations: await ctx.db
-				.query("caseContactRelations")
+			inbox: await ctx.db
+				.query("emailInboxes")
+				.withIndex("by_organization_id", (index) =>
+					index.eq("organizationId", organizationId),
+				)
+				.unique(),
+			cases: await ctx.db
+				.query("cases")
+				.withIndex("by_organization_id_and_last_activity_at", (index) =>
+					index.eq("organizationId", organizationId),
+				)
 				.collect(),
-			caseEmailThreadRelations: await ctx.db
-				.query("caseEmailThreadRelations")
+			threads: await ctx.db
+				.query("emailThreads")
+				.withIndex("by_organization_id_and_last_activity_at", (index) =>
+					index.eq("organizationId", organizationId),
+				)
+				.collect(),
+			embeddings: await ctx.db.query("caseEmbeddings").collect(),
+			agentTasks: await ctx.db
+				.query("agentTasks")
+				.withIndex("by_organization_id_and_requested_at", (index) =>
+					index.eq("organizationId", organizationId),
+				)
 				.collect(),
 		}));
 
-		expect(state.cases).toHaveLength(15);
-		expect(state.contacts).toHaveLength(13);
-		expect(state.threads).toHaveLength(15);
-		expect(state.messages).toHaveLength(30);
-		expect(state.sends).toHaveLength(12);
-		expect(state.caseContactRelations).toHaveLength(15);
-		expect(state.caseEmailThreadRelations).toHaveLength(15);
 		expect(state.inbox).toMatchObject({
-			displayName: ACME_INBOX.displayName,
-			address: ACME_INBOX.address,
+			displayName: "Acme Kundcenter",
+			address: "service@acme.seed.invalid",
 			status: "active",
-			unreadThreadCount: 6,
+			unreadThreadCount: 10,
 		});
 		expect(state.inbox?.outbound).toBeUndefined();
 		expect(
-			state.contacts.every((contact) => contact.address.endsWith(".invalid")),
-		).toBe(true);
+			state.cases.map((caseRecord) => caseRecord.reference).sort(),
+		).toEqual(ACME_CASES.map((caseSeed) => caseSeed.reference).sort());
+		expect(state.threads).toHaveLength(17);
+		expect(state.embeddings).toEqual([]);
+		expect(state.agentTasks).toEqual([]);
 	});
+});
 
-	it("moves and renames the complete seed graph between organizations", async () => {
-		const test = createTest();
-		const { sourceOrganizationId, targetOrganizationId, targetMemberId } =
-			await test.run(async (ctx) => {
-				const sourceOrganizationId = await ctx.db.insert("organizations", {
-					name: "Merimoar",
-					workosOrganizationId: "org_source",
-					active: true,
-				});
-				const targetOrganizationId = await ctx.db.insert("organizations", {
-					name: "Acme AB",
-					workosOrganizationId: "org_acme",
-					active: true,
-				});
-				await ctx.db.insert("organizationMembers", {
-					organizationId: sourceOrganizationId,
-					workosUserId: "user_shared",
-					active: true,
-				});
-				const targetMemberId = await ctx.db.insert("organizationMembers", {
-					organizationId: targetOrganizationId,
-					workosUserId: "user_shared",
-					active: true,
-				});
-				await ctx.db.insert("cases", {
-					organizationId: sourceOrganizationId,
-					reference: "CASE-UNRELATED",
-					title: "Unrelated source case",
-					description: "This must remain in the source organization.",
-					ownerMemberId: null,
-					dueAt: null,
-					status: "open",
-					lastActivityAt: 1,
-					createdAt: 1,
-					updatedAt: 1,
-				});
-				return {
-					sourceOrganizationId,
-					targetOrganizationId,
-					targetMemberId,
-				};
-			});
-		const seeded = await test.mutation(internal.seed.acme.seed, {
-			organizationId: sourceOrganizationId,
-			confirmation: "seed-acme-ab",
-		});
-		await test.run(async (ctx) => {
-			await ctx.db.patch(seeded.inboxId, {
-				displayName: "Sundhamn Energi — seeddata",
-				address: "kundservice@seed.sundhamn-energi.invalid",
-			});
-			const messages = await ctx.db.query("emailMessages").collect();
-			for (const message of messages) {
-				const makeLegacy = (value: string) =>
-					value
-						.replaceAll("Acme AB", "Sundhamn Energi")
-						.replaceAll("seed.acme.invalid", "seed.sundhamn-energi.invalid");
-				const participant = (value: { address: string; name?: string }) => ({
-					address: makeLegacy(value.address),
-					...(value.name ? { name: makeLegacy(value.name) } : undefined),
-				});
-				await ctx.db.patch(message._id, {
-					internetMessageId: message.internetMessageId
-						? makeLegacy(message.internetMessageId)
-						: undefined,
-					inReplyTo: message.inReplyTo
-						? makeLegacy(message.inReplyTo)
-						: undefined,
-					references: message.references.map(makeLegacy),
-					from: participant(message.from),
-					to: message.to.map(participant),
-					cc: message.cc.map(participant),
-					bcc: message.bcc.map(participant),
-					replyTo: message.replyTo.map(participant),
-					subject: makeLegacy(message.subject),
-					textBody: makeLegacy(message.textBody),
-				});
-			}
+describe("Acme organization-scoped replacement gate", () => {
+	it("atomically replaces Acme while preserving its membership and every foreign row", async () => {
+		const { test, organizationId, memberId, otherOrganizationId, otherCaseId } =
+			await createAcmeFixture();
+		const before = await test.run(async (ctx) => ({
+			caseIds: (
+				await ctx.db
+					.query("cases")
+					.withIndex("by_organization_id_and_last_activity_at", (index) =>
+						index.eq("organizationId", organizationId),
+					)
+					.collect()
+			).map((caseRecord) => caseRecord._id),
+			otherCase: await ctx.db.get(otherCaseId),
+		}));
+		const preview = await test.query(internal.seed.acmeReplacement.preview, {
+			deploymentUrl: ACME_DEPLOYMENT_URL,
+			organizationId,
 		});
 
-		const result = await test.mutation(internal.seed.acmeMigration.moveToAcme, {
-			sourceWorkosOrganizationId: "org_source",
-			targetWorkosOrganizationId: "org_acme",
-			confirmation: "move-seed-data-to-acme-ab",
+		const result = await test.mutation(internal.seed.acmeReplacement.replace, {
+			deploymentUrl: ACME_DEPLOYMENT_URL,
+			organizationId,
+			expectedWorkosOrganizationId: ACME_WORKOS_ORGANIZATION_ID,
+			expectedRemovalCounts: preview.removalCounts,
+			expectedCreationCounts: preview.creationCounts,
+			previewToken: preview.previewToken,
+			confirmation: REPLACEMENT_CONFIRMATION,
 		});
-		const inspection = await test.query(
-			internal.seed.acmeMigration.inspectMove,
-			{
-				sourceWorkosOrganizationId: "org_source",
-				targetWorkosOrganizationId: "org_acme",
-			},
-		);
-		const secondMove = await test.mutation(
-			internal.seed.acmeMigration.moveToAcme,
-			{
-				sourceWorkosOrganizationId: "org_source",
-				targetWorkosOrganizationId: "org_acme",
-				confirmation: "move-seed-data-to-acme-ab",
-			},
-		);
 
 		expect(result).toMatchObject({
-			alreadyMoved: false,
-			movedCases: 15,
-			movedContacts: 13,
-			movedThreads: 15,
-			movedMessages: 30,
-			movedSends: 12,
-			movedEvents: 45,
-			inboxId: seeded.inboxId,
+			datasetVersion: ACME_DATASET_VERSION,
+			datasetFingerprint: calculateAcmeDatasetFingerprint(),
+			organizationId,
+			preservedOrganizationMembers: 1,
+			removed: preview.removalCounts,
+			created: preview.creationCounts,
 		});
-		expect(inspection).toEqual({
-			sourceOrganizationFound: true,
-			targetOrganizationFound: true,
-			sourceCases: 0,
-			targetCases: 15,
-			sourceInboxFound: false,
-			targetInboxFound: true,
-			targetThreads: 15,
-			targetMessages: 30,
-			legacyMessageFields: 0,
+		const after = await test.run(async (ctx) => ({
+			organization: await ctx.db.get(organizationId),
+			member: await ctx.db.get(memberId),
+			caseIds: (
+				await ctx.db
+					.query("cases")
+					.withIndex("by_organization_id_and_last_activity_at", (index) =>
+						index.eq("organizationId", organizationId),
+					)
+					.collect()
+			).map((caseRecord) => caseRecord._id),
+			otherCases: await ctx.db
+				.query("cases")
+				.withIndex("by_organization_id_and_last_activity_at", (index) =>
+					index.eq("organizationId", otherOrganizationId),
+				)
+				.collect(),
+		}));
+
+		expect(after.organization).toMatchObject({
+			_id: organizationId,
+			name: "Acme AB",
+			workosOrganizationId: ACME_WORKOS_ORGANIZATION_ID,
 		});
-		expect(secondMove).toMatchObject({
-			alreadyMoved: true,
-			movedCases: 0,
-			movedContacts: 0,
-			movedThreads: 0,
-			movedMessages: 0,
+		expect(after.member).toMatchObject({ _id: memberId, organizationId });
+		expect(after.caseIds).toHaveLength(9);
+		expect(after.caseIds.some((id) => before.caseIds.includes(id))).toBe(false);
+		expect(after.otherCases).toEqual([before.otherCase]);
+	});
+
+	it("rejects a stale preview before deleting anything", async () => {
+		const { test, organizationId } = await createAcmeFixture();
+		const preview = await test.query(internal.seed.acmeReplacement.preview, {
+			deploymentUrl: ACME_DEPLOYMENT_URL,
+			organizationId,
 		});
+		const extraCaseId = await test.run(async (ctx) =>
+			ctx.db.insert("cases", {
+				organizationId,
+				reference: "ACM-STALE-PREVIEW",
+				title: "Changed after preview",
+				description: "The replacement must stop before mutation.",
+				ownerMemberId: null,
+				dueAt: null,
+				status: "open",
+				lastActivityAt: 2,
+				createdAt: 2,
+				updatedAt: 2,
+			}),
+		);
+
+		await expect(
+			test.mutation(internal.seed.acmeReplacement.replace, {
+				deploymentUrl: ACME_DEPLOYMENT_URL,
+				organizationId,
+				expectedWorkosOrganizationId: ACME_WORKOS_ORGANIZATION_ID,
+				expectedRemovalCounts: preview.removalCounts,
+				expectedCreationCounts: preview.creationCounts,
+				previewToken: preview.previewToken,
+				confirmation: REPLACEMENT_CONFIRMATION,
+			}),
+		).rejects.toThrow(/removal count for cases/);
 
 		const state = await test.run(async (ctx) => ({
-			sourceCases: await ctx.db
+			extraCase: await ctx.db.get(extraCaseId),
+			cases: await ctx.db
 				.query("cases")
 				.withIndex("by_organization_id_and_last_activity_at", (index) =>
-					index.eq("organizationId", sourceOrganizationId),
+					index.eq("organizationId", organizationId),
 				)
 				.collect(),
-			targetCases: await ctx.db
-				.query("cases")
-				.withIndex("by_organization_id_and_last_activity_at", (index) =>
-					index.eq("organizationId", targetOrganizationId),
-				)
-				.collect(),
-			targetContacts: await ctx.db
-				.query("contacts")
-				.withIndex("by_organization_id_and_last_seen_at", (index) =>
-					index.eq("organizationId", targetOrganizationId),
-				)
-				.collect(),
-			targetThreads: await ctx.db
-				.query("emailThreads")
-				.withIndex("by_organization_id_and_last_activity_at", (index) =>
-					index.eq("organizationId", targetOrganizationId),
-				)
-				.collect(),
-			inbox: await ctx.db.get(seeded.inboxId),
-			events: await ctx.db.query("caseEvents").collect(),
-			sends: await ctx.db.query("emailSends").collect(),
 		}));
-		expect(state.sourceCases).toMatchObject([{ reference: "CASE-UNRELATED" }]);
-		expect(state.targetCases).toHaveLength(15);
-		expect(
-			state.targetCases.every(
-				(caseRecord) => caseRecord.ownerMemberId === targetMemberId,
-			),
-		).toBe(true);
-		expect(state.targetContacts).toHaveLength(13);
-		expect(state.targetThreads).toHaveLength(15);
-		expect(state.inbox).toMatchObject({
-			organizationId: targetOrganizationId,
-			displayName: ACME_INBOX.displayName,
-			address: ACME_INBOX.address,
+		expect(state.extraCase).not.toBeNull();
+		expect(state.cases).toHaveLength(10);
+	});
+
+	it("rejects cross-organization references and leaves both organizations intact", async () => {
+		const { test, organizationId, otherCaseId } = await createAcmeFixture();
+		const acmeContactId = await test.run(async (ctx) => {
+			const contact = await ctx.db
+				.query("contacts")
+				.withIndex("by_organization_id_and_address", (index) =>
+					index
+						.eq("organizationId", organizationId)
+						.eq("address", "hanna.ekstrom@vasterhamn.seed.invalid"),
+				)
+				.unique();
+			if (!contact) throw new Error("Expected Acme contact");
+			await ctx.db.insert("caseContactRelations", {
+				caseId: otherCaseId,
+				contactId: contact._id,
+				startedAt: 3,
+				endedAt: null,
+				addedByMemberId: null,
+				removedByMemberId: null,
+			});
+			return contact._id;
 		});
-		expect(
-			state.events.every(
-				(event) =>
-					event.createdByMemberId === null ||
-					event.createdByMemberId === targetMemberId,
-			),
-		).toBe(true);
-		expect(
-			state.sends.every((send) => send.requestedByMemberId === targetMemberId),
-		).toBe(true);
+
+		await expect(
+			test.query(internal.seed.acmeReplacement.preview, {
+				deploymentUrl: ACME_DEPLOYMENT_URL,
+				organizationId,
+			}),
+		).rejects.toThrow(/another organization shares an Acme contact relation/);
+
+		const state = await test.run(async (ctx) => ({
+			contact: await ctx.db.get(acmeContactId),
+			otherCase: await ctx.db.get(otherCaseId),
+			acmeCases: await ctx.db
+				.query("cases")
+				.withIndex("by_organization_id_and_last_activity_at", (index) =>
+					index.eq("organizationId", organizationId),
+				)
+				.collect(),
+		}));
+		expect(state.contact).not.toBeNull();
+		expect(state.otherCase).not.toBeNull();
+		expect(state.acmeCases).toHaveLength(9);
+	});
+
+	it("rejects execution when the runtime deployment does not match", async () => {
+		const { test, organizationId } = await createAcmeFixture();
+		vi.stubEnv("CONVEX_CLOUD_URL", "https://wrong-deployment.convex.cloud");
+
+		await expect(
+			test.query(internal.seed.acmeReplacement.preview, {
+				deploymentUrl: ACME_DEPLOYMENT_URL,
+				organizationId,
+			}),
+		).rejects.toThrow(/runtime deployment/);
 	});
 });

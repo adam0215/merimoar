@@ -76,7 +76,7 @@ import type * as http from "../http.js";
 import type * as migrations from "../migrations.js";
 import type * as seed_acme from "../seed/acme.js";
 import type * as seed_acmeData from "../seed/acmeData.js";
-import type * as seed_acmeMigration from "../seed/acmeMigration.js";
+import type * as seed_acmeReplacement from "../seed/acmeReplacement.js";
 import type * as workos from "../workos.js";
 
 import type {
@@ -154,7 +154,7 @@ declare const fullApi: ApiFromModules<{
   migrations: typeof migrations;
   "seed/acme": typeof seed_acme;
   "seed/acmeData": typeof seed_acmeData;
-  "seed/acmeMigration": typeof seed_acmeMigration;
+  "seed/acmeReplacement": typeof seed_acmeReplacement;
   workos: typeof workos;
 }>;
 
