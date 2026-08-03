@@ -13,6 +13,8 @@ import type {
 } from "./_generated/server";
 import { internalMutation } from "./_generated/server";
 
+const DEFAULT_CASE_REFERENCE_SLUG = "CASE";
+
 export const PIPES_CONNECTED_ACCOUNT_EVENT_TYPES = [
 	"pipes.connected_account.connected",
 	"pipes.connected_account.disconnected",
@@ -82,6 +84,7 @@ async function upsertOrganization(
 	return await ctx.db.insert("organizations", {
 		name,
 		workosOrganizationId,
+		referenceSlug: DEFAULT_CASE_REFERENCE_SLUG,
 		active: true,
 	});
 }
@@ -97,6 +100,7 @@ async function ensureOrganization(
 	return await ctx.db.insert("organizations", {
 		name: workosOrganizationId,
 		workosOrganizationId,
+		referenceSlug: DEFAULT_CASE_REFERENCE_SLUG,
 		active: true,
 	});
 }

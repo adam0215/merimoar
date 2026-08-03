@@ -10,11 +10,13 @@ async function createMigrationFixture(
 		const organizationId = await ctx.db.insert("organizations", {
 			name: "Anchor organization",
 			workosOrganizationId: "org_anchor",
+			referenceSlug: "ANCH",
 			active: true,
 		});
 		const conflictingOrganizationId = await ctx.db.insert("organizations", {
 			name: "Conflicting task organization",
 			workosOrganizationId: "org_conflicting",
+			referenceSlug: "CONF",
 			active: true,
 		});
 		const anchorCaseId = await ctx.db.insert("cases", {

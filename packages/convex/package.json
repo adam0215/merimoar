@@ -18,7 +18,8 @@
 		"./email/input": "./email/input.ts",
 		"./entity/constants": "./entity/constants.ts",
 		"./entity/input": "./entity/input.ts",
-		"./entity/values": "./entity/values.ts"
+		"./entity/values": "./entity/values.ts",
+		"./organization/input": "./organization/input.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit"

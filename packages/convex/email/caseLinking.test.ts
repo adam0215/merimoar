@@ -25,11 +25,13 @@ async function createCaseLinkingFixture() {
 		const organizationId = await ctx.db.insert("organizations", {
 			name: "Merimoar",
 			workosOrganizationId: "org_merimoar",
+			referenceSlug: "MER",
 			active: true,
 		});
 		const otherOrganizationId = await ctx.db.insert("organizations", {
 			name: "Other",
 			workosOrganizationId: "org_other",
+			referenceSlug: "OTHR",
 			active: true,
 		});
 		const actorMemberId = await ctx.db.insert("organizationMembers", {

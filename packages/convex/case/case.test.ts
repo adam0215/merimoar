@@ -40,11 +40,13 @@ async function createFixture() {
 		const organizationId = await ctx.db.insert("organizations", {
 			name: "Merimoar",
 			workosOrganizationId: "org_merimoar",
+			referenceSlug: "MER",
 			active: true,
 		});
 		const otherOrganizationId = await ctx.db.insert("organizations", {
 			name: "Other",
 			workosOrganizationId: "org_other",
+			referenceSlug: "OTHR",
 			active: true,
 		});
 		const actorMemberId = await ctx.db.insert("organizationMembers", {
@@ -352,7 +354,7 @@ describe("cases", () => {
 			dueAt: 2_000,
 			status: "open",
 		});
-		expect(detail?.case.reference).toMatch(/^CASE-[A-F0-9]{6}$/);
+		expect(detail?.case.reference).toBe("MER-00001");
 		expect(detail?.events[0]?.event.createdByMemberId).toBe(actorMemberId);
 		expect(detail?.contacts[0]?.relation.addedByMemberId).toBe(actorMemberId);
 		expect(detail?.entities[0]?.relation.addedByMemberId).toBe(actorMemberId);
@@ -364,6 +366,36 @@ describe("cases", () => {
 			relation: { addedByMemberId: actorMemberId },
 			relatedCase: { _id: caseId },
 		});
+	});
+
+	it("increments the index across prefix changes without rewriting old cases", async () => {
+		const { actor, base } = await createFixture();
+		const input = {
+			title: "Sequential case",
+			description: "",
+			ownerMemberId: null,
+			dueAt: null,
+			initialEventBody: "",
+			contactIds: [],
+			entityIds: [],
+			relatedCaseIds: [],
+		};
+		const firstCaseId = await actor.mutation(api.case.mutations.create, input);
+		await actor.mutation(api.organization.settings.updateReferenceSlug, {
+			referenceSlug: "ACM",
+		});
+		const secondCaseId = await actor.mutation(api.case.mutations.create, input);
+		const references = await base.run(async (ctx) =>
+			Promise.all([
+				ctx.db.get("cases", firstCaseId),
+				ctx.db.get("cases", secondCaseId),
+			]),
+		);
+
+		expect(references.map((caseRecord) => caseRecord?.reference)).toEqual([
+			"MER-00001",
+			"ACM-00002",
+		]);
 	});
 
 	it("records a case status transition once and attributes it to the actor", async () => {
@@ -559,7 +591,7 @@ describe("cases", () => {
 		);
 		expect(relatedCaseDetail?.events[0]?.event).toHaveProperty(
 			"body",
-			expect.stringContaining("Removed CASE-"),
+			expect.stringContaining("Removed MER-00001"),
 		);
 		expect(historicalRelation).toMatchObject({
 			endedAt: expect.any(Number),

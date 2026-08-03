@@ -4,6 +4,20 @@
 
 - Headings are semi bold.
 
+## Standard pages
+
+- Pages in the same product area should share a clear visual rhythm while
+  allowing their structure to follow the content and interaction needs.
+- Standard pages generally use 24px outer content padding. Adjust it when the
+  layout, viewport, or surrounding controls require different safe space.
+- Use one clear page title and semantic section headings. Keep headings semi
+  bold and place related actions alongside the heading when appropriate.
+- Use consistent vertical spacing between the title, sections, and their
+  content. Prefer spacing controlled by the surrounding layout over a stack of
+  unrelated margins.
+- Content may be full width, constrained, split into columns, or use specialized
+  regions when that improves readability or supports the page's purpose.
+
 ## Inputs
 
 - Labels above inputs (text, select, checkbox, etc.) are always 14px/w500 if nothing else is specified.

@@ -45,11 +45,13 @@ export async function createFixture() {
 		const organizationId = await ctx.db.insert("organizations", {
 			name: "Agent organization",
 			workosOrganizationId: "org_agent_test",
+			referenceSlug: "AGNT",
 			active: true,
 		});
 		const otherOrganizationId = await ctx.db.insert("organizations", {
 			name: "Other organization",
 			workosOrganizationId: "org_other_agent_test",
+			referenceSlug: "OTHR",
 			active: true,
 		});
 		const memberId = await ctx.db.insert("organizationMembers", {

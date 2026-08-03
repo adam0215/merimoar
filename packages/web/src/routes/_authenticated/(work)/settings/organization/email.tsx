@@ -114,84 +114,85 @@ function OrganizationEmailSettings() {
 
 	return (
 		<div className="h-full overflow-y-auto">
-			<div className="mx-auto w-full max-w-4xl px-5 py-8 md:px-10 md:py-12">
-				<div className="mb-10">
-					<h1 className="text-2xl font-semibold tracking-tight">
-						Email routing
-					</h1>
-					<p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-						Create inboxes and connect the services that deliver email to them.
-					</p>
-				</div>
+			<div className="w-full space-y-8 p-6">
+				<h1 className="text-2xl font-semibold tracking-tight">Email routing</h1>
 
-				<section className="mb-10">
-					<div className="mb-4">
-						<h2 className="text-base font-medium">Email integrations</h2>
+				<section aria-labelledby="email-integrations-heading">
+					<h2 id="email-integrations-heading" className="font-semibold">
+						Email integrations
+					</h2>
+					<div className="mt-3">
+						<ResendPipesConnection
+							connectionState={resendPipesConnectionState}
+						/>
 					</div>
-					<ResendPipesConnection connectionState={resendPipesConnectionState} />
 				</section>
 
-				<div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-					<h2 className="text-base font-medium">Inboxes</h2>
-					<AddEmailInboxDialog outboundIntegrations={outboundIntegrations} />
-				</div>
-				<div className="space-y-3">
-					{inboxes.length === 0 && (
-						<Card className="border-dashed bg-muted/20">
-							<CardHeader>
-								<CardTitle>No inboxes</CardTitle>
-								<CardDescription>
-									Add an inbox name and email address.
-								</CardDescription>
-							</CardHeader>
-						</Card>
-					)}
+				<section aria-labelledby="inboxes-heading">
+					<div className="flex flex-wrap items-center justify-between gap-4">
+						<h2 id="inboxes-heading" className="font-semibold">
+							Inboxes
+						</h2>
+						<AddEmailInboxDialog outboundIntegrations={outboundIntegrations} />
+					</div>
+					<div className="mt-3 space-y-3">
+						{inboxes.length === 0 && (
+							<Card className="border-dashed bg-muted/20">
+								<CardHeader>
+									<CardTitle>No inboxes</CardTitle>
+									<CardDescription>
+										Add an inbox name and email address.
+									</CardDescription>
+								</CardHeader>
+							</Card>
+						)}
 
-					{inboxes.map((inbox) => (
-						<Card key={inbox._id}>
-							<CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-center">
-								<div className="flex min-w-0 items-center gap-4">
-									<div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted">
-										<IconInbox className="size-5" />
-									</div>
-									<div className="min-w-0">
-										<CardTitle className="truncate">
-											{inbox.displayName}
-										</CardTitle>
-										<div className="mt-2 flex flex-col gap-1.5 text-sm text-muted-foreground">
-											<CardDescription className="flex min-w-0 items-center gap-2">
-												<IconMailbox className="size-4 shrink-0" />
-												<span className="truncate">{inbox.address}</span>
-											</CardDescription>
-											<p className="flex min-w-0 items-center gap-2">
-												<IconMailShare className="size-4 shrink-0" />
-												<span className="truncate">
-													{inbox.outboundIntegration
-														? inbox.outboundIntegration.address
-														: "No outbound"}
-												</span>
-											</p>
+						{inboxes.map((inbox) => (
+							<Card key={inbox._id}>
+								<CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-center">
+									<div className="flex min-w-0 items-center gap-4">
+										<div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-muted">
+											<IconInbox className="size-5" />
+										</div>
+										<div className="min-w-0">
+											<CardTitle className="truncate">
+												{inbox.displayName}
+											</CardTitle>
+											<div className="mt-2 flex flex-col gap-1.5 text-sm text-muted-foreground">
+												<CardDescription className="flex min-w-0 items-center gap-2">
+													<IconMailbox className="size-4 shrink-0" />
+													<span className="truncate">{inbox.address}</span>
+												</CardDescription>
+												<p className="flex min-w-0 items-center gap-2">
+													<IconMailShare className="size-4 shrink-0" />
+													<span className="truncate">
+														{inbox.outboundIntegration
+															? inbox.outboundIntegration.address
+															: "No outbound"}
+													</span>
+												</p>
+											</div>
 										</div>
 									</div>
-								</div>
-								<CardAction className="flex flex-col items-end gap-2 self-center">
-									<Badge variant="success">Active</Badge>
-									<div className="flex items-center gap-1">
-										<EditEmailInboxDialog
-											inbox={inbox}
-											outboundIntegrations={outboundIntegrations}
-										/>
-										<RemoveEmailInboxDialog
-											inboxId={inbox._id}
-											displayName={inbox.displayName}
-											address={inbox.address}
-										/>
-									</div>
-								</CardAction>
-							</CardHeader>
-						</Card>
-					))}
-				</div>
+									<CardAction className="flex flex-col items-end gap-2 self-center">
+										<Badge variant="success">Active</Badge>
+										<div className="flex items-center gap-1">
+											<EditEmailInboxDialog
+												inbox={inbox}
+												outboundIntegrations={outboundIntegrations}
+											/>
+											<RemoveEmailInboxDialog
+												inboxId={inbox._id}
+												displayName={inbox.displayName}
+												address={inbox.address}
+											/>
+										</div>
+									</CardAction>
+								</CardHeader>
+							</Card>
+						))}
+					</div>
+				</section>
 
 				<FailedIngestEvents inboxes={inboxes} />
 			</div>
@@ -262,14 +263,16 @@ function FailedIngestEvents({
 	}
 
 	return (
-		<section className="mt-10">
-			<div className="mb-4">
-				<h2 className="text-lg font-semibold">Failed email ingest</h2>
+		<section aria-labelledby="failed-email-ingest-heading">
+			<div>
+				<h2 id="failed-email-ingest-heading" className="font-semibold">
+					Failed email ingest
+				</h2>
 				<p className="mt-1 text-sm text-muted-foreground">
 					Retry email that could not be routed or processed.
 				</p>
 			</div>
-			<div className="space-y-3">
+			<div className="mt-3 space-y-3">
 				{failures.map((failure) => (
 					<Card key={`${failure.inboxId}:${failure.eventId}`} size="sm">
 						<CardHeader className="items-center">

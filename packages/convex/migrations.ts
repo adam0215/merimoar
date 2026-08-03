@@ -6,6 +6,17 @@ import { internalQuery } from "./_generated/server";
 
 const migrations = new Migrations<DataModel>(components.migrations);
 
+export const backfillOrganizationReferenceSlugs = migrations.define({
+	table: "organizations",
+	migrateOne: async (ctx, organization) => {
+		if (organization.referenceSlug === undefined) {
+			await ctx.db.patch("organizations", organization._id, {
+				referenceSlug: "CASE",
+			});
+		}
+	},
+});
+
 export const typeLegacyCaseEventsAsHumanNotes = migrations.define({
 	table: "caseEvents",
 	migrateOne: async (ctx, event) => {

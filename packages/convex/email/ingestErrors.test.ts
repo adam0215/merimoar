@@ -60,6 +60,7 @@ describe("email ingest retry classification", () => {
 			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
 				workosOrganizationId: "org_merimoar",
+				referenceSlug: "MER",
 				active: true,
 			});
 			const integrationId = await ctx.db.insert("emailIntegrations", {

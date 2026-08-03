@@ -35,6 +35,7 @@ import {
 import { appendAgentChangeCaseEvent } from "#/case/events";
 import { caseDetailsInputSchema } from "#/case/input";
 import { CASE_STATUS_LABELS, caseStatusValidator } from "#/case/model";
+import { generateNextCaseReference } from "#/case/reference";
 import {
 	addContactCaseRelation,
 	addEntityCaseRelation,
@@ -48,7 +49,6 @@ import { MAX_FIELDS_PER_ENTITY_TYPE } from "#/entity/constants";
 import { syncGlobalSearchEntry } from "#/globalSearch/model";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
 import { mutation } from "../_generated/server";
 
 const MAX_GLOBAL_SEARCH_CANDIDATES = 60;
@@ -553,7 +553,7 @@ export const createCase = mutation({
 			status: "open",
 		});
 		const now = Date.now();
-		const reference = await generateCaseReference(ctx, organizationId);
+		const reference = await generateNextCaseReference(ctx, organizationId);
 		const caseId = await ctx.db.insert("cases", {
 			organizationId,
 			reference,
@@ -912,20 +912,3 @@ export const readEmailThread = mutation({
 		};
 	},
 });
-
-async function generateCaseReference(
-	ctx: MutationCtx,
-	organizationId: Id<"organizations">,
-) {
-	for (let attempt = 0; attempt < 5; attempt += 1) {
-		const reference = `CASE-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
-		const existing = await ctx.db
-			.query("cases")
-			.withIndex("by_organization_id_and_reference", (index) =>
-				index.eq("organizationId", organizationId).eq("reference", reference),
-			)
-			.unique();
-		if (!existing) return reference;
-	}
-	throw new Error("Could not generate a unique case reference");
-}

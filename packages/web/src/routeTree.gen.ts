@@ -23,6 +23,7 @@ import { Route as ApiAuthSignInRouteImport } from './routes/api/auth/sign-in'
 import { Route as ApiAuthSignOutRouteImport } from './routes/api/auth/sign-out'
 import { Route as AuthenticatedworkSettingsOrganizationEmailRouteImport } from './routes/_authenticated/(work)/settings/organization/email'
 import { Route as AuthenticatedworkSettingsOrganizationEntitiesRouteImport } from './routes/_authenticated/(work)/settings/organization/entities'
+import { Route as AuthenticatedworkSettingsOrganizationGeneralRouteImport } from './routes/_authenticated/(work)/settings/organization/general'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
@@ -98,6 +99,12 @@ const AuthenticatedworkSettingsOrganizationEntitiesRoute =
     path: '/settings/organization/entities',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedworkSettingsOrganizationGeneralRoute =
+  AuthenticatedworkSettingsOrganizationGeneralRouteImport.update({
+    id: '/(work)/settings/organization/general',
+    path: '/settings/organization/general',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/api/auth/sign-out': typeof ApiAuthSignOutRoute
   '/settings/organization/email': typeof AuthenticatedworkSettingsOrganizationEmailRoute
   '/settings/organization/entities': typeof AuthenticatedworkSettingsOrganizationEntitiesRoute
+  '/settings/organization/general': typeof AuthenticatedworkSettingsOrganizationGeneralRoute
 }
 export interface FileRoutesByTo {
   '/auth-error': typeof AuthErrorRoute
@@ -128,6 +136,7 @@ export interface FileRoutesByTo {
   '/api/auth/sign-out': typeof ApiAuthSignOutRoute
   '/settings/organization/email': typeof AuthenticatedworkSettingsOrganizationEmailRoute
   '/settings/organization/entities': typeof AuthenticatedworkSettingsOrganizationEntitiesRoute
+  '/settings/organization/general': typeof AuthenticatedworkSettingsOrganizationGeneralRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -145,6 +154,7 @@ export interface FileRoutesById {
   '/api/auth/sign-out': typeof ApiAuthSignOutRoute
   '/_authenticated/(work)/settings/organization/email': typeof AuthenticatedworkSettingsOrganizationEmailRoute
   '/_authenticated/(work)/settings/organization/entities': typeof AuthenticatedworkSettingsOrganizationEntitiesRoute
+  '/_authenticated/(work)/settings/organization/general': typeof AuthenticatedworkSettingsOrganizationGeneralRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -162,6 +172,7 @@ export interface FileRouteTypes {
     | '/api/auth/sign-out'
     | '/settings/organization/email'
     | '/settings/organization/entities'
+    | '/settings/organization/general'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth-error'
@@ -177,6 +188,7 @@ export interface FileRouteTypes {
     | '/api/auth/sign-out'
     | '/settings/organization/email'
     | '/settings/organization/entities'
+    | '/settings/organization/general'
   id:
     | '__root__'
     | '/_authenticated'
@@ -193,6 +205,7 @@ export interface FileRouteTypes {
     | '/api/auth/sign-out'
     | '/_authenticated/(work)/settings/organization/email'
     | '/_authenticated/(work)/settings/organization/entities'
+    | '/_authenticated/(work)/settings/organization/general'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -303,6 +316,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedworkSettingsOrganizationEntitiesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/(work)/settings/organization/general': {
+      id: '/_authenticated/(work)/settings/organization/general'
+      path: '/settings/organization/general'
+      fullPath: '/settings/organization/general'
+      preLoaderRoute: typeof AuthenticatedworkSettingsOrganizationGeneralRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -316,6 +336,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedworkEmailRoute: typeof AuthenticatedworkEmailRoute
   AuthenticatedworkSettingsOrganizationEmailRoute: typeof AuthenticatedworkSettingsOrganizationEmailRoute
   AuthenticatedworkSettingsOrganizationEntitiesRoute: typeof AuthenticatedworkSettingsOrganizationEntitiesRoute
+  AuthenticatedworkSettingsOrganizationGeneralRoute: typeof AuthenticatedworkSettingsOrganizationGeneralRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -330,6 +351,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedworkSettingsOrganizationEmailRoute,
   AuthenticatedworkSettingsOrganizationEntitiesRoute:
     AuthenticatedworkSettingsOrganizationEntitiesRoute,
+  AuthenticatedworkSettingsOrganizationGeneralRoute:
+    AuthenticatedworkSettingsOrganizationGeneralRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

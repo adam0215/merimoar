@@ -30,6 +30,7 @@ describe("inbound email ingestion", () => {
 				const organizationId = await ctx.db.insert("organizations", {
 					name: "Merimoar",
 					workosOrganizationId: "org_merimoar",
+					referenceSlug: "MER",
 					active: true,
 				});
 				const integrationId = await ctx.db.insert("emailIntegrations", {
@@ -222,6 +223,7 @@ describe("inbound email ingestion", () => {
 			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
 				workosOrganizationId: "org_merimoar",
+				referenceSlug: "MER",
 				active: true,
 			});
 			const integrationId = await ctx.db.insert("emailIntegrations", {
@@ -308,11 +310,13 @@ describe("inbound email ingestion", () => {
 			const firstOrganizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
 				workosOrganizationId: "org_merimoar",
+				referenceSlug: "MER",
 				active: true,
 			});
 			const secondOrganizationId = await ctx.db.insert("organizations", {
 				name: "Other",
 				workosOrganizationId: "org_other",
+				referenceSlug: "OTHR",
 				active: true,
 			});
 			const firstIntegrationId = await ctx.db.insert("emailIntegrations", {
@@ -467,6 +471,7 @@ describe("inbound email ingestion", () => {
 			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
 				workosOrganizationId: "org_merimoar",
+				referenceSlug: "MER",
 				active: true,
 			});
 			const integrationId = await ctx.db.insert("emailIntegrations", {

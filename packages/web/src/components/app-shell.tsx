@@ -45,6 +45,9 @@ function getPageTitle(pathname: string, agentView: AgentView) {
 	if (pathname === "/settings/organization/entities") {
 		return "Entity settings";
 	}
+	if (pathname === "/settings/organization/general") {
+		return "General settings";
+	}
 	if (pathname === "/settings/organization/email") {
 		return "Email settings";
 	}

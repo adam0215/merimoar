@@ -18,6 +18,7 @@ import {
 	optionalCaseEventBodySchema,
 } from "#/case/input";
 import { caseStatusValidator } from "#/case/model";
+import { generateNextCaseReference } from "#/case/reference";
 import {
 	addContactCaseRelation,
 	addEntityCaseRelation,
@@ -79,23 +80,6 @@ async function requireHumanWriteAccessForEmailMove(
 	}
 }
 
-async function generateCaseReference(
-	ctx: MutationCtx,
-	organizationId: Id<"organizations">,
-) {
-	for (let attempt = 0; attempt < 5; attempt += 1) {
-		const reference = `CASE-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
-		const existing = await ctx.db
-			.query("cases")
-			.withIndex("by_organization_id_and_reference", (index) =>
-				index.eq("organizationId", organizationId).eq("reference", reference),
-			)
-			.unique();
-		if (!existing) return reference;
-	}
-	throw new Error("Could not generate a unique case reference");
-}
-
 export const create = mutation({
 	args: {
 		title: v.string(),
@@ -141,7 +125,7 @@ export const create = mutation({
 				args.entityIds,
 				args.relatedCaseIds,
 			),
-			generateCaseReference(ctx, actor.organization._id),
+			generateNextCaseReference(ctx, actor.organization._id),
 		]);
 		await Promise.all(
 			relations.relatedCaseIds.map((caseId) =>

@@ -90,6 +90,11 @@ describe("agent tools and projections", () => {
 			),
 		).toHaveLength(1);
 		expect(
+			state.createdCases.find(
+				(caseRecord) => caseRecord.title === "Created once",
+			)?.reference,
+		).toBe("AGNT-00001");
+		expect(
 			state.events.filter(
 				(event) =>
 					"type" in event &&

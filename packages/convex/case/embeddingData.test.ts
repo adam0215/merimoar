@@ -23,11 +23,13 @@ async function createFixture() {
 		const organizationId = await ctx.db.insert("organizations", {
 			name: "Embedding organization",
 			workosOrganizationId: "org_embedding",
+			referenceSlug: "EMBD",
 			active: true,
 		});
 		const otherOrganizationId = await ctx.db.insert("organizations", {
 			name: "Other organization",
 			workosOrganizationId: "org_embedding_other",
+			referenceSlug: "OTHR",
 			active: true,
 		});
 		const actorMemberId = await ctx.db.insert("organizationMembers", {

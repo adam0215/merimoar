@@ -19,6 +19,7 @@ async function createFixture(active?: boolean) {
 		const id = await ctx.db.insert("organizations", {
 			name: "Merimoar",
 			workosOrganizationId: "org_merimoar",
+			referenceSlug: "MER",
 			active: true,
 		});
 		if (active !== undefined) {

@@ -34,6 +34,7 @@ async function createAcmeFixture() {
 		const organizationId = await ctx.db.insert("organizations", {
 			name: "Acme AB",
 			workosOrganizationId: ACME_WORKOS_ORGANIZATION_ID,
+			referenceSlug: "ACME",
 			active: true,
 		});
 		const memberId = await ctx.db.insert("organizationMembers", {
@@ -44,6 +45,7 @@ async function createAcmeFixture() {
 		const otherOrganizationId = await ctx.db.insert("organizations", {
 			name: "Other organization",
 			workosOrganizationId: "org_other_seed_fixture",
+			referenceSlug: "OTHR",
 			active: true,
 		});
 		const otherMemberId = await ctx.db.insert("organizationMembers", {

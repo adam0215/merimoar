@@ -209,6 +209,7 @@ describe("email integrations", () => {
 			const organizationId = await ctx.db.insert("organizations", {
 				name: "Merimoar",
 				workosOrganizationId: "org_merimoar",
+				referenceSlug: "MER",
 				active: true,
 			});
 			return await ctx.db.insert("emailIntegrations", {

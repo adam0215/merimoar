@@ -6,18 +6,21 @@ import {
 	IconFolderFilled,
 	IconHome,
 	IconInbox,
+	IconPlus,
 	IconRobot,
 	IconSettings,
 	IconSettingsFilled,
 } from "@tabler/icons-react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import type { FunctionReturnType } from "convex/server";
 import { useQuery } from "convex-helpers/react/cache";
+import { useState } from "react";
 import {
 	CASE_VIEW_FILTER_OPTIONS,
 	CaseViewIndicator,
 	isCaseViewFilter,
 } from "#/components/case/case-status.tsx";
+import { CreateCaseDialog } from "#/components/case/create-case-dialog.tsx";
 import { SidebarUserMenu } from "#/components/sidebar-user-menu.tsx";
 import {
 	Collapsible,
@@ -213,6 +216,7 @@ export function WorkSidebar({
 	const contactsIsActive = pathname === "/contacts";
 	const casesIsActive = pathname === "/cases";
 	const settingsEmailIsActive = pathname === "/settings/organization/email";
+	const settingsGeneralIsActive = pathname === "/settings/organization/general";
 	const settingsEntitiesIsActive =
 		pathname === "/settings/organization/entities";
 	const settingsIsActive = pathname.startsWith("/settings");
@@ -221,6 +225,12 @@ export function WorkSidebar({
 	const selectedCaseView = isCaseViewFilter(location.search.view)
 		? location.search.view
 		: "all";
+	const navigate = useNavigate();
+	const [createCaseDialogOpen, setCreateCaseDialogOpen] = useState(false);
+	const createCaseOptions = useQuery(
+		api.case.reader.getCreateOptions,
+		createCaseDialogOpen ? {} : "skip",
+	);
 	const pendingApprovals = useQuery(api.agent.reader.listPendingApprovals, {});
 	const agentInboxCount =
 		pendingApprovals?.reduce(
@@ -253,7 +263,7 @@ export function WorkSidebar({
 									isActive={casesIsActive}
 									tooltip="Cases"
 									className={cn(
-										"pr-8",
+										"pr-14",
 										casesIsActive ? "text-foreground" : "text-muted-foreground",
 									)}
 									render={<Link to="/cases" search={{}} />}
@@ -261,6 +271,32 @@ export function WorkSidebar({
 									<CasesIcon />
 									<span>Cases</span>
 								</SidebarMenuButton>
+								<CreateCaseDialog
+									options={createCaseOptions}
+									open={createCaseDialogOpen}
+									onOpenChange={setCreateCaseDialogOpen}
+									onCreated={(caseId) =>
+										void navigate({
+											to: "/cases",
+											search: {
+												case: caseId,
+												view:
+													casesIsActive && selectedCaseView !== "all"
+														? selectedCaseView
+														: undefined,
+											},
+										})
+									}
+									trigger={
+										<SidebarMenuAction
+											aria-label="Create case"
+											title="Create case"
+											className="right-7"
+										>
+											<IconPlus />
+										</SidebarMenuAction>
+									}
+								/>
 								<CollapsibleTrigger
 									render={
 										<SidebarMenuAction
@@ -348,6 +384,19 @@ export function WorkSidebar({
 								</CollapsibleTrigger>
 								<CollapsibleContent>
 									<SidebarMenuSub>
+										<SidebarMenuSubItem>
+											<SidebarMenuSubButton
+												isActive={settingsGeneralIsActive}
+												className={
+													settingsGeneralIsActive
+														? "text-foreground"
+														: "text-muted-foreground"
+												}
+												render={<Link to="/settings/organization/general" />}
+											>
+												<span>General</span>
+											</SidebarMenuSubButton>
+										</SidebarMenuSubItem>
 										<SidebarMenuSubItem>
 											<SidebarMenuSubButton
 												isActive={settingsEntitiesIsActive}

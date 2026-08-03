@@ -22,8 +22,14 @@ export default defineSchema({
 	organizations: defineTable({
 		name: v.string(),
 		workosOrganizationId: v.string(),
+		referenceSlug: v.string(),
 		active: v.boolean(),
 	}).index("by_workos_organization_id", ["workosOrganizationId"]),
+
+	caseReferenceSequences: defineTable({
+		organizationId: v.id("organizations"),
+		lastIndex: v.int64(),
+	}).index("by_organization_id", ["organizationId"]),
 
 	emailIntegrations: defineTable({
 		organizationId: v.id("organizations"),
