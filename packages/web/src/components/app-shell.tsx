@@ -15,6 +15,7 @@ import {
 } from "#/components/agents/agent-navigation.ts";
 import { AgentsSidebar } from "#/components/agents/agents-sidebar.tsx";
 import { AppNotificationCenter } from "#/components/app-notification-center.tsx";
+import { GlobalSearch } from "#/components/global-search.tsx";
 import { MerimoarLogo } from "#/components/merimoar-logo.tsx";
 import { OrganizationSwitcher } from "#/components/organization-switcher.tsx";
 import {
@@ -158,7 +159,7 @@ function AppHeader({
 			</div>
 			<div
 				className={cn(
-					"flex min-w-0 flex-1 items-center gap-4 pr-4 pl-2",
+					"flex min-w-0 flex-1 items-center gap-4 pr-4 pl-2 md:grid md:grid-cols-[minmax(0,1fr)_minmax(12rem,16rem)_minmax(0,1fr)]",
 					state === "expanded" && "md:pl-0",
 				)}
 			>
@@ -170,6 +171,7 @@ function AppHeader({
 						<InboxAddressSummary addresses={inboxAddresses} />
 					)}
 				</div>
+				<GlobalSearch />
 				<AreaTabs activeArea={activeArea} />
 			</div>
 		</header>
