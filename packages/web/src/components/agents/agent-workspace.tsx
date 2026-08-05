@@ -84,27 +84,27 @@ export function AgentOverview() {
 					<OverviewMetric
 						label={TASK_OVERVIEW_LABELS.active}
 						value={counts.active}
-						icon={<IconPlayerPlay />}
+						icon={<IconPlayerPlay className="text-system-blue" />}
 					/>
 					<OverviewMetric
 						label={TASK_OVERVIEW_LABELS.waiting}
 						value={counts.waiting}
-						icon={<IconClock />}
+						icon={<IconClock className="text-alert" />}
 					/>
 					<OverviewMetric
 						label={TASK_OVERVIEW_LABELS.approval}
 						value={counts.approval}
-						icon={<IconHandStop />}
+						icon={<IconHandStop className="text-alert" />}
 					/>
 					<OverviewMetric
 						label={TASK_OVERVIEW_LABELS.finished}
 						value={counts.finished}
-						icon={<IconCircleCheck />}
+						icon={<IconCircleCheck className="text-success" />}
 					/>
 					<OverviewMetric
 						label={TASK_OVERVIEW_LABELS.unable}
 						value={counts.unable}
-						icon={<IconAlertTriangle />}
+						icon={<IconAlertTriangle className="text-destructive" />}
 						className="col-span-2 sm:col-span-1"
 					/>
 				</div>
