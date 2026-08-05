@@ -139,7 +139,8 @@ function AppHeader({
 			<div
 				className={cn(
 					"flex h-full w-20 shrink-0 items-center gap-1 pr-0 pl-2 transition-[width,padding] duration-200",
-					state === "expanded" && "md:w-(--sidebar-width) md:px-4",
+					state === "expanded" &&
+						"md:w-(--sidebar-width) md:gap-0 md:pr-1.5 md:pl-4",
 				)}
 			>
 				<Link
@@ -155,7 +156,7 @@ function AppHeader({
 						<OrganizationSwitcher organizations={organizations} />
 					</div>
 				)}
-				<SidebarTrigger className="ml-auto shrink-0" />
+				<SidebarTrigger className="ml-auto shrink-0 text-muted-foreground" />
 			</div>
 			<div
 				className={cn(

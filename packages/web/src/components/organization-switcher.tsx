@@ -84,7 +84,7 @@ export function OrganizationSwitcher({
 				aria-label="Organization"
 				disabled={loading || isSwitching}
 				className={cn(
-					"h-9 w-full max-w-full border-0 bg-transparent px-2 py-0 shadow-none hover:bg-muted focus-visible:ring-2 dark:hover:bg-muted",
+					"h-9 w-full max-w-full border-0 bg-transparent py-0 pr-0 pl-2 shadow-none hover:bg-muted focus-visible:ring-2 dark:hover:bg-muted",
 					ORGANIZATION_NAME_TYPOGRAPHY_CLASS_NAME,
 				)}
 			>

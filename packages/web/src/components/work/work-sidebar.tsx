@@ -112,8 +112,8 @@ function PrimaryNavigationSidebarGroup({
 							</SidebarMenuButton>
 							<SidebarMenuBadge
 								className={cn(
-									hasInboxes ? "right-8" : "right-2",
-									"top-1/2! translate-x-px -translate-y-1/2 justify-end px-0 font-normal text-muted-foreground text-xs peer-hover/menu-button:text-muted-foreground peer-data-active/menu-button:text-muted-foreground",
+									hasInboxes ? "right-7" : "right-2",
+									"top-1/2! w-5 -translate-y-1/2 px-0 font-normal text-muted-foreground text-xs peer-hover/menu-button:text-muted-foreground peer-data-active/menu-button:text-muted-foreground",
 								)}
 								aria-label={`${totalUnreadCount} unread`}
 							>
