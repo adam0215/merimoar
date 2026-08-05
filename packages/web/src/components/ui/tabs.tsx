@@ -29,7 +29,7 @@ const tabsListVariants = cva(
 				default: "bg-muted",
 				line: "gap-1 bg-transparent",
 				"divider-line":
-					"gap-1 bg-transparent p-0 group-data-horizontal/tabs:w-full group-data-horizontal/tabs:justify-start group-data-horizontal/tabs:after:absolute group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:-bottom-px group-data-horizontal/tabs:after:h-0.5 group-data-horizontal/tabs:after:rounded-full group-data-horizontal/tabs:after:bg-border group-data-vertical/tabs:after:absolute group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:-right-px group-data-vertical/tabs:after:w-0.5 group-data-vertical/tabs:after:rounded-full group-data-vertical/tabs:after:bg-border",
+					"gap-1 bg-transparent p-0 group-data-horizontal/tabs:w-full group-data-horizontal/tabs:justify-start group-data-horizontal/tabs:after:absolute group-data-horizontal/tabs:after:inset-x-0 group-data-horizontal/tabs:after:bottom-[-0.5px] group-data-horizontal/tabs:after:h-px group-data-horizontal/tabs:after:rounded-full group-data-horizontal/tabs:after:bg-border group-data-vertical/tabs:after:absolute group-data-vertical/tabs:after:inset-y-0 group-data-vertical/tabs:after:right-[-0.5px] group-data-vertical/tabs:after:w-px group-data-vertical/tabs:after:rounded-full group-data-vertical/tabs:after:bg-border",
 			},
 		},
 		defaultVariants: {
@@ -62,7 +62,7 @@ function TabsList({
 				<TabsPrimitive.Indicator
 					renderBeforeHydration
 					data-slot="tabs-indicator"
-					className="pointer-events-none absolute z-10 rounded-full bg-foreground group-data-horizontal/tabs:-bottom-px group-data-horizontal/tabs:left-0 group-data-horizontal/tabs:h-0.5 group-data-horizontal/tabs:w-(--active-tab-width) group-data-horizontal/tabs:translate-x-(--active-tab-left) group-data-vertical/tabs:top-0 group-data-vertical/tabs:-right-px group-data-vertical/tabs:h-(--active-tab-height) group-data-vertical/tabs:w-0.5 group-data-vertical/tabs:translate-y-(--active-tab-top)"
+					className="pointer-events-none absolute z-10 rounded-full bg-foreground transition-transform duration-150 ease-[cubic-bezier(0.77,0,0.175,1)] group-data-horizontal/tabs:bottom-[-0.5px] group-data-horizontal/tabs:left-0 group-data-horizontal/tabs:h-px group-data-horizontal/tabs:w-(--active-tab-width) group-data-horizontal/tabs:translate-x-(--active-tab-left) group-data-vertical/tabs:top-0 group-data-vertical/tabs:right-[-0.5px] group-data-vertical/tabs:h-(--active-tab-height) group-data-vertical/tabs:w-px group-data-vertical/tabs:translate-y-(--active-tab-top) motion-reduce:transition-none"
 				/>
 			)}
 			{children}
