@@ -21,12 +21,12 @@ export function TakeOverTaskDialog({
 	caseId,
 	label = "Take over",
 	iconOnly = false,
-	variant = "outline",
+	variant = "secondary",
 }: {
 	caseId: Id<"cases">;
 	label?: string;
 	iconOnly?: boolean;
-	variant?: "ghost" | "outline" | "secondary";
+	variant?: "ghost" | "secondary";
 }) {
 	const takeOverCase = useMutation(api.agent.tasks.takeOverCase);
 	const [isTakingOver, setIsTakingOver] = useState(false);
@@ -70,7 +70,7 @@ export function TakeOverTaskDialog({
 					</DialogDescription>
 				</DialogHeader>
 				<DialogFooter>
-					<DialogClose render={<Button variant="outline" />}>
+					<DialogClose render={<Button variant="secondary" />}>
 						Keep delegated
 					</DialogClose>
 					<DialogClose

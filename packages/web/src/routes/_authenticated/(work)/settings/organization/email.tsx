@@ -306,7 +306,7 @@ function FailedIngestEvents({
 							<Button
 								type="button"
 								size="sm"
-								variant="outline"
+								variant="secondary"
 								disabled={!failure.canReplay || replayingEventId !== undefined}
 								onClick={() => replay(failure.eventId, failure.inboxId)}
 							>

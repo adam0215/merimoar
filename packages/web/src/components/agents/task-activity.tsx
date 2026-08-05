@@ -116,7 +116,7 @@ export function TaskActivity({
 							{turns.status === "CanLoadMore" && (
 								<MessageScrollerItem>
 									<Button
-										variant="outline"
+										variant="secondary"
 										size="sm"
 										onClick={() => turns.loadMore(20)}
 									>
@@ -191,7 +191,11 @@ function TurnItems({
 				),
 			)}
 			{items.status === "CanLoadMore" && (
-				<Button variant="outline" size="sm" onClick={() => items.loadMore(100)}>
+				<Button
+					variant="secondary"
+					size="sm"
+					onClick={() => items.loadMore(100)}
+				>
 					Load more activity
 				</Button>
 			)}

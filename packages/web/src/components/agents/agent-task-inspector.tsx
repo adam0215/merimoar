@@ -32,7 +32,7 @@ export function AgentTaskInspector({ taskId }: { taskId: string }) {
 				<p className="text-sm font-medium">Task not found</p>
 				<Button
 					nativeButton={false}
-					variant="outline"
+					variant="secondary"
 					size="sm"
 					className="mt-4"
 					render={<Link to="/agents" search={{ view: "tasks" }} />}

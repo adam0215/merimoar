@@ -94,7 +94,7 @@ export function AddFieldDialog({
 				setOpen(nextOpen);
 			}}
 		>
-			<DialogTrigger render={<Button variant="outline" size="sm" />}>
+			<DialogTrigger render={<Button variant="secondary" size="sm" />}>
 				<IconPlus />
 				Add field
 			</DialogTrigger>

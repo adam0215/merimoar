@@ -368,7 +368,7 @@ function OutboundSendFailure({
 			{canRetry && (
 				<Button
 					type="button"
-					variant="outline"
+					variant="secondary"
 					size="xs"
 					disabled={readOnly || isRetrying}
 					title={

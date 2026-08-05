@@ -1,6 +1,6 @@
 import { api } from "@merimoar/convex/api";
 import type { Id } from "@merimoar/convex/data-model";
-import { IconChevronDown, IconRobot } from "@tabler/icons-react";
+import { IconChevronDown, IconHistory, IconRobot } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "convex/react";
 import { motion, useReducedMotion } from "motion/react";
@@ -103,7 +103,7 @@ function CaseTaskMenu({ tasks }: { tasks: CaseAgentTaskSummary[] }) {
 					/>
 				}
 			>
-				<IconRobot />
+				<IconHistory />
 			</DropdownMenuTrigger>
 			<DropdownMenuContent
 				side="top"
@@ -323,7 +323,8 @@ function DelegateDialog({
 					<Button size="lg" className="h-11 rounded-full px-5 shadow-lg" />
 				}
 			>
-				Delegate to agent
+				<IconRobot />
+				Delegate
 			</DialogTrigger>
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
@@ -343,7 +344,7 @@ function DelegateDialog({
 						</Field>
 						<DialogFooter>
 							<Button
-								variant="outline"
+								variant="secondary"
 								disabled={isDelegating}
 								onClick={() => setShowInstruction(false)}
 							>
@@ -360,7 +361,7 @@ function DelegateDialog({
 				) : (
 					<DialogFooter>
 						<Button
-							variant="outline"
+							variant="secondary"
 							disabled={isDelegating}
 							onClick={() => setShowInstruction(true)}
 						>
