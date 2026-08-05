@@ -1,4 +1,3 @@
-import { defaultAgentDefinition } from "@merimoar/agent/manifest";
 import { api } from "@merimoar/convex/api";
 import {
 	IconAlertCircle,
@@ -178,35 +177,6 @@ export function AgentTasks() {
 	);
 }
 
-export function AgentToolsPage() {
-	return (
-		<AgentWorkspacePage>
-			<h1 className="text-2xl font-semibold tracking-tight">Tools</h1>
-			<AgentTools />
-		</AgentWorkspacePage>
-	);
-}
-
-function AgentTools() {
-	return (
-		<section aria-labelledby="agent-tools-heading">
-			<h2 id="agent-tools-heading" className="sr-only">
-				Tools
-			</h2>
-			<div className="grid gap-2 sm:grid-cols-2">
-				{defaultAgentDefinition.tools.map((tool) => (
-					<article key={tool} className="rounded-xl border p-4">
-						<p className="text-sm font-medium">{formatToolName(tool)}</p>
-						<p className="mt-1 font-mono text-xs text-muted-foreground">
-							{tool}
-						</p>
-					</article>
-				))}
-			</div>
-		</section>
-	);
-}
-
 function AgentWorkspacePage({ children }: { children: React.ReactNode }) {
 	return (
 		<div className="h-full overflow-y-auto">
@@ -325,11 +295,4 @@ function compareWorkspaceTasks(
 	const rightIsWorking = right.task.status === "active";
 	if (leftIsWorking !== rightIsWorking) return leftIsWorking ? -1 : 1;
 	return right.task.requestedAt - left.task.requestedAt;
-}
-
-function formatToolName(tool: string) {
-	return tool
-		.split("_")
-		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-		.join(" ");
 }

@@ -8,6 +8,8 @@ import {
 import {
 	createConnectedResendIntegration,
 	createTest,
+	insertResendIntegration,
+	setEmailIntegrationConnectionStatus,
 	syncWorkosUser,
 } from "#/test.setup";
 import { api, internal } from "../_generated/api";
@@ -92,18 +94,14 @@ async function createFixture() {
 			firstSeenAt: 1_000,
 			lastSeenAt: 1_000,
 		});
+		const { integrationId: inboundIntegrationId } =
+			await insertResendIntegration(ctx, organizationId, {
+				suffix: "inbound",
+				workosUserId: "user_adam",
+			});
 		const inboundMessageId = await ctx.db.insert("emailMessages", {
 			inboxId,
-			integrationId: await ctx.db.insert("emailIntegrations", {
-				organizationId,
-				provider: "resend",
-				status: "connected",
-				workosUserId: "user_adam",
-				workosOrganizationId: "org_merimoar",
-				workosDataIntegrationId: "data_integration_inbound",
-				workosConnectedAccountId: "connected_account_inbound",
-				workosConnectedAccountUpdatedAt: 1_000,
-			}),
+			integrationId: inboundIntegrationId,
 			threadId,
 			direction: "inbound",
 			senderContactId: contactId,
@@ -124,16 +122,11 @@ async function createFixture() {
 		await ctx.db.patch(threadId, {
 			latestMessageId: inboundMessageId,
 		});
-		const otherInboundIntegrationId = await ctx.db.insert("emailIntegrations", {
-			organizationId: otherOrganizationId,
-			provider: "resend",
-			status: "connected",
-			workosUserId: "user_other",
-			workosOrganizationId: "org_other",
-			workosDataIntegrationId: "data_integration_other_inbound",
-			workosConnectedAccountId: "connected_account_other_inbound",
-			workosConnectedAccountUpdatedAt: 1_000,
-		});
+		const { integrationId: otherInboundIntegrationId } =
+			await insertResendIntegration(ctx, otherOrganizationId, {
+				suffix: "other_inbound",
+				workosUserId: "user_other",
+			});
 		const otherContactId = await ctx.db.insert("contacts", {
 			organizationId: otherOrganizationId,
 			address: "customer@other.test",
@@ -683,10 +676,12 @@ describe("outbound email replies", () => {
 					address: "replies@verified.example",
 				},
 			});
-			await ctx.db.patch(fixture.integrationId, {
-				status: "needs_reauthorization",
-			});
 		});
+		await setEmailIntegrationConnectionStatus(
+			fixture.base,
+			fixture.integrationId,
+			"needs_reauthorization",
+		);
 		await expectErrorCode(
 			fixture.actor.mutation(api.email.outbound.queueReply, {
 				threadId: fixture.threadId,
@@ -701,8 +696,12 @@ describe("outbound email replies", () => {
 			fixture.otherOrganizationId,
 			"other",
 		);
+		await setEmailIntegrationConnectionStatus(
+			fixture.base,
+			fixture.integrationId,
+			"connected",
+		);
 		await fixture.base.run(async (ctx) => {
-			await ctx.db.patch(fixture.integrationId, { status: "connected" });
 			await ctx.db.patch(fixture.inboxId, {
 				outbound: {
 					integrationId: otherIntegrationId,
@@ -858,15 +857,17 @@ describe("outbound email replies", () => {
 	it("recovers routes and guards known, expired, and ambiguous provider outcomes", async () => {
 		const route = await createFixture();
 		const routeQueued = await saveAndQueue(route, "route-recovery");
-		await route.base.run(async (ctx) => {
-			await ctx.db.patch(route.integrationId, {
-				status: "needs_reauthorization",
-			});
-		});
+		await setEmailIntegrationConnectionStatus(
+			route.base,
+			route.integrationId,
+			"needs_reauthorization",
+		);
 		expect(await prepareSendAttempt(route, routeQueued)).toBeNull();
-		await route.base.run(async (ctx) => {
-			await ctx.db.patch(route.integrationId, { status: "connected" });
-		});
+		await setEmailIntegrationConnectionStatus(
+			route.base,
+			route.integrationId,
+			"connected",
+		);
 		await route.actor.mutation(api.email.outbound.retryFailedSend, {
 			messageId: routeQueued.messageId,
 		});
@@ -956,8 +957,12 @@ describe("outbound email replies", () => {
 			await ctx.db.patch(queued.messageId, {
 				externalMessageId: "already-accepted-id",
 			});
-			await ctx.db.patch(fixture.integrationId, { status: "disconnected" });
 		});
+		await setEmailIntegrationConnectionStatus(
+			fixture.base,
+			fixture.integrationId,
+			"disconnected",
+		);
 		expect(await prepareSendAttempt(fixture, queued)).toMatchObject({
 			message: { externalMessageId: "already-accepted-id" },
 		});

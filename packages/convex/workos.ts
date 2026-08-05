@@ -2,9 +2,10 @@ import { type AuthFunctions, AuthKit } from "@convex-dev/workos-authkit";
 import { type GenericMutationCtx } from "convex/server";
 import { v } from "convex/values";
 import {
-	type ResendPipesSnapshot,
-	synchronizeResendIntegration,
-} from "#/email/integrations";
+	synchronizeResendEmailIntegration,
+	upsertConnectedAccount,
+} from "#/integrations/connectedAccounts";
+import type { ConnectedAccountSnapshot } from "#/integrations/model";
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import type {
@@ -187,9 +188,10 @@ export function isPipesConnectedAccountEvent(
 	);
 }
 
-function parseResendConnectedAccountEventData(
+export function parseConnectedAccountSnapshot(
+	event: (typeof PIPES_CONNECTED_ACCOUNT_EVENT_TYPES)[number],
 	data: Record<string, unknown>,
-): ResendPipesSnapshot | null {
+): ConnectedAccountSnapshot | null {
 	const updatedAt =
 		typeof data.updated_at === "string"
 			? Date.parse(data.updated_at)
@@ -197,6 +199,7 @@ function parseResendConnectedAccountEventData(
 	if (
 		typeof data.id !== "string" ||
 		typeof data.data_integration_id !== "string" ||
+		typeof data.provider_slug !== "string" ||
 		typeof data.organization_id !== "string" ||
 		!Array.isArray(data.scopes) ||
 		!data.scopes.every((scope) => typeof scope === "string") ||
@@ -206,16 +209,23 @@ function parseResendConnectedAccountEventData(
 		return null;
 	}
 	return {
-		connectedAccountId: data.id,
-		dataIntegrationId: data.data_integration_id,
-		organizationId: data.organization_id,
-		scopes: data.scopes,
-		updatedAt,
-		userId: data.user_id,
+		workosConnectedAccountId: data.id,
+		workosDataIntegrationId: data.data_integration_id,
+		providerSlug: data.provider_slug,
+		workosUserId: data.user_id,
+		workosOrganizationId: data.organization_id,
+		grantedScopes: data.scopes,
+		connectionStatus:
+			event === "pipes.connected_account.connected"
+				? "connected"
+				: event === "pipes.connected_account.disconnected"
+					? "disconnected"
+					: "needs_reauthorization",
+		workosUpdatedAt: updatedAt,
 	};
 }
 
-export const processPipesWebhookEvent = internalMutation({
+export const processConnectedAccountWebhookEvent = internalMutation({
 	args: {
 		eventId: v.string(),
 		event: v.union(
@@ -227,15 +237,8 @@ export const processPipesWebhookEvent = internalMutation({
 	},
 	returns: v.null(),
 	handler: async (ctx, args): Promise<null> => {
-		const providerSlug = args.data.provider_slug;
-		if (typeof providerSlug !== "string") {
-			throw new Error("Invalid WorkOS Pipes provider");
-		}
-		if (providerSlug !== "resend") {
-			return null;
-		}
 		const processedEvent = await ctx.db
-			.query("emailIntegrationSyncEvents")
+			.query("connectedAccountSyncEvents")
 			.withIndex("by_source_and_source_event_id", (query) =>
 				query.eq("source", "workos_pipes").eq("sourceEventId", args.eventId),
 			)
@@ -243,21 +246,52 @@ export const processPipesWebhookEvent = internalMutation({
 		if (processedEvent) {
 			return null;
 		}
-		await ctx.db.insert("emailIntegrationSyncEvents", {
+
+		if (args.data.organization_id === null || args.data.user_id === null) {
+			const updatedAt =
+				typeof args.data.updated_at === "string"
+					? Date.parse(args.data.updated_at)
+					: Number.NaN;
+			await ctx.db.insert("connectedAccountSyncEvents", {
+				source: "workos_pipes",
+				sourceEventId: args.eventId,
+				eventType: args.event,
+				providerSlug:
+					typeof args.data.provider_slug === "string"
+						? args.data.provider_slug
+						: undefined,
+				workosConnectedAccountId:
+					typeof args.data.id === "string" ? args.data.id : undefined,
+				workosUpdatedAt: Number.isFinite(updatedAt) ? updatedAt : undefined,
+				outcome: "ignored_unscoped",
+				processedAt: Date.now(),
+			});
+			return null;
+		}
+
+		const snapshot = parseConnectedAccountSnapshot(args.event, args.data);
+		if (!snapshot) {
+			throw new Error("Invalid WorkOS Pipes connected account");
+		}
+		const organizationId = await ensureOrganization(
+			ctx,
+			snapshot.workosOrganizationId,
+		);
+		const result = await upsertConnectedAccount(ctx, organizationId, snapshot);
+		if (result.connectedAccount.providerSlug === "resend") {
+			await synchronizeResendEmailIntegration(ctx, result.connectedAccount);
+		}
+		await ctx.db.insert("connectedAccountSyncEvents", {
 			source: "workos_pipes",
 			sourceEventId: args.eventId,
 			eventType: args.event,
+			providerSlug: snapshot.providerSlug,
+			workosConnectedAccountId: snapshot.workosConnectedAccountId,
+			connectedAccountId: result.connectedAccount._id,
+			workosUpdatedAt: snapshot.workosUpdatedAt,
+			outcome: result.outcome,
 			processedAt: Date.now(),
 		});
-		if (args.data.organization_id === null || args.data.user_id === null) {
-			return null;
-		}
-		const data = parseResendConnectedAccountEventData(args.data);
-		if (!data) {
-			throw new Error("Invalid WorkOS Pipes Resend connected account");
-		}
-		const organizationId = await ensureOrganization(ctx, data.organizationId);
-		await synchronizeResendIntegration(ctx, organizationId, args.event, data);
 		return null;
 	},
 });

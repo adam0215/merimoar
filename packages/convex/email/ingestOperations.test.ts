@@ -209,7 +209,7 @@ describe("failed email ingest operations", () => {
 
 	it("does not route an integration into another organization", async () => {
 		const { base, organizationId, otherActor } = await createFixture();
-		await createActiveEmailInbox(otherActor, {
+		const otherInboxId = await createActiveEmailInbox(otherActor, {
 			displayName: "Other",
 			address: "shared@example.test",
 		});
@@ -230,6 +230,17 @@ describe("failed email ingest operations", () => {
 		const event = await base.run(async (ctx) => ctx.db.get(eventId));
 		expect(event).toMatchObject({ integrationId });
 		expect(event).not.toHaveProperty("inboxId");
+		expect(
+			await otherActor.query(api.email.ingestOperations.listFailedEvents, {
+				inboxId: otherInboxId,
+			}),
+		).toEqual([]);
+		await expect(
+			otherActor.mutation(api.email.ingestOperations.replayFailedEvent, {
+				inboxId: otherInboxId,
+				eventId,
+			}),
+		).rejects.toThrow("could not be found");
 	});
 
 	it("tracks attempts and ignores stale Workpool generations", async () => {

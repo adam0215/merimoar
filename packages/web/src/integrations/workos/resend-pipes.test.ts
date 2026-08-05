@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
 	createEmailSettingsReturnTo,
+	hasResendEmailScope,
 	isResendAuthorizationRejected,
 	resolveResendPipesConnectionState,
 } from "#/integrations/workos/resend-pipes";
@@ -42,6 +43,15 @@ describe("Resend Pipes connection state", () => {
 });
 
 describe("Resend Pipes authorization health", () => {
+	test("keeps an active WorkOS connection separate from missing email scope", () => {
+		expect(
+			hasResendEmailScope({
+				scopes: ["emails:send"],
+				missingScopes: ["full_access"],
+			}),
+		).toBe(false);
+	});
+
 	test.each([
 		401, 403,
 	])("treats provider authorization rejection %s as requiring reconnection", (statusCode) => {

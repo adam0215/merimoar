@@ -2,6 +2,7 @@
 
 import type { EmailSendFailure } from "#/email/model";
 import { connectResendOutboundEmailProvider } from "#/email/outboundResendProvider";
+import type { EmailIntegrationAccessContext } from "#/integrations/model";
 import type { Doc } from "../_generated/dataModel";
 
 export type ProviderSendResult =
@@ -27,14 +28,23 @@ export type OutboundProviderConnection =
 	| {
 			status: "unavailable";
 			failure: Extract<EmailSendFailure, { kind: "before_provider" }>;
-			reauthorizationRequired: boolean;
+			workosAccessFailure?: "needs_reauthorization" | "not_installed";
 	  };
 
 export async function connectOutboundEmailProvider(
-	integration: Doc<"emailIntegrations">,
+	integration: EmailIntegrationAccessContext,
 ): Promise<OutboundProviderConnection> {
-	switch (integration.provider) {
+	switch (integration.providerSlug) {
 		case "resend":
 			return await connectResendOutboundEmailProvider(integration);
+		default:
+			return {
+				status: "unavailable",
+				failure: {
+					kind: "before_provider",
+					reason: "configuration",
+					message: "This connected account has no email provider binding.",
+				},
+			};
 	}
 }

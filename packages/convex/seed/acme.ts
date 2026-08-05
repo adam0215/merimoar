@@ -542,15 +542,18 @@ export async function insertAcmeDataset(
 	owner: Doc<"organizationMembers">,
 ) {
 	assertAcmeDatasetIsInternallyConsistent();
-	const integrationId = await ctx.db.insert("emailIntegrations", {
+	const connectedAccountId = await ctx.db.insert("connectedAccounts", {
 		organizationId: organization._id,
-		provider: "resend",
-		status: "disconnected",
+		providerSlug: "resend",
 		workosUserId: owner.workosUserId,
-		workosOrganizationId: organization.workosOrganizationId,
 		workosDataIntegrationId: `seed:${ACME_DATASET_VERSION}`,
 		workosConnectedAccountId: `seed:${ACME_DATASET_VERSION}:${organization._id}`,
-		workosConnectedAccountUpdatedAt: INTEGRATION_UPDATED_AT,
+		connectionStatus: "disconnected",
+		grantedScopes: [],
+		workosUpdatedAt: INTEGRATION_UPDATED_AT,
+	});
+	const integrationId = await ctx.db.insert("emailIntegrations", {
+		connectedAccountId,
 	});
 	const inboxId = await ctx.db.insert("emailInboxes", {
 		organizationId: organization._id,

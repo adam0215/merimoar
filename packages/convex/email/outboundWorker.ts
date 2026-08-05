@@ -72,7 +72,7 @@ export const processOutboundEmail = internalAction({
 					await reconcileInternetMessageId(
 						ctx,
 						context.message._id,
-						context.integration._id,
+						context.integration.integrationId,
 						context.message.externalMessageId,
 						connection.provider,
 					);
@@ -103,13 +103,14 @@ export const processOutboundEmail = internalAction({
 			throw new Error("Email provider access is temporarily unavailable");
 		}
 		if (connection.status === "unavailable") {
-			if (connection.reauthorizationRequired) {
+			if (connection.workosAccessFailure) {
 				await ctx.runMutation(
-					internal.email.integrations.markNeedsReauthorization,
+					internal.email.integrations.recordWorkosAccessFailure,
 					{
-						integrationId: context.integration._id,
-						expectedConnectedAccountUpdatedAt:
-							context.integration.workosConnectedAccountUpdatedAt,
+						integrationId: context.integration.integrationId,
+						expectedConnectedAccountId: context.integration.connectedAccountId,
+						expectedWorkosUpdatedAt: context.integration.workosUpdatedAt,
+						error: connection.workosAccessFailure,
 					},
 				);
 			}
@@ -143,11 +144,12 @@ export const processOutboundEmail = internalAction({
 		if (result.status === "rejected") {
 			if (result.kind === "authorization") {
 				await ctx.runMutation(
-					internal.email.integrations.markNeedsReauthorization,
+					internal.email.integrations.recordWorkosAccessFailure,
 					{
-						integrationId: context.integration._id,
-						expectedConnectedAccountUpdatedAt:
-							context.integration.workosConnectedAccountUpdatedAt,
+						integrationId: context.integration.integrationId,
+						expectedConnectedAccountId: context.integration.connectedAccountId,
+						expectedWorkosUpdatedAt: context.integration.workosUpdatedAt,
+						error: "needs_reauthorization",
 					},
 				);
 			}
@@ -198,7 +200,7 @@ export const processOutboundEmail = internalAction({
 			await reconcileInternetMessageId(
 				ctx,
 				context.message._id,
-				context.integration._id,
+				context.integration.integrationId,
 				result.externalMessageId,
 				provider,
 			);

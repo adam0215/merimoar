@@ -14,7 +14,11 @@ describe("Resend Pipes access", () => {
 					missingScopes: [],
 				},
 			}),
-		).toEqual({ active: true, token: "oauth-token" });
+		).toEqual({
+			active: true,
+			token: "oauth-token",
+			grantedScopes: ["full_access"],
+		});
 	});
 
 	it("preserves WorkOS reauthorization failures", () => {

@@ -92,6 +92,7 @@ describe("Acme residential management seed fixture", () => {
 		expect(counts).toEqual(calculateAcmeCreationCounts());
 		expect(counts).toMatchObject({
 			emailIntegrations: 1,
+			connectedAccounts: 1,
 			emailInboxes: 1,
 			emailThreads: 17,
 			emailThreadExternalReferences: 17,

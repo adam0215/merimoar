@@ -48,6 +48,19 @@ describe("agent runtime diagnostics", () => {
 		});
 	});
 
+	it("preserves arbitrary external JSON keys without prototype semantics", () => {
+		const externalJson = JSON.parse(
+			'{"_id":"external-id","__proto__":{"safe":true}}',
+		) as Record<string, unknown>;
+		const serialized = JSON.parse(
+			serializeDiagnosticValue(externalJson),
+		) as Record<string, unknown>;
+
+		expect(serialized._id).toBe("external-id");
+		expect(Object.hasOwn(serialized, "__proto__")).toBe(true);
+		expect(serialized.__proto__).toEqual({ safe: true });
+	});
+
 	it("redacts credentials embedded in provider errors", () => {
 		expect(
 			getDiagnosticErrorMessage(

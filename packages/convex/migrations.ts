@@ -1,10 +1,87 @@
 import { Migrations } from "@convex-dev/migrations";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import type { DataModel } from "./_generated/dataModel";
+import type { DataModel, Doc } from "./_generated/dataModel";
 import { internalQuery } from "./_generated/server";
+import {
+	computeCustomToolConfigurationHash,
+	computeLegacyCustomToolConfigurationHash,
+} from "./agent/customToolModel";
 
 const migrations = new Migrations<DataModel>(components.migrations);
+
+export const normalizeCustomToolPaths = migrations.define({
+	table: "agentCustomTools",
+	migrateOne: async (ctx, tool) => {
+		if (!tool.path.startsWith("/")) {
+			return;
+		}
+		const integration = await ctx.db.get(
+			"customIntegrations",
+			tool.integrationId,
+		);
+		if (!integration) {
+			throw new Error(`Custom tool ${tool._id} has no integration`);
+		}
+		if (
+			tool.testedConfigurationHash !==
+			(await computeLegacyCustomToolConfigurationHash({
+				baseUrl: integration.baseUrl,
+				path: tool.path,
+				parameters: tool.parameters,
+			}))
+		) {
+			throw new Error(`Custom tool ${tool._id} has no valid test proof`);
+		}
+		const path = tool.path.slice(1);
+		await ctx.db.patch("agentCustomTools", tool._id, {
+			path,
+			testedConfigurationHash: await computeCustomToolConfigurationHash({
+				baseUrl: integration.baseUrl,
+				path,
+				parameters: tool.parameters,
+			}),
+		});
+	},
+});
+
+const acmeDemoCamelCaseParameterNames = new Map([
+	["property_identifier", "propertyIdentifier"],
+	["case_reference", "caseReference"],
+	["asset_id", "assetId"],
+	["supplier_number", "supplierNumber"],
+	["system_id", "systemId"],
+	["invoice_number", "invoiceNumber"],
+]);
+
+export const camelCaseAcmeDemoToolParameters = migrations.define({
+	table: "agentCustomTools",
+	migrateOne: async (ctx, tool) => {
+		const integration = await ctx.db.get(
+			"customIntegrations",
+			tool.integrationId,
+		);
+		if (
+			integration?.name !== "MockAPI" ||
+			integration.baseUrl !== "http://localhost:8000/"
+		) {
+			return;
+		}
+		const parameters = tool.parameters.map((parameter) => ({
+			...parameter,
+			name:
+				acmeDemoCamelCaseParameterNames.get(parameter.name) ?? parameter.name,
+		}));
+		if (
+			parameters.every(
+				(parameter, index) => parameter.name === tool.parameters[index]?.name,
+			)
+		) {
+			return;
+		}
+		await ctx.db.patch("agentCustomTools", tool._id, { parameters });
+	},
+});
 
 export const backfillOrganizationReferenceSlugs = migrations.define({
 	table: "organizations",
@@ -122,7 +199,15 @@ export const reconcileConnectedResendWebhooksForOutboundEvents =
 	migrations.define({
 		table: "emailIntegrations",
 		migrateOne: async (ctx, integration) => {
-			if (integration.status !== "connected") {
+			const connectedAccount = await ctx.db.get(
+				"connectedAccounts",
+				integration.connectedAccountId,
+			);
+			if (
+				!connectedAccount ||
+				connectedAccount.connectionStatus !== "connected" ||
+				!connectedAccount.grantedScopes.includes("full_access")
+			) {
 				return;
 			}
 			await ctx.scheduler.runAfter(
@@ -130,10 +215,274 @@ export const reconcileConnectedResendWebhooksForOutboundEvents =
 				internal.email.integrationActions.reconcileResendWebhook,
 				{
 					integrationId: integration._id,
-					expectedConnectedAccountUpdatedAt:
-						integration.workosConnectedAccountUpdatedAt,
+					expectedConnectedAccountId: connectedAccount._id,
+					expectedWorkosUpdatedAt: connectedAccount.workosUpdatedAt,
 					attempt: 0,
 				},
 			);
 		},
 	});
+
+export const preflightConnectedAccountCleanupTasks = migrations.define({
+	table: "emailIntegrationWebhookCleanupTasks",
+	migrateOne: async (ctx, task) => {
+		const integration = await ctx.db.get(
+			"emailIntegrations",
+			task.integrationId,
+		);
+		if (!integration) {
+			throw new Error(
+				`Webhook cleanup task ${task._id} has an orphaned email integration`,
+			);
+		}
+	},
+});
+
+export const backfillConnectedAccountSyncEvents = migrations.define({
+	table: "emailIntegrationSyncEvents",
+	migrateOne: async (ctx, event) => {
+		const existing = await ctx.db
+			.query("connectedAccountSyncEvents")
+			.withIndex("by_source_and_source_event_id", (index) =>
+				index
+					.eq("source", event.source)
+					.eq("sourceEventId", event.sourceEventId),
+			)
+			.unique();
+		if (!existing) {
+			await ctx.db.insert("connectedAccountSyncEvents", {
+				source: event.source,
+				sourceEventId: event.sourceEventId,
+				eventType: event.eventType,
+				outcome: "legacy_backfill",
+				processedAt: event.processedAt,
+			});
+		}
+	},
+});
+
+export const validateConnectedAccountSplit = migrations.define({
+	table: "emailIntegrations",
+	migrateOne: async (ctx, integration) => {
+		const account = await ctx.db.get(
+			"connectedAccounts",
+			integration.connectedAccountId,
+		);
+		if (!account || account.providerSlug !== "resend") {
+			throw new Error(
+				`Email integration ${integration._id} has an invalid connected account`,
+			);
+		}
+		const organization = await ctx.db.get(
+			"organizations",
+			account.organizationId,
+		);
+		if (!organization) {
+			throw new Error(`Connected account ${account._id} has no organization`);
+		}
+		await ctx.db
+			.query("emailIntegrations")
+			.withIndex("by_connected_account_id", (index) =>
+				index.eq("connectedAccountId", account._id),
+			)
+			.unique();
+		await ctx.db
+			.query("connectedAccounts")
+			.withIndex("by_workos_connected_account_id", (index) =>
+				index.eq("workosConnectedAccountId", account.workosConnectedAccountId),
+			)
+			.unique();
+	},
+});
+
+export const validateEmailInboxIntegrationReferences = migrations.define({
+	table: "emailInboxes",
+	migrateOne: async (ctx, inbox) => {
+		if (!inbox.outbound) {
+			return;
+		}
+		const integration = await ctx.db.get(
+			"emailIntegrations",
+			inbox.outbound.integrationId,
+		);
+		if (!integration) {
+			throw new Error(`Email inbox ${inbox._id} has an orphaned integration`);
+		}
+		const account = await ctx.db.get(
+			"connectedAccounts",
+			integration.connectedAccountId,
+		);
+		if (!account || account.organizationId !== inbox.organizationId) {
+			throw new Error(
+				`Email inbox ${inbox._id} crosses an integration organization boundary`,
+			);
+		}
+	},
+});
+
+export const validateEmailThreadIntegrationReferences = migrations.define({
+	table: "emailThreadExternalReferences",
+	migrateOne: async (ctx, reference) => {
+		const [integration, inbox, thread] = await Promise.all([
+			ctx.db.get("emailIntegrations", reference.integrationId),
+			ctx.db.get("emailInboxes", reference.inboxId),
+			ctx.db.get("emailThreads", reference.threadId),
+		]);
+		if (!integration || !inbox || !thread) {
+			throw new Error(
+				`Email thread reference ${reference._id} has an orphaned relation`,
+			);
+		}
+		const account = await ctx.db.get(
+			"connectedAccounts",
+			integration.connectedAccountId,
+		);
+		if (
+			!account ||
+			account.organizationId !== inbox.organizationId ||
+			account.organizationId !== thread.organizationId ||
+			thread.inboxId !== inbox._id
+		) {
+			throw new Error(
+				`Email thread reference ${reference._id} crosses an organization boundary`,
+			);
+		}
+	},
+});
+
+export const validateEmailMessageIntegrationReferences = migrations.define({
+	table: "emailMessages",
+	migrateOne: async (ctx, message) => {
+		const [integration, thread] = await Promise.all([
+			ctx.db.get("emailIntegrations", message.integrationId),
+			ctx.db.get("emailThreads", message.threadId),
+		]);
+		if (!integration || !thread) {
+			throw new Error(`Email message ${message._id} has an orphaned relation`);
+		}
+		const account = await ctx.db.get(
+			"connectedAccounts",
+			integration.connectedAccountId,
+		);
+		if (!account || account.organizationId !== thread.organizationId) {
+			throw new Error(
+				`Email message ${message._id} crosses an integration organization boundary`,
+			);
+		}
+	},
+});
+
+export const validateEmailIngestIntegrationReferences = migrations.define({
+	table: "emailIngestEvents",
+	migrateOne: async (ctx, event) => {
+		const integration = await ctx.db.get(
+			"emailIntegrations",
+			event.integrationId,
+		);
+		if (!integration) {
+			throw new Error(
+				`Email ingest event ${event._id} has an orphaned integration`,
+			);
+		}
+		const [account, inbox] = await Promise.all([
+			ctx.db.get("connectedAccounts", integration.connectedAccountId),
+			event.inboxId ? ctx.db.get("emailInboxes", event.inboxId) : null,
+		]);
+		if (
+			!account ||
+			(event.inboxId !== undefined &&
+				(!inbox || inbox.organizationId !== account.organizationId))
+		) {
+			throw new Error(
+				`Email ingest event ${event._id} crosses an integration organization boundary`,
+			);
+		}
+	},
+});
+
+export const validateConnectedAccountSyncEventBackfill = migrations.define({
+	table: "emailIntegrationSyncEvents",
+	migrateOne: async (ctx, event) => {
+		const migrated = await ctx.db
+			.query("connectedAccountSyncEvents")
+			.withIndex("by_source_and_source_event_id", (index) =>
+				index
+					.eq("source", event.source)
+					.eq("sourceEventId", event.sourceEventId),
+			)
+			.unique();
+		if (!migrated) {
+			throw new Error(`Sync event ${event._id} was not backfilled`);
+		}
+	},
+});
+
+export const verifyConnectedAccountSplit = internalQuery({
+	args: {},
+	returns: v.object({
+		complete: v.boolean(),
+		invalidEmailIntegrationIds: v.array(v.id("emailIntegrations")),
+		orphanedCleanupTaskIds: v.array(
+			v.id("emailIntegrationWebhookCleanupTasks"),
+		),
+		unbackfilledSyncEventIds: v.array(v.id("emailIntegrationSyncEvents")),
+	}),
+	handler: async (ctx) => {
+		const integrations = await ctx.db.query("emailIntegrations").take(100);
+		const invalidIntegrations: Doc<"emailIntegrations">[] = [];
+		for (const integration of integrations) {
+			const account = await ctx.db.get(integration.connectedAccountId);
+			if (!account || account.providerSlug !== "resend") {
+				invalidIntegrations.push(integration);
+			}
+		}
+		const cleanupTasks = await ctx.db
+			.query("emailIntegrationWebhookCleanupTasks")
+			.take(100);
+		const orphanedCleanupTasks: Doc<"emailIntegrationWebhookCleanupTasks">[] =
+			[];
+		for (const task of cleanupTasks) {
+			if (!(await ctx.db.get(task.integrationId))) {
+				orphanedCleanupTasks.push(task);
+			}
+		}
+		const legacyEvents = await ctx.db
+			.query("emailIntegrationSyncEvents")
+			.take(100);
+		const unbackfilledEvents: Doc<"emailIntegrationSyncEvents">[] = [];
+		for (const event of legacyEvents) {
+			const migrated = await ctx.db
+				.query("connectedAccountSyncEvents")
+				.withIndex("by_source_and_source_event_id", (index) =>
+					index
+						.eq("source", event.source)
+						.eq("sourceEventId", event.sourceEventId),
+				)
+				.unique();
+			if (!migrated) {
+				unbackfilledEvents.push(event);
+			}
+		}
+		return {
+			complete:
+				invalidIntegrations.length === 0 &&
+				orphanedCleanupTasks.length === 0 &&
+				unbackfilledEvents.length === 0,
+			invalidEmailIntegrationIds: invalidIntegrations.map(
+				(integration) => integration._id,
+			),
+			orphanedCleanupTaskIds: orphanedCleanupTasks.map((task) => task._id),
+			unbackfilledSyncEventIds: unbackfilledEvents.map((event) => event._id),
+		};
+	},
+});
+
+export const runConnectedAccountSplitValidation = migrations.runner([
+	internal.migrations.validateConnectedAccountSplit,
+	internal.migrations.preflightConnectedAccountCleanupTasks,
+	internal.migrations.validateEmailInboxIntegrationReferences,
+	internal.migrations.validateEmailThreadIntegrationReferences,
+	internal.migrations.validateEmailMessageIntegrationReferences,
+	internal.migrations.validateEmailIngestIntegrationReferences,
+	internal.migrations.validateConnectedAccountSyncEventBackfill,
+]);

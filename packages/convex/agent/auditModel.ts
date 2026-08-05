@@ -250,6 +250,7 @@ export function projectAuditItem(item: Doc<"agentItems">) {
 				runId: item.runId,
 				toolCallId: item.toolCallId,
 				toolName: item.toolName,
+				...(item.customToolId ? { customToolId: item.customToolId } : {}),
 				inputJson: item.inputJson,
 				summary: item.summary,
 			};

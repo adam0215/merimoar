@@ -6,7 +6,11 @@ import {
 	CASE_EMBEDDING_DIMENSIONS,
 	normalizeEmbeddingForVectorSearch,
 } from "#/case/embeddingModel";
-import { createTest, syncWorkosUser } from "#/test.setup";
+import {
+	createTest,
+	insertResendIntegration,
+	syncWorkosUser,
+} from "#/test.setup";
 import { internal } from "../_generated/api";
 
 const ISSUER = "https://api.workos.com/";
@@ -51,16 +55,16 @@ async function createFixture() {
 			status: "active",
 			unreadThreadCount: 0,
 		});
-		const integrationId = await ctx.db.insert("emailIntegrations", {
+		const { integrationId } = await insertResendIntegration(
+			ctx,
 			organizationId,
-			provider: "resend",
-			status: "connected",
-			workosUserId: ACTOR_SUBJECT,
-			workosOrganizationId: "org_embedding",
-			workosDataIntegrationId: "data_embedding",
-			workosConnectedAccountId: "account_embedding",
-			workosConnectedAccountUpdatedAt: 1,
-		});
+			{
+				hasWebhook: false,
+				suffix: "embedding",
+				workosUpdatedAt: 1,
+				workosUserId: ACTOR_SUBJECT,
+			},
+		);
 		const contactId = await ctx.db.insert("contacts", {
 			organizationId,
 			address: "sender@example.com",

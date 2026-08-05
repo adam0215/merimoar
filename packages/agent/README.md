@@ -15,6 +15,15 @@ Built-in schemas and execution live together in their AI SDK definitions.
 `update_activity` records intentional, high-level progress changes; tool calls
 retain their own ordered audit items instead of being duplicated as activities.
 
+## Custom tool run snapshots
+
+Each run pins its executable custom tool definitions. Tool items retain the
+selected runtime name and input, but not the endpoint, schema, approval policy,
+or configuration hash required to replay an approval after the workspace tool
+changes. Display names are deliberately excluded so activity can resolve the
+current name while approval and lease continuation retain the approved runtime
+definition.
+
 ## Local TUI
 
 The TUI uses the real prompt, agent definition, and built-in tools with a fixed

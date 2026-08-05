@@ -15,6 +15,7 @@
 		},
 		"./case/input": "./case/input.ts",
 		"./case/model": "./case/model.ts",
+		"./agent/custom-tool-model": "./agent/customToolModel.ts",
 		"./email/input": "./email/input.ts",
 		"./entity/constants": "./entity/constants.ts",
 		"./entity/input": "./entity/input.ts",

@@ -8,6 +8,7 @@ import type {
 	ProviderSendResult,
 } from "#/email/outboundProvider";
 import { fetchResendAccess } from "#/email/resendAccess";
+import type { EmailIntegrationAccessContext } from "#/integrations/model";
 import type { Doc } from "../_generated/dataModel";
 
 function formatMailbox({ address, name }: { address: string; name?: string }) {
@@ -109,14 +110,18 @@ export function createResendSendRequest(
 }
 
 export async function connectResendOutboundEmailProvider(
-	integration: Doc<"emailIntegrations">,
+	integration: EmailIntegrationAccessContext,
 ): Promise<OutboundProviderConnection> {
 	const access = await fetchResendAccess(integration);
 	if (!access.active) {
 		const missingRequiredScope = access.error === "missing_required_scope";
 		return {
 			status: "unavailable",
-			reauthorizationRequired: true,
+			workosAccessFailure:
+				access.error === "needs_reauthorization" ||
+				access.error === "not_installed"
+					? access.error
+					: undefined,
 			failure: {
 				kind: "before_provider",
 				reason: missingRequiredScope ? "configuration" : "route_inactive",

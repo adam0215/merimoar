@@ -451,6 +451,7 @@ export const recordToolStarted = mutation({
 		claimToken: v.string(),
 		toolCallId: v.string(),
 		toolName: v.string(),
+		customToolId: v.optional(v.id("agentCustomTools")),
 		inputJson: v.string(),
 		summary: v.string(),
 	},
@@ -488,6 +489,7 @@ export const recordToolStarted = mutation({
 				existing.kind !== "tool" ||
 				existing.turnId !== turn._id ||
 				existing.toolName !== toolName ||
+				existing.customToolId !== args.customToolId ||
 				existing.inputJson !== inputJson ||
 				existing.summary !== summary
 			) {
@@ -510,6 +512,7 @@ export const recordToolStarted = mutation({
 			runId: args.runId,
 			toolCallId,
 			toolName,
+			...(args.customToolId ? { customToolId: args.customToolId } : {}),
 			inputJson,
 			summary,
 			status: "started",
@@ -566,6 +569,7 @@ export const recordToolFinished = mutation({
 			runId: item.runId,
 			toolCallId: item.toolCallId,
 			toolName: item.toolName,
+			...(item.customToolId ? { customToolId: item.customToolId } : {}),
 			inputJson: item.inputJson,
 			summary: item.summary,
 		};
@@ -655,6 +659,7 @@ export const recordToolApprovalRequest = mutation({
 			runId: toolItem.runId,
 			toolCallId: toolItem.toolCallId,
 			toolName: toolItem.toolName,
+			...(toolItem.customToolId ? { customToolId: toolItem.customToolId } : {}),
 			inputJson: toolItem.inputJson,
 			summary: toolItem.summary,
 			status: "approval_required",
@@ -757,6 +762,7 @@ export const stageTaskStatus = mutation({
 			runId: item.runId,
 			toolCallId: item.toolCallId,
 			toolName: item.toolName,
+			...(item.customToolId ? { customToolId: item.customToolId } : {}),
 			inputJson: item.inputJson,
 			summary: item.summary,
 			status: "completed",

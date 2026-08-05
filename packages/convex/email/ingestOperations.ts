@@ -2,6 +2,11 @@ import { ConvexError, v } from "convex/values";
 import { requireActor } from "#/auth/access";
 import { emailIngestPool } from "#/email/ingestQueue";
 import { updateIngestRecipientStatuses } from "#/email/ingestState";
+import { getEmailIntegrationAccessContext } from "#/integrations/connectedAccounts";
+import {
+	deriveEmailReadiness,
+	type EmailIntegrationAccessContext,
+} from "#/integrations/model";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
@@ -45,18 +50,34 @@ async function requireOwnedInbox(
 	return inbox;
 }
 
-async function inboxCanProcessEvent(
+async function getInboxEventIntegration(
 	ctx: QueryCtx | MutationCtx,
 	inbox: Doc<"emailInboxes">,
 	event: Doc<"emailIngestEvents">,
 ) {
-	if (inbox.status !== "active" || !event.integrationId) {
-		return false;
+	if (event.inboxId !== undefined && event.inboxId !== inbox._id) {
+		return null;
 	}
-	const integration = await ctx.db.get(event.integrationId);
+	const integration = await getEmailIntegrationAccessContext(
+		ctx,
+		event.integrationId,
+	);
+	return integration?.organizationId === inbox.organizationId
+		? integration
+		: null;
+}
+
+function inboxCanProcessInbound(
+	inbox: Doc<"emailInboxes">,
+	integration: EmailIntegrationAccessContext,
+) {
 	return (
-		integration?.organizationId === inbox.organizationId &&
-		integration.status === "connected"
+		inbox.status === "active" &&
+		deriveEmailReadiness(
+			integration.connectionStatus,
+			integration.grantedScopes,
+			integration.resendWebhook !== undefined,
+		).inbound === "ready"
 	);
 }
 
@@ -88,9 +109,12 @@ export const listFailedEvents = query({
 				const event = await ctx.db.get(recipient.eventId);
 				if (
 					!event ||
-					(event.status !== "failed" && event.status !== "unroutable") ||
-					(event.inboxId !== undefined && event.inboxId !== inbox._id)
+					(event.status !== "failed" && event.status !== "unroutable")
 				) {
+					return null;
+				}
+				const integration = await getInboxEventIntegration(ctx, inbox, event);
+				if (!integration) {
 					return null;
 				}
 
@@ -102,7 +126,7 @@ export const listFailedEvents = query({
 					attempts: event.attempts,
 					replayCount: event.replayCount ?? 0,
 					reason: describeFailure(event),
-					canReplay: await inboxCanProcessEvent(ctx, inbox, event),
+					canReplay: inboxCanProcessInbound(inbox, integration),
 					inbox: {
 						displayName: inbox.displayName,
 						address: inbox.address,
@@ -138,11 +162,11 @@ export const replayFailedEvent = mutation({
 				index.eq("eventId", args.eventId).eq("address", inbox.address),
 			)
 			.first();
-		if (
-			!event ||
-			!matchingRecipient ||
-			(event.inboxId !== undefined && event.inboxId !== inbox._id)
-		) {
+		if (!event || !matchingRecipient) {
+			throwFailedEventNotFound();
+		}
+		const integration = await getInboxEventIntegration(ctx, inbox, event);
+		if (!integration) {
 			throwFailedEventNotFound();
 		}
 		if (event.status === "processed") {
@@ -154,7 +178,7 @@ export const replayFailedEvent = mutation({
 		if (event.status !== "failed" && event.status !== "unroutable") {
 			throwFailedEventNotFound();
 		}
-		if (!(await inboxCanProcessEvent(ctx, inbox, event))) {
+		if (!inboxCanProcessInbound(inbox, integration)) {
 			throw new ConvexError({
 				code: "EMAIL_ROUTE_INACTIVE",
 				message: "Activate the inbox and integration before retrying.",

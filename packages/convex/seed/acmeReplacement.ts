@@ -57,7 +57,7 @@ async function collectAcmeOrganizationGraph(
 
 	const [
 		members,
-		integrations,
+		connectedAccounts,
 		inboxes,
 		threads,
 		contacts,
@@ -73,8 +73,8 @@ async function collectAcmeOrganizationGraph(
 			)
 			.take(MAX_ROWS_PER_REPLACEMENT_TABLE + 1),
 		ctx.db
-			.query("emailIntegrations")
-			.withIndex("by_organization_id_and_provider", (index) =>
+			.query("connectedAccounts")
+			.withIndex("by_organization_id_and_provider_slug", (index) =>
 				index.eq("organizationId", organizationId),
 			)
 			.take(MAX_ROWS_PER_REPLACEMENT_TABLE + 1),
@@ -121,8 +121,20 @@ async function collectAcmeOrganizationGraph(
 			)
 			.take(MAX_ROWS_PER_REPLACEMENT_TABLE + 1),
 	]);
+	const integrationGroups = await Promise.all(
+		connectedAccounts.map((account) =>
+			ctx.db
+				.query("emailIntegrations")
+				.withIndex("by_connected_account_id", (index) =>
+					index.eq("connectedAccountId", account._id),
+				)
+				.take(MAX_ROWS_PER_REPLACEMENT_TABLE + 1),
+		),
+	);
+	const integrations = integrationGroups.flat();
 
 	for (const [table, rows] of [
+		["connectedAccounts", connectedAccounts],
 		["emailIntegrations", integrations],
 		["emailInboxes", inboxes],
 		["emailThreads", threads],
@@ -426,6 +438,7 @@ async function collectAcmeOrganizationGraph(
 		organization,
 		members,
 		emailIntegrationWebhookCleanupTasks,
+		connectedAccounts,
 		emailIntegrations: integrations,
 		emailInboxes: inboxes,
 		emailThreads: threads,
@@ -510,6 +523,9 @@ async function requireNoCrossOrganizationReferences(
 ) {
 	const organizationId = graph.organization._id;
 	const memberIds = new Set(graph.members.map((row) => row._id));
+	const connectedAccountIds = new Set(
+		graph.connectedAccounts.map((row) => row._id),
+	);
 	const integrationIds = new Set(graph.emailIntegrations.map((row) => row._id));
 	const inboxIds = new Set(graph.emailInboxes.map((row) => row._id));
 	const threadIds = new Set(graph.emailThreads.map((row) => row._id));
@@ -537,10 +553,15 @@ async function requireNoCrossOrganizationReferences(
 		}
 	};
 
+	for (const connectedAccount of graph.connectedAccounts) {
+		requireSubset(
+			connectedAccount.organizationId === organizationId,
+			"connected account is outside Acme",
+		);
+	}
 	for (const integration of graph.emailIntegrations) {
 		requireSubset(
-			integration.organizationId === organizationId &&
-				integration.workosOrganizationId === ACME_WORKOS_ORGANIZATION_ID,
+			connectedAccountIds.has(integration.connectedAccountId),
 			"email integration is outside Acme",
 		);
 	}
@@ -1112,6 +1133,8 @@ async function deleteAcmeOrganizationGraph(
 		await ctx.db.delete("emailInboxes", row._id);
 	for (const row of graph.emailIntegrations)
 		await ctx.db.delete("emailIntegrations", row._id);
+	for (const row of graph.connectedAccounts)
+		await ctx.db.delete("connectedAccounts", row._id);
 	for (const row of graph.cases) await ctx.db.delete("cases", row._id);
 	for (const row of graph.entityTextFieldValues)
 		await ctx.db.delete("entityTextFieldValues", row._id);

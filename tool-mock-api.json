@@ -1,0 +1,234 @@
+{
+  "uuid": "4cd7315a-6527-4be4-8f26-319ee74557a1",
+  "lastMigration": 33,
+  "name": "Acme custom tools",
+  "endpointPrefix": "",
+  "latency": 0,
+  "port": 8000,
+  "hostname": "",
+  "folders": [],
+  "routes": [
+    {
+      "uuid": "98b9e35e-ec18-4f14-9bcb-e05531bb9542",
+      "type": "http",
+      "documentation": "Read BMS measurements for Sjögläntan's hot-water case ACM-26061.",
+      "method": "post",
+      "endpoint": "bms/measurements",
+      "responses": [
+        {
+          "uuid": "41a928cb-e8da-437f-9502-87ff3e5c5028",
+          "body": "{\n  \"outcome\": \"success\",\n  \"data\": {\n    \"propertyIdentifier\": \"{{body 'propertyIdentifier'}}\",\n    \"signal\": \"{{body 'signal'}}\",\n    \"unit\": \"°C\",\n    \"window\": {\n      \"from\": \"2026-07-29T19:00:00+02:00\",\n      \"to\": \"2026-07-29T22:00:00+02:00\"\n    },\n    \"minimum\": 39.0,\n    \"maximum\": 54.2,\n    \"latest\": 51.8,\n    \"samples\": [\n      { \"at\": \"2026-07-29T19:00:00+02:00\", \"value\": 54.2 },\n      { \"at\": \"2026-07-29T20:00:00+02:00\", \"value\": 41.1 },\n      { \"at\": \"2026-07-29T21:00:00+02:00\", \"value\": 39.0 },\n      { \"at\": \"2026-07-29T22:00:00+02:00\", \"value\": 51.8 }\n    ]\n  },\n  \"warnings\": [\n    {\n      \"code\": \"INTERMITTENT_LOW_TEMPERATURE\",\n      \"message\": \"Tappvarmvattnet föll under 40 °C under hög belastning.\"\n    }\n  ],\n  \"meta\": {\n    \"source\": \"Göta BMS Demo\",\n    \"observedAt\": \"2026-07-29T22:01:14+02:00\",\n    \"version\": \"telemetry-1842\"\n  }\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "BMS measurements",
+          "headers": [],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "OR",
+          "disableTemplating": false,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    },
+    {
+      "uuid": "a589b00d-421c-4530-8c91-c9f18ccc8ff9",
+      "type": "http",
+      "documentation": "Search existing work orders for the garage-port cases ACM-26071 and ACM-26073.",
+      "method": "post",
+      "endpoint": "work-orders/search",
+      "responses": [
+        {
+          "uuid": "3857d857-7153-4946-a11a-12978e08a30d",
+          "body": "{\n  \"outcome\": \"success\",\n  \"data\": {\n    \"propertyIdentifier\": \"{{body 'propertyIdentifier'}}\",\n    \"query\": \"{{body 'query'}}\",\n    \"exactMatches\": [\n      {\n        \"workOrderId\": \"WO-2026-0711\",\n        \"title\": \"Felsökning och tillfällig säkring av garageport\",\n        \"status\": \"in_progress\",\n        \"supplier\": \"Västkust Portservice AB\",\n        \"externalReference\": \"JD-8441\",\n        \"lastUpdatedAt\": \"2026-07-24T14:20:00+02:00\"\n      }\n    ],\n    \"relatedMatches\": [],\n    \"searchComplete\": true\n  },\n  \"warnings\": [],\n  \"meta\": {\n    \"source\": \"Acme Arbetsorder Demo\",\n    \"observedAt\": \"2026-08-01T08:03:00+02:00\",\n    \"version\": \"work-orders-917\"\n  }\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Work orders",
+          "headers": [],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "OR",
+          "disableTemplating": false,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    },
+    {
+      "uuid": "8e6156e0-e1df-4274-926d-e00ffbd13bca",
+      "type": "http",
+      "documentation": "Request a non-binding quote for Hiss B in case ACM-26069.",
+      "method": "post",
+      "endpoint": "quote-requests",
+      "responses": [
+        {
+          "uuid": "d2fd7f32-b17f-4a58-8577-a454564b98d7",
+          "body": "{\n  \"outcome\": \"success\",\n  \"data\": {\n    \"quoteRequestId\": \"RFQ-2026-0269\",\n    \"status\": \"requested\",\n    \"nonBinding\": true,\n    \"caseReference\": \"{{body 'caseReference'}}\",\n    \"propertyIdentifier\": \"{{body 'propertyIdentifier'}}\",\n    \"assetId\": \"{{body 'assetId'}}\",\n    \"supplierNumber\": \"{{body 'supplierNumber'}}\",\n    \"scope\": \"{{body 'scope'}}\",\n    \"requestedTerms\": [\n      \"fixed_price\",\n      \"delivery_time\",\n      \"estimated_downtime\",\n      \"valid_through\"\n    ],\n    \"createdAt\": \"2026-08-04T10:15:00+02:00\"\n  },\n  \"warnings\": [],\n  \"meta\": {\n    \"source\": \"Västkust Hisspartner Demo\",\n    \"observedAt\": \"2026-08-04T10:15:00+02:00\",\n    \"version\": \"quote-request-RFQ-2026-0269-v1\",\n    \"idempotencyKey\": \"ACM-26069-MAG-HISS-B-v1\"\n  }\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Quote requested",
+          "headers": [],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "OR",
+          "disableTemplating": false,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    },
+    {
+      "uuid": "20495486-19d7-4d59-93b8-a303d358a1cf",
+      "type": "http",
+      "documentation": "Read the fire-alarm event for Teaterkajen case ACM-26075.",
+      "method": "post",
+      "endpoint": "fire-alarm/events",
+      "responses": [
+        {
+          "uuid": "3d36339e-693a-42bf-a040-6cc1b04f74b9",
+          "body": "{\n  \"outcome\": \"success\",\n  \"data\": {\n    \"systemId\": \"{{body 'systemId'}}\",\n    \"status\": \"operational\",\n    \"events\": [\n      {\n        \"eventId\": \"FAS-EVT-88214\",\n        \"occurredAt\": \"2026-07-26T22:18:34+02:00\",\n        \"type\": \"smoke_detector_alarm\",\n        \"zone\": \"{{body 'zone'}}\",\n        \"location\": \"Plan 4, korridor utanför lägenhet 4-1202\",\n        \"restoredAt\": \"2026-07-26T22:47:11+02:00\"\n      }\n    ],\n    \"bypassRequests\": []\n  },\n  \"warnings\": [\n    {\n      \"code\": \"NO_BYPASS_REQUEST_FOUND\",\n      \"message\": \"Ingen registrerad begäran om frånkoppling hittades för zon 4.\"\n    }\n  ],\n  \"meta\": {\n    \"source\": \"Brandteknik Händelselogg Demo\",\n    \"observedAt\": \"2026-07-27T13:20:00+02:00\",\n    \"version\": \"fire-log-5581\"\n  }\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Fire alarm events",
+          "headers": [],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "OR",
+          "disableTemplating": false,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    },
+    {
+      "uuid": "d4080ff0-92db-412a-977a-042257b7a70f",
+      "type": "http",
+      "documentation": "Read the disputed invoice in case ACM-26073.",
+      "method": "post",
+      "endpoint": "invoices/read",
+      "responses": [
+        {
+          "uuid": "52fbea28-f8f0-46bf-ad96-d51b77384125",
+          "body": "{\n  \"outcome\": \"success\",\n  \"data\": {\n    \"invoiceNumber\": \"{{body 'invoiceNumber'}}\",\n    \"supplier\": \"Västkust Portservice AB\",\n    \"propertyIdentifier\": \"Göteborg Ankaret 2:14\",\n    \"status\": \"disputed\",\n    \"netAmount\": { \"amount\": 18900, \"currency\": \"SEK\" },\n    \"dueDate\": \"2026-08-15\",\n    \"purchaseOrderId\": null,\n    \"workOrderId\": \"WO-2026-0711\",\n    \"dispute\": {\n      \"reason\": \"Beställningsrätt och jourpåslag är inte styrkta.\",\n      \"paymentBlocked\": true\n    },\n    \"missingDocuments\": [\n      \"Signerad arbetsrapport\",\n      \"Avtalsrad som styrker jourpåslag\"\n    ]\n  },\n  \"warnings\": [\n    {\n      \"code\": \"INCOMPLETE_PURCHASE_EVIDENCE\",\n      \"message\": \"Fakturan saknar underlag som styrker hela beloppet.\"\n    }\n  ],\n  \"meta\": {\n    \"source\": \"Västerhamn Leverantörsreskontra Demo\",\n    \"observedAt\": \"2026-08-02T09:00:00+02:00\",\n    \"version\": \"invoice-JD-8441-v4\"\n  }\n}",
+          "latency": 0,
+          "statusCode": 200,
+          "label": "Invoice",
+          "headers": [],
+          "bodyType": "INLINE",
+          "filePath": "",
+          "databucketID": "",
+          "sendFileAsBody": false,
+          "rules": [],
+          "rulesOperator": "OR",
+          "disableTemplating": false,
+          "fallbackTo404": false,
+          "default": true,
+          "crudKey": "id",
+          "callbacks": []
+        }
+      ],
+      "responseMode": null,
+      "streamingMode": null,
+      "streamingInterval": 0
+    }
+  ],
+  "rootChildren": [
+    {
+      "type": "route",
+      "uuid": "98b9e35e-ec18-4f14-9bcb-e05531bb9542"
+    },
+    {
+      "type": "route",
+      "uuid": "a589b00d-421c-4530-8c91-c9f18ccc8ff9"
+    },
+    {
+      "type": "route",
+      "uuid": "8e6156e0-e1df-4274-926d-e00ffbd13bca"
+    },
+    {
+      "type": "route",
+      "uuid": "20495486-19d7-4d59-93b8-a303d358a1cf"
+    },
+    {
+      "type": "route",
+      "uuid": "d4080ff0-92db-412a-977a-042257b7a70f"
+    }
+  ],
+  "proxyMode": false,
+  "proxyHost": "",
+  "proxyRemovePrefix": false,
+  "tlsOptions": {
+    "enabled": false,
+    "type": "CERT",
+    "pfxPath": "",
+    "certPath": "",
+    "keyPath": "",
+    "caPath": "",
+    "passphrase": ""
+  },
+  "cors": true,
+  "headers": [
+    {
+      "key": "Content-Type",
+      "value": "application/json"
+    },
+    {
+      "key": "Access-Control-Allow-Origin",
+      "value": "*"
+    },
+    {
+      "key": "Access-Control-Allow-Methods",
+      "value": "GET,POST,PUT,PATCH,DELETE,HEAD,OPTIONS"
+    },
+    {
+      "key": "Access-Control-Allow-Headers",
+      "value": "Content-Type, Origin, Accept, Authorization, Content-Length, X-Requested-With"
+    }
+  ],
+  "proxyReqHeaders": [
+    {
+      "key": "",
+      "value": ""
+    }
+  ],
+  "proxyResHeaders": [
+    {
+      "key": "",
+      "value": ""
+    }
+  ],
+  "data": [],
+  "callbacks": []
+}

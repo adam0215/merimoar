@@ -70,6 +70,7 @@ export async function commitMutatingToolResult(
 		runId: item.runId,
 		toolCallId: item.toolCallId,
 		toolName: item.toolName,
+		...(item.customToolId ? { customToolId: item.customToolId } : {}),
 		inputJson: item.inputJson,
 		summary: item.summary,
 		status: "completed",

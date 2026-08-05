@@ -10,6 +10,8 @@
 
 import type * as agent_access from "../agent/access.js";
 import type * as agent_auditModel from "../agent/auditModel.js";
+import type * as agent_customToolModel from "../agent/customToolModel.js";
+import type * as agent_customTools from "../agent/customTools.js";
 import type * as agent_leases from "../agent/leases.js";
 import type * as agent_model from "../agent/model.js";
 import type * as agent_reader from "../agent/reader.js";
@@ -74,6 +76,10 @@ import type * as entity_values from "../entity/values.js";
 import type * as globalSearch_model from "../globalSearch/model.js";
 import type * as globalSearch_reader from "../globalSearch/reader.js";
 import type * as http from "../http.js";
+import type * as integrations_connectedAccounts from "../integrations/connectedAccounts.js";
+import type * as integrations_model from "../integrations/model.js";
+import type * as integrations_reconcileActions from "../integrations/reconcileActions.js";
+import type * as integrations_workosAccess from "../integrations/workosAccess.js";
 import type * as migrations from "../migrations.js";
 import type * as organization_input from "../organization/input.js";
 import type * as organization_settings from "../organization/settings.js";
@@ -91,6 +97,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   "agent/access": typeof agent_access;
   "agent/auditModel": typeof agent_auditModel;
+  "agent/customToolModel": typeof agent_customToolModel;
+  "agent/customTools": typeof agent_customTools;
   "agent/leases": typeof agent_leases;
   "agent/model": typeof agent_model;
   "agent/reader": typeof agent_reader;
@@ -155,6 +163,10 @@ declare const fullApi: ApiFromModules<{
   "globalSearch/model": typeof globalSearch_model;
   "globalSearch/reader": typeof globalSearch_reader;
   http: typeof http;
+  "integrations/connectedAccounts": typeof integrations_connectedAccounts;
+  "integrations/model": typeof integrations_model;
+  "integrations/reconcileActions": typeof integrations_reconcileActions;
+  "integrations/workosAccess": typeof integrations_workosAccess;
   migrations: typeof migrations;
   "organization/input": typeof organization_input;
   "organization/settings": typeof organization_settings;

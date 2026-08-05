@@ -65,14 +65,18 @@ export const processInboundEmail = internalAction({
 
 		const access = await fetchResendAccess(ingestContext.integration);
 		if (!access.active) {
-			await ctx.runMutation(
-				internal.email.integrations.markNeedsReauthorization,
-				{
-					integrationId: ingestContext.integration._id,
-					expectedConnectedAccountUpdatedAt:
-						ingestContext.integration.workosConnectedAccountUpdatedAt,
-				},
-			);
+			if (access.error !== "missing_required_scope") {
+				await ctx.runMutation(
+					internal.email.integrations.recordWorkosAccessFailure,
+					{
+						integrationId: ingestContext.integration.integrationId,
+						expectedConnectedAccountId:
+							ingestContext.integration.connectedAccountId,
+						expectedWorkosUpdatedAt: ingestContext.integration.workosUpdatedAt,
+						error: access.error,
+					},
+				);
+			}
 			return await failPermanently(ctx, {
 				...args,
 				failureKind:
@@ -97,11 +101,13 @@ export const processInboundEmail = internalAction({
 			}
 			if (isResendAuthorizationError(error)) {
 				await ctx.runMutation(
-					internal.email.integrations.markNeedsReauthorization,
+					internal.email.integrations.recordWorkosAccessFailure,
 					{
-						integrationId: ingestContext.integration._id,
-						expectedConnectedAccountUpdatedAt:
-							ingestContext.integration.workosConnectedAccountUpdatedAt,
+						integrationId: ingestContext.integration.integrationId,
+						expectedConnectedAccountId:
+							ingestContext.integration.connectedAccountId,
+						expectedWorkosUpdatedAt: ingestContext.integration.workosUpdatedAt,
+						error: "needs_reauthorization",
 					},
 				);
 			}

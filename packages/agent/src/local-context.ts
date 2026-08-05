@@ -77,6 +77,9 @@ export function createLocalAgentContext(): AgentContext {
 			}),
 			updateActivity: async () => {},
 			updateTaskStatus: async (update: TaskStatusUpdate) => update,
+			invokeCustomTool: async () => {
+				throw new Error("Custom tools are not available in the local TUI.");
+			},
 		},
 	};
 }

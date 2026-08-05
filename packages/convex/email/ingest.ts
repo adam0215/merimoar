@@ -8,6 +8,8 @@ import {
 	normalizedInboundEmailValidator,
 } from "#/email/model";
 import { routeEmailToOrganizationInbox } from "#/email/router";
+import { getEmailIntegrationAccessContext } from "#/integrations/connectedAccounts";
+import { deriveEmailReadiness } from "#/integrations/model";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -90,8 +92,18 @@ export const routeResendEvent = internalMutation({
 		if (existing)
 			return { status: "duplicate" as const, eventId: existing._id };
 
-		const integration = await ctx.db.get(args.integrationId);
-		if (!integration || integration.status !== "connected")
+		const integration = await getEmailIntegrationAccessContext(
+			ctx,
+			args.integrationId,
+		);
+		if (
+			!integration ||
+			deriveEmailReadiness(
+				integration.connectionStatus,
+				integration.grantedScopes,
+				integration.resendWebhook !== undefined,
+			).inbound !== "ready"
+		)
 			return { status: "ignored" as const };
 		const { inbox, recipientAddresses } = await routeEmailToOrganizationInbox(
 			ctx,
@@ -101,7 +113,7 @@ export const routeResendEvent = internalMutation({
 		const canRoute = inbox !== undefined;
 		const eventId = await ctx.db.insert("emailIngestEvents", {
 			inboxId: inbox?._id,
-			integrationId: integration._id,
+			integrationId: integration.integrationId,
 			externalEventId: args.externalEventId,
 			externalMessageId: args.externalMessageId,
 			eventType: args.eventType,
@@ -161,10 +173,16 @@ export const prepareProcessingAttempt = internalMutation({
 
 		const [inbox, integration] = await Promise.all([
 			ctx.db.get(event.inboxId),
-			ctx.db.get(event.integrationId),
+			getEmailIntegrationAccessContext(ctx, event.integrationId),
 		]);
 		const routeIsActive =
-			inbox?.status === "active" && integration?.status === "connected";
+			inbox?.status === "active" &&
+			integration !== null &&
+			deriveEmailReadiness(
+				integration.connectionStatus,
+				integration.grantedScopes,
+				integration.resendWebhook !== undefined,
+			).inbound === "ready";
 		if (!routeIsActive) {
 			await ctx.db.patch(event._id, {
 				status: "failed",

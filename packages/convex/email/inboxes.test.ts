@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	createConnectedResendIntegration,
 	createTest,
+	setEmailIntegrationConnectionStatus,
 	syncWorkosUser,
 } from "#/test.setup";
 import { api } from "../_generated/api";
@@ -242,9 +243,11 @@ describe("email inboxes", () => {
 			},
 		});
 
-		await base.run(async (ctx) => {
-			await ctx.db.patch(integrationId, { status: "disconnected" });
-		});
+		await setEmailIntegrationConnectionStatus(
+			base,
+			integrationId,
+			"disconnected",
+		);
 		await expect(
 			actor.mutation(api.email.inboxes.update, {
 				inboxId,
@@ -334,9 +337,11 @@ describe("email inboxes", () => {
 			}),
 		).rejects.toThrow("could not be found");
 
-		await base.run(async (ctx) => {
-			await ctx.db.patch(integrationId, { status: "disconnected" });
-		});
+		await setEmailIntegrationConnectionStatus(
+			base,
+			integrationId,
+			"disconnected",
+		);
 		await expect(
 			actor.mutation(api.email.inboxes.update, {
 				inboxId,

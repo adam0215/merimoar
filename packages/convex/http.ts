@@ -41,11 +41,14 @@ http.route({
 		}
 
 		if (isPipesConnectedAccountEvent(event.event)) {
-			await ctx.runMutation(internal.workos.processPipesWebhookEvent, {
-				eventId: event.id,
-				event: event.event,
-				data: event.data,
-			});
+			await ctx.runMutation(
+				internal.workos.processConnectedAccountWebhookEvent,
+				{
+					eventId: event.id,
+					event: event.event,
+					data: event.data,
+				},
+			);
 			return new Response("OK", { status: 200 });
 		}
 

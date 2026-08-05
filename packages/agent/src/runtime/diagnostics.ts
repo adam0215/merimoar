@@ -114,7 +114,7 @@ function sanitizeValue(
 
 	const descriptors = Object.getOwnPropertyDescriptors(value);
 	const entries = Object.entries(descriptors).slice(0, MAX_OBJECT_PROPERTIES);
-	const sanitized: Record<string, DiagnosticValue> = {};
+	const sanitized: Record<string, DiagnosticValue> = Object.create(null);
 	for (const [rawKey, descriptor] of entries) {
 		const key = clampString(rawKey);
 		if (isSensitiveFieldName(rawKey)) {

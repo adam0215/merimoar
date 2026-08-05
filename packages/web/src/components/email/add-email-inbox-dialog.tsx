@@ -76,10 +76,15 @@ type EmailInboxDialogProps =
 	  };
 
 function providerLabel(provider: OutboundIntegrations[number]["provider"]) {
-	const labels = {
-		resend: "Resend",
-	} satisfies Record<OutboundIntegrations[number]["provider"], string>;
-	return labels[provider];
+	return provider === "resend" ? "Resend" : provider;
+}
+
+function unavailableIntegrationLabel(
+	integration: OutboundIntegrations[number],
+) {
+	return integration.outboundReadiness === "missing_scope"
+		? "Full access required"
+		: "Reconnect required";
 }
 
 function splitEmailAddress(address?: string) {
@@ -98,7 +103,7 @@ function splitEmailAddress(address?: string) {
 function getInitialForm(props: EmailInboxDialogProps): FormState {
 	if (props.mode === "create") {
 		const defaultIntegration = props.outboundIntegrations.find(
-			(integration) => integration.status === "connected",
+			(integration) => integration.outboundReadiness === "ready",
 		);
 		return {
 			displayName: "",
@@ -292,9 +297,9 @@ function EmailInboxDialog(props: EmailInboxDialogProps) {
 		...props.outboundIntegrations.map((integration) => ({
 			value: integration.integrationId,
 			label:
-				integration.status === "connected"
+				integration.outboundReadiness === "ready"
 					? providerLabel(integration.provider)
-					: `${providerLabel(integration.provider)} · Reconnect required`,
+					: `${providerLabel(integration.provider)} · ${unavailableIntegrationLabel(integration)}`,
 		})),
 	];
 	const domainItems = verifiedDomains.map((domain) => ({
@@ -438,12 +443,12 @@ function EmailInboxDialog(props: EmailInboxDialogProps) {
 													<SelectItem
 														key={integration.integrationId}
 														value={integration.integrationId}
-														disabled={integration.status !== "connected"}
+														disabled={integration.outboundReadiness !== "ready"}
 													>
 														<span>{providerLabel(integration.provider)}</span>
-														{integration.status !== "connected" && (
+														{integration.outboundReadiness !== "ready" && (
 															<span className="text-xs text-muted-foreground">
-																Reconnect required
+																{unavailableIntegrationLabel(integration)}
 															</span>
 														)}
 													</SelectItem>

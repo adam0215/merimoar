@@ -3,6 +3,7 @@
 import { v } from "convex/values";
 import { Resend } from "resend";
 import { fetchResendAccess } from "#/email/resendAccess";
+import { resendProvisioningFenceValidator } from "#/integrations/model";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
@@ -44,8 +45,7 @@ async function scheduleWebhookCleanup(
 
 export const reconcileResendWebhook = internalAction({
 	args: {
-		integrationId: v.id("emailIntegrations"),
-		expectedConnectedAccountUpdatedAt: v.number(),
+		...resendProvisioningFenceValidator.fields,
 		attempt: v.number(),
 	},
 	handler: async (ctx, args): Promise<null> => {
@@ -53,8 +53,8 @@ export const reconcileResendWebhook = internalAction({
 			internal.email.integrations.getResendProvisioningContext,
 			{
 				integrationId: args.integrationId,
-				expectedConnectedAccountUpdatedAt:
-					args.expectedConnectedAccountUpdatedAt,
+				expectedConnectedAccountId: args.expectedConnectedAccountId,
+				expectedWorkosUpdatedAt: args.expectedWorkosUpdatedAt,
 			},
 		);
 		if (!context) {
@@ -66,28 +66,48 @@ export const reconcileResendWebhook = internalAction({
 		try {
 			const access = await fetchResendAccess(context);
 			if (!access.active) {
-				await ctx.runMutation(
-					internal.email.integrations.markNeedsReauthorization,
-					{
-						integrationId: args.integrationId,
-						expectedConnectedAccountUpdatedAt:
-							args.expectedConnectedAccountUpdatedAt,
-					},
-				);
+				if (access.error !== "missing_required_scope") {
+					await ctx.runMutation(
+						internal.email.integrations.recordWorkosAccessFailure,
+						{
+							integrationId: args.integrationId,
+							expectedConnectedAccountId: args.expectedConnectedAccountId,
+							expectedWorkosUpdatedAt: args.expectedWorkosUpdatedAt,
+							error: access.error,
+						},
+					);
+				}
 				return null;
 			}
 
 			resend = new Resend(access.token);
-			if (context.webhookId) {
-				const updatedWebhook = await resend.webhooks.update(context.webhookId, {
-					endpoint: `${process.env.CONVEX_SITE_URL}/webhooks/email/resend/${args.integrationId}`,
-					events: ["email.received", "email.sent"],
-					status: "enabled",
-				});
-				if (updatedWebhook.error || !updatedWebhook.data) {
+			if (context.resendWebhook) {
+				const updatedWebhook = await resend.webhooks.update(
+					context.resendWebhook.webhookId,
+					{
+						endpoint: `${process.env.CONVEX_SITE_URL}/webhooks/email/resend/${args.integrationId}`,
+						events: ["email.received", "email.sent"],
+						status: "enabled",
+					},
+				);
+				if (!updatedWebhook.error && updatedWebhook.data) {
+					return null;
+				}
+				if (updatedWebhook.error?.name !== "not_found") {
 					throw new Error("Resend rejected webhook reconciliation");
 				}
-				return null;
+				const cleared = await ctx.runMutation(
+					internal.email.integrations.clearConfirmedMissingResendWebhook,
+					{
+						integrationId: args.integrationId,
+						expectedConnectedAccountId: args.expectedConnectedAccountId,
+						expectedWorkosUpdatedAt: args.expectedWorkosUpdatedAt,
+						webhookId: context.resendWebhook.webhookId,
+					},
+				);
+				if (!cleared) {
+					return null;
+				}
 			}
 			const webhook = await resend.webhooks.create({
 				endpoint: `${process.env.CONVEX_SITE_URL}/webhooks/email/resend/${args.integrationId}`,
@@ -102,8 +122,8 @@ export const reconcileResendWebhook = internalAction({
 				internal.email.integrations.activateResendWebhook,
 				{
 					integrationId: args.integrationId,
-					expectedConnectedAccountUpdatedAt:
-						args.expectedConnectedAccountUpdatedAt,
+					expectedConnectedAccountId: args.expectedConnectedAccountId,
+					expectedWorkosUpdatedAt: args.expectedWorkosUpdatedAt,
 					webhookId: webhook.data.id,
 					webhookSecret: webhook.data.signing_secret,
 				},
@@ -144,7 +164,10 @@ export const retryWebhookCleanup = internalAction({
 
 		let deleted = false;
 		try {
-			const access = await fetchResendAccess(context);
+			const access = await fetchResendAccess({
+				...context,
+				providerSlug: "resend",
+			});
 			deleted =
 				access.active &&
 				(await deleteResendWebhook(

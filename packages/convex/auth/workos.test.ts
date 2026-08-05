@@ -28,27 +28,45 @@ function membership(status: "active" | "inactive" | "pending" = "active") {
 	};
 }
 
-function pipesData({
-	scopes = [],
-	updatedAt,
-}: {
-	scopes?: string[];
-	updatedAt: string;
-}) {
-	return {
-		id: "connected_account_resend",
-		object: "connected_account",
-		data_integration_id: "data_integration_resend",
-		provider_slug: "resend",
-		user_id: "user_adam",
-		organization_id: ORGANIZATION.id,
-		scopes,
-		state: scopes.includes("full_access")
-			? "connected"
-			: "needs_reauthorization",
-		created_at: "2026-01-01T00:00:00.000Z",
-		updated_at: updatedAt,
-	};
+async function processConnectedAccount(
+	test: ReturnType<typeof createTest>,
+	{
+		dataIntegrationId = "data_integration_resend",
+		event = "pipes.connected_account.connected",
+		eventId,
+		organizationId = ORGANIZATION.id,
+		providerSlug = "resend",
+		scopes = [],
+		updatedAt = "2026-01-01T00:01:00.000Z",
+	}: {
+		dataIntegrationId?: string;
+		event?:
+			| "pipes.connected_account.connected"
+			| "pipes.connected_account.disconnected"
+			| "pipes.connected_account.reauthorization_needed";
+		eventId: string;
+		organizationId?: string | null;
+		providerSlug?: string;
+		scopes?: string[];
+		updatedAt?: string;
+	},
+) {
+	return await test.mutation(
+		internal.workos.processConnectedAccountWebhookEvent,
+		{
+			eventId,
+			event,
+			data: {
+				id: "connected_account_resend",
+				data_integration_id: dataIntegrationId,
+				provider_slug: providerSlug,
+				user_id: "user_adam",
+				organization_id: organizationId,
+				scopes,
+				updated_at: updatedAt,
+			},
+		},
+	);
 }
 
 describe("official WorkOS component projection", () => {
@@ -211,20 +229,17 @@ describe("official WorkOS component projection", () => {
 		expect(state.member?.active).toBe(false);
 	});
 
-	it("persists Pipes state before the first inbox and rejects stale events", async () => {
+	it("persists generic Pipes state and rejects stale events", async () => {
 		const base = createTest();
-		await base.mutation(internal.workos.processPipesWebhookEvent, {
+		await processConnectedAccount(base, {
 			eventId: "event_needs_reauthorization",
 			event: "pipes.connected_account.reauthorization_needed",
-			data: pipesData({ updatedAt: "2026-01-01T00:02:00.000Z" }),
+			updatedAt: "2026-01-01T00:02:00.000Z",
 		});
-		await base.mutation(internal.workos.processPipesWebhookEvent, {
+		await processConnectedAccount(base, {
 			eventId: "event_stale_connected",
-			event: "pipes.connected_account.connected",
-			data: pipesData({
-				scopes: ["full_access"],
-				updatedAt: "2026-01-01T00:01:00.000Z",
-			}),
+			scopes: ["full_access"],
+			updatedAt: "2026-01-01T00:01:00.000Z",
 		});
 
 		const state = await base.run(async (ctx) => {
@@ -234,82 +249,149 @@ describe("official WorkOS component projection", () => {
 					query.eq("workosOrganizationId", ORGANIZATION.id),
 				)
 				.unique();
-			const integration = organization
+			const connectedAccount = organization
 				? await ctx.db
-						.query("emailIntegrations")
+						.query("connectedAccounts")
 						.withIndex("by_workos_connected_account_id", (query) =>
 							query.eq("workosConnectedAccountId", "connected_account_resend"),
 						)
 						.unique()
 				: null;
-			return { integration, organization };
+			return { connectedAccount, organization };
 		});
 		expect(state.organization).toMatchObject({ active: true });
-		expect(state.integration).toMatchObject({
-			status: "needs_reauthorization",
-			workosConnectedAccountUpdatedAt: Date.parse("2026-01-01T00:02:00.000Z"),
+		expect(state.connectedAccount).toMatchObject({
+			connectionStatus: "needs_reauthorization",
+			workosUpdatedAt: Date.parse("2026-01-01T00:02:00.000Z"),
 		});
 	});
 
 	it("processes each Pipes event ID once and accepts a newer snapshot", async () => {
 		const base = createTest();
-		await base.mutation(internal.workos.processPipesWebhookEvent, {
+		await processConnectedAccount(base, {
 			eventId: "event_connected",
-			event: "pipes.connected_account.connected",
-			data: pipesData({
-				scopes: ["full_access"],
-				updatedAt: "2026-01-01T00:03:00.000Z",
-			}),
+			scopes: ["full_access"],
+			updatedAt: "2026-01-01T00:03:00.000Z",
 		});
-		await base.mutation(internal.workos.processPipesWebhookEvent, {
+		await processConnectedAccount(base, {
 			eventId: "event_connected",
 			event: "pipes.connected_account.reauthorization_needed",
-			data: pipesData({ updatedAt: "2026-01-01T00:04:00.000Z" }),
+			updatedAt: "2026-01-01T00:04:00.000Z",
 		});
 
 		const state = await base.run(async (ctx) => ({
-			integration: await ctx.db.query("emailIntegrations").first(),
-			events: await ctx.db.query("emailIntegrationSyncEvents").collect(),
+			connectedAccount: await ctx.db.query("connectedAccounts").first(),
+			events: await ctx.db.query("connectedAccountSyncEvents").collect(),
 		}));
-		expect(state.integration).toMatchObject({
-			status: "connected",
-			workosConnectedAccountUpdatedAt: Date.parse("2026-01-01T00:03:00.000Z"),
+		expect(state.connectedAccount).toMatchObject({
+			connectionStatus: "connected",
+			workosUpdatedAt: Date.parse("2026-01-01T00:03:00.000Z"),
 		});
 		expect(state.events).toHaveLength(1);
 
-		await base.mutation(internal.workos.processPipesWebhookEvent, {
+		await processConnectedAccount(base, {
 			eventId: "event_disconnected",
 			event: "pipes.connected_account.disconnected",
-			data: pipesData({ updatedAt: "2026-01-01T00:05:00.000Z" }),
+			updatedAt: "2026-01-01T00:05:00.000Z",
 		});
 		expect(
-			await base.run(async (ctx) => ctx.db.query("emailIntegrations").first()),
-		).toMatchObject({ status: "disconnected" });
+			await base.run(async (ctx) => ctx.db.query("connectedAccounts").first()),
+		).toMatchObject({ connectionStatus: "disconnected" });
 	});
 
-	it("acknowledges connected-account events for other providers", async () => {
+	it("keeps the provider alias when WorkOS reports a custom provider type", async () => {
+		const base = createTest();
+		await processConnectedAccount(base, {
+			eventId: "event_connected",
+			scopes: ["full_access"],
+		});
+		await processConnectedAccount(base, {
+			eventId: "event_reauthorization",
+			event: "pipes.connected_account.reauthorization_needed",
+			providerSlug: "custom",
+			updatedAt: "2026-01-01T00:02:00.000Z",
+		});
+
+		expect(
+			await base.run(async (ctx) => ctx.db.query("connectedAccounts").first()),
+		).toMatchObject({
+			providerSlug: "resend",
+			connectionStatus: "needs_reauthorization",
+			workosUpdatedAt: Date.parse("2026-01-01T00:02:00.000Z"),
+		});
+	});
+
+	it.each([
+		"google",
+		"github",
+		"custom-provider",
+	])("upserts %s without creating an email integration", async (providerSlug) => {
 		const base = createTest();
 		await expect(
-			base.mutation(internal.workos.processPipesWebhookEvent, {
-				eventId: "event_github",
-				event: "pipes.connected_account.connected",
-				data: {
-					id: "connected_account_github",
-					data_integration_id: "data_integration_github",
-					provider_slug: "github",
-					organization_id: null,
-					user_id: "user_adam",
-					scopes: ["repo"],
-					updated_at: "2026-01-01T00:01:00.000Z",
-				},
+			processConnectedAccount(base, {
+				eventId: `event_${providerSlug}`,
+				providerSlug,
+				scopes: ["read"],
 			}),
 		).resolves.toBeNull();
 
 		const state = await base.run(async (ctx) => ({
-			events: await ctx.db.query("emailIntegrationSyncEvents").collect(),
+			accounts: await ctx.db.query("connectedAccounts").collect(),
 			integrations: await ctx.db.query("emailIntegrations").collect(),
 		}));
-		expect(state.events).toHaveLength(0);
+		expect(state.accounts).toMatchObject([{ providerSlug }]);
 		expect(state.integrations).toHaveLength(0);
+	});
+
+	it("records but does not attach organization-unscoped accounts", async () => {
+		const base = createTest();
+		await processConnectedAccount(base, {
+			eventId: "event_unscoped",
+			organizationId: null,
+		});
+		const state = await base.run(async (ctx) => ({
+			accounts: await ctx.db.query("connectedAccounts").collect(),
+			event: await ctx.db.query("connectedAccountSyncEvents").first(),
+		}));
+		expect(state.accounts).toHaveLength(0);
+		expect(state.event).toMatchObject({ outcome: "ignored_unscoped" });
+	});
+
+	it("uses a safe deterministic status tie-break and rejects identity moves", async () => {
+		const base = createTest();
+		const updatedAt = "2026-01-01T00:01:00.000Z";
+		await processConnectedAccount(base, {
+			eventId: "event_degraded",
+			event: "pipes.connected_account.reauthorization_needed",
+			scopes: ["full_access"],
+			updatedAt,
+		});
+		await processConnectedAccount(base, {
+			eventId: "event_late_connected",
+			scopes: ["full_access", "extra"],
+			updatedAt,
+		});
+		expect(
+			await base.run(async (ctx) => ctx.db.query("connectedAccounts").first()),
+		).toMatchObject({
+			connectionStatus: "needs_reauthorization",
+			grantedScopes: ["full_access"],
+		});
+
+		await expect(
+			processConnectedAccount(base, {
+				eventId: "event_identity_move",
+				dataIntegrationId: "data_integration_other",
+				updatedAt: "2026-01-01T00:02:00.000Z",
+			}),
+		).rejects.toThrow("cannot change external identity");
+
+		await expect(
+			processConnectedAccount(base, {
+				eventId: "event_organization_move",
+				organizationId: "org_other",
+				updatedAt: "2026-01-01T00:02:00.000Z",
+			}),
+		).rejects.toThrow("cannot change organization");
 	});
 });

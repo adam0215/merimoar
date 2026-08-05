@@ -3,8 +3,8 @@ import { AgentTaskInspector } from "#/components/agents/agent-task-inspector.tsx
 import {
 	AgentOverview,
 	AgentTasks,
-	AgentToolsPage,
 } from "#/components/agents/agent-workspace.tsx";
+import { AgentToolsPage } from "#/components/agents/custom-tools-page.tsx";
 
 export function AgentsPage({
 	view,

@@ -91,9 +91,13 @@ describe("invokeAgentRun", () => {
 		const finishRun = vi.fn<AgentRuntimeAdapter["finishRun"]>(async () => {
 			events.push("finish");
 		});
+		const loadCustomTools = vi.fn<AgentRuntimeAdapter["loadCustomTools"]>(
+			async () => [],
+		);
 		let messageNumber = 0;
 		let steeringCheckCount = 0;
 		const runtime = createMinimalRuntime({
+			loadCustomTools,
 			getTranscript: async () => ({
 				taskId: "task-1",
 				turns: [
@@ -167,11 +171,87 @@ describe("invokeAgentRun", () => {
 			totalTokens: 28,
 		});
 		expect(model.doStreamCalls).toHaveLength(2);
+		expect(loadCustomTools).toHaveBeenCalledOnce();
 		expect(JSON.stringify(model.doStreamCalls[0])).toContain(
 			"This task is anchored to case ID case-1.",
 		);
 		expect(JSON.stringify(model.doStreamCalls[1])).toContain(
 			"Also verify the related email before finishing.",
+		);
+	});
+
+	it("records a custom tool with its display name, stable id, and approval copy", async () => {
+		const model = new MockLanguageModelV4({
+			doStream: [
+				{
+					stream: simulateReadableStream({
+						chunks: [
+							{ type: "stream-start", warnings: [] },
+							{
+								type: "tool-call",
+								toolCallId: "custom-call",
+								toolName: "request_quote",
+								input: "{}",
+							},
+							{
+								type: "finish",
+								usage,
+								finishReason: { unified: "tool-calls", raw: "tool-calls" },
+							},
+						],
+					}),
+				},
+				{
+					stream: simulateReadableStream({
+						chunks: [
+							{ type: "stream-start", warnings: [] },
+							{
+								type: "finish",
+								usage,
+								finishReason: { unified: "stop", raw: "stop" },
+							},
+						],
+					}),
+				},
+			],
+		});
+		const recordToolStarted = vi.fn<AgentRuntimeAdapter["recordToolStarted"]>(
+			async () => {},
+		);
+		const recordToolApprovalRequest = vi.fn<
+			AgentRuntimeAdapter["recordToolApprovalRequest"]
+		>(async () => {});
+		const runtime = createMinimalRuntime({
+			loadCustomTools: async () => [
+				{
+					toolId: "tool-1",
+					name: "Request Quote",
+					normalizedName: "request_quote",
+					description: "Request a supplier quote.",
+					parameters: [],
+					requiresApproval: true,
+					baseUrl: "https://api.example.com",
+					path: "quotes",
+				},
+			],
+			recordToolStarted,
+			recordToolApprovalRequest,
+		});
+
+		await invokeAgentRun({ claim: createClaim(), runtime, model });
+
+		expect(recordToolStarted).toHaveBeenCalledWith({
+			toolCallId: "custom-call",
+			toolName: "request_quote",
+			customToolId: "tool-1",
+			inputJson: "{}",
+			summary: "Request Quote",
+		});
+		expect(recordToolApprovalRequest).toHaveBeenCalledWith(
+			expect.objectContaining({
+				toolCallId: "custom-call",
+				request: 'Approve using "Request Quote"?',
+			}),
 		);
 	});
 
@@ -445,6 +525,7 @@ function createMinimalRuntime(
 	overrides: Partial<AgentRuntimeAdapter> = {},
 ): AgentRuntimeAdapter {
 	return {
+		loadCustomTools: async () => [],
 		getTranscript: async () => ({
 			taskId: "task-1",
 			turns: [
@@ -481,6 +562,7 @@ function createMinimalRuntime(
 		addCaseRelation: async () => null,
 		searchEmails: async () => [],
 		readEmailThread: async () => null,
+		invokeCustomTool: async () => null,
 		...overrides,
 	};
 }

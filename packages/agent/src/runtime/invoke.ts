@@ -89,22 +89,6 @@ export async function invokeAgentRun(input: {
 	}, executionTimeoutMs);
 	const startedToolCalls = new Set<string>();
 
-	const recordToolStart = async (toolCall: {
-		toolCallId: string;
-		toolName: string;
-		input: unknown;
-	}) => {
-		if (startedToolCalls.has(toolCall.toolCallId)) return;
-		startedToolCalls.add(toolCall.toolCallId);
-		await flushPendingText();
-		await input.runtime.recordToolStarted({
-			toolCallId: toolCall.toolCallId,
-			toolName: toolCall.toolName,
-			inputJson: serializeDiagnosticValue(toolCall.input),
-			summary: describeToolCall(toolCall.toolName),
-		});
-	};
-
 	try {
 		const transcript = await input.runtime.getTranscript();
 		if (transcript.selectedStatusItemId) {
@@ -116,9 +100,31 @@ export async function invokeAgentRun(input: {
 			input.claim.runId,
 		);
 		await capabilities.updateActivity({ title: "Started working" });
+		const customTools = await input.runtime.loadCustomTools();
+		const customToolsByName = new Map(
+			customTools.map((tool) => [tool.normalizedName, tool]),
+		);
+		const recordToolStart = async (toolCall: {
+			toolCallId: string;
+			toolName: string;
+			input: unknown;
+		}) => {
+			if (startedToolCalls.has(toolCall.toolCallId)) return;
+			startedToolCalls.add(toolCall.toolCallId);
+			const customTool = customToolsByName.get(toolCall.toolName);
+			await flushPendingText();
+			await input.runtime.recordToolStarted({
+				toolCallId: toolCall.toolCallId,
+				toolName: toolCall.toolName,
+				...(customTool ? { customToolId: customTool.toolId } : {}),
+				inputJson: serializeDiagnosticValue(toolCall.input),
+				summary: customTool?.name ?? describeToolCall(toolCall.toolName),
+			});
+		};
 		const agent = createMerimoarAgent({
 			model: input.model,
 			context,
+			customTools,
 			prepareMessages: async (messages) => {
 				const steeringMessages = await input.runtime.getSteeringMessages(
 					latestSteeringSequence,
@@ -195,10 +201,13 @@ export async function invokeAgentRun(input: {
 				case "tool-approval-request":
 					await recordToolStart(part.toolCall);
 					await flushPendingText();
+					const customTool = customToolsByName.get(part.toolCall.toolName);
 					await input.runtime.recordToolApprovalRequest({
 						toolCallId: part.toolCall.toolCallId,
 						approvalId: part.approvalId,
-						request: `Approve ${describeToolCall(part.toolCall.toolName).toLocaleLowerCase()}?`,
+						request: customTool
+							? `Approve using "${customTool.name}"?`
+							: `Approve ${describeToolCall(part.toolCall.toolName).toLocaleLowerCase()}?`,
 						...(part.signature ? { signature: part.signature } : {}),
 					});
 					break;

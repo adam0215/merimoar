@@ -109,6 +109,7 @@ export const agentRunBaseValidator = v.object({
 	leaseFailureCount: v.optional(v.number()),
 	leaseGeneration: v.number(),
 	selectedStatusItemId: v.optional(v.id("agentItems")),
+	customToolSnapshotCreatedAt: v.optional(v.number()),
 });
 
 export const agentRunValidator = v.union(
@@ -150,6 +151,7 @@ export const agentToolItemBaseValidator = agentItemBaseValidator.extend({
 	runId: v.id("agentRuns"),
 	toolCallId: v.string(),
 	toolName: v.string(),
+	customToolId: v.optional(v.id("agentCustomTools")),
 	inputJson: v.string(),
 	summary: v.string(),
 });
@@ -294,5 +296,8 @@ export function agentRunBaseFields(run: AgentRun) {
 		...(run.selectedStatusItemId
 			? { selectedStatusItemId: run.selectedStatusItemId }
 			: {}),
+		...(run.customToolSnapshotCreatedAt === undefined
+			? {}
+			: { customToolSnapshotCreatedAt: run.customToolSnapshotCreatedAt }),
 	};
 }

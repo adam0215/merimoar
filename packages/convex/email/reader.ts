@@ -13,6 +13,8 @@ import {
 	emailSendStatusValidator,
 } from "#/email/model";
 import { setThreadUnread } from "#/email/unreadCounts";
+import { getEmailIntegrationAccessContext } from "#/integrations/connectedAccounts";
+import { deriveEmailReadiness } from "#/integrations/model";
 import type { Id, TableNames } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
@@ -52,17 +54,39 @@ export const listOutboundIntegrations = query({
 	args: {},
 	handler: async (ctx) => {
 		const workspace = await requireActor(ctx);
-		const integrations = await ctx.db
-			.query("emailIntegrations")
-			.withIndex("by_organization_id_and_provider", (index) =>
-				index.eq("organizationId", workspace.organization._id),
+		const accounts = await ctx.db
+			.query("connectedAccounts")
+			.withIndex("by_organization_id_and_provider_slug", (index) =>
+				index
+					.eq("organizationId", workspace.organization._id)
+					.eq("providerSlug", "resend"),
 			)
 			.take(100);
-		return integrations.map((integration) => ({
-			integrationId: integration._id,
-			provider: integration.provider,
-			status: integration.status,
-		}));
+		const integrations = await Promise.all(
+			accounts.map(async (account) => {
+				const integration = await ctx.db
+					.query("emailIntegrations")
+					.withIndex("by_connected_account_id", (index) =>
+						index.eq("connectedAccountId", account._id),
+					)
+					.unique();
+				if (!integration) {
+					return null;
+				}
+				const readiness = deriveEmailReadiness(
+					account.connectionStatus,
+					account.grantedScopes,
+					integration.resendWebhook !== undefined,
+				);
+				return {
+					integrationId: integration._id,
+					provider: account.providerSlug,
+					connectionStatus: account.connectionStatus,
+					outboundReadiness: readiness.outbound,
+				};
+			}),
+		);
+		return integrations.filter((integration) => integration !== null);
 	},
 });
 
@@ -82,7 +106,7 @@ export const listInboxes = query({
 			inboxes.map(async (inbox) => {
 				const outbound = inbox.outbound;
 				const outboundIntegration = outbound
-					? await ctx.db.get(outbound.integrationId)
+					? await getEmailIntegrationAccessContext(ctx, outbound.integrationId)
 					: null;
 				return {
 					_id: inbox._id,
@@ -95,9 +119,14 @@ export const listInboxes = query({
 						outboundIntegration?.organizationId ===
 							workspace.organization._id && outbound
 							? {
-									integrationId: outboundIntegration._id,
-									provider: outboundIntegration.provider,
-									status: outboundIntegration.status,
+									integrationId: outboundIntegration.integrationId,
+									provider: outboundIntegration.providerSlug,
+									connectionStatus: outboundIntegration.connectionStatus,
+									outboundReadiness: deriveEmailReadiness(
+										outboundIntegration.connectionStatus,
+										outboundIntegration.grantedScopes,
+										outboundIntegration.resendWebhook !== undefined,
+									).outbound,
 									address: outbound.address,
 								}
 							: null,

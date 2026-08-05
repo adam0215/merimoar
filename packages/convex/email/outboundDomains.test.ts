@@ -3,6 +3,7 @@ import { listVerifiedResendDomainNames } from "#/email/outboundDomainModel";
 import {
 	createConnectedResendIntegration,
 	createTest,
+	setEmailIntegrationConnectionStatus,
 	syncWorkosUser,
 } from "#/test.setup";
 import { internal } from "../_generated/api";
@@ -84,8 +85,8 @@ describe("outbound domains", () => {
 				{ integrationId },
 			),
 		).resolves.toMatchObject({
-			_id: integrationId,
-			provider: "resend",
+			integrationId,
+			providerSlug: "resend",
 		});
 		await expect(
 			otherActor.query(
@@ -94,9 +95,11 @@ describe("outbound domains", () => {
 			),
 		).resolves.toBeNull();
 
-		await test.run(async (ctx) => {
-			await ctx.db.patch(integrationId, { status: "disconnected" });
-		});
+		await setEmailIntegrationConnectionStatus(
+			test,
+			integrationId,
+			"disconnected",
+		);
 		await expect(
 			actor.query(
 				internal.email.integrations.getSelectableResendAccessContext,

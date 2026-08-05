@@ -1,4 +1,4 @@
-import type { AgentToolKey } from "../manifest";
+import type { BuiltInToolKey } from "../manifest";
 import type { AgentContext } from "../types";
 import { createAddCaseRelationTool } from "./add-case-relation/ai-sdk";
 import { createCreateCaseTool } from "./create-case/ai-sdk";
@@ -12,7 +12,7 @@ import { createUpdateActivityTool } from "./update-activity/ai-sdk";
 import { createUpdateCaseTool } from "./update-case/ai-sdk";
 import { createUpdateTaskStatusTool } from "./update-task-status/ai-sdk";
 
-export function createBuiltins(context: AgentContext) {
+export function createBuiltInTools(context: AgentContext) {
 	return {
 		global_search: createGlobalSearchTool(context),
 		inspect_entity: createInspectEntityTool(context),
@@ -25,5 +25,5 @@ export function createBuiltins(context: AgentContext) {
 		read_email_thread: createReadEmailThreadTool(context),
 		update_activity: createUpdateActivityTool(context),
 		update_task_status: createUpdateTaskStatusTool(context),
-	} satisfies Record<AgentToolKey, unknown>;
+	} satisfies Record<BuiltInToolKey, unknown>;
 }

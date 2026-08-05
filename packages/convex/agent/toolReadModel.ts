@@ -3,6 +3,7 @@ import { caseStatusValidator } from "#/case/model";
 import { emailParticipantValidator } from "#/email/model";
 import { entityFieldTypeValidator } from "#/entity/model";
 import { globalSearchTargetValidator } from "#/globalSearch/model";
+import { getEmailIntegrationAccessContext } from "#/integrations/connectedAccounts";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
@@ -256,7 +257,7 @@ export async function validateEmailMessageLinks(
 	}
 	const [inbox, integration] = await Promise.all([
 		ctx.db.get(args.thread.inboxId),
-		ctx.db.get(args.message.integrationId),
+		getEmailIntegrationAccessContext(ctx, args.message.integrationId),
 	]);
 	if (!inbox || inbox.organizationId !== args.organizationId) {
 		invalidPersistedAgentData(

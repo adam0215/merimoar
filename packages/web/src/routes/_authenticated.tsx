@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { getAuth } from "@workos/authkit-tanstack-react-start";
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
+import { CustomToolNamesProvider } from "#/components/agents/custom-tool-names.tsx";
 import { AppShell } from "#/components/app-shell";
 import { AppSplashScreen } from "#/components/app-splash-screen";
 import { TooltipProvider } from "#/components/ui/tooltip";
@@ -37,11 +38,13 @@ function AuthenticatedLayout() {
 		<>
 			<Authenticated>
 				<WorkspaceAccessGate>
-					<TooltipProvider>
-						<AppShell organizations={availableOrganizations}>
-							<Outlet />
-						</AppShell>
-					</TooltipProvider>
+					<CustomToolNamesProvider>
+						<TooltipProvider>
+							<AppShell organizations={availableOrganizations}>
+								<Outlet />
+							</AppShell>
+						</TooltipProvider>
+					</CustomToolNamesProvider>
 				</WorkspaceAccessGate>
 			</Authenticated>
 			<AuthLoading>

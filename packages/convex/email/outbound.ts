@@ -15,6 +15,8 @@ import {
 } from "#/email/outboundModel";
 import { emailOutboundPool } from "#/email/outboundQueue";
 import { setThreadUnread } from "#/email/unreadCounts";
+import { getEmailIntegrationAccessContext } from "#/integrations/connectedAccounts";
+import { deriveEmailReadiness } from "#/integrations/model";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -218,7 +220,10 @@ export const queueReply = mutation({
 				"Choose an outbound email integration and address for this inbox.",
 			);
 		}
-		const integration = await ctx.db.get(outbound.integrationId);
+		const integration = await getEmailIntegrationAccessContext(
+			ctx,
+			outbound.integrationId,
+		);
 		if (
 			!integration ||
 			integration.organizationId !== workspace.organization._id
@@ -228,7 +233,13 @@ export const queueReply = mutation({
 				"The outbound email integration does not belong to this inbox organization.",
 			);
 		}
-		if (integration.status !== "connected") {
+		if (
+			deriveEmailReadiness(
+				integration.connectionStatus,
+				integration.grantedScopes,
+				integration.resendWebhook !== undefined,
+			).outbound !== "ready"
+		) {
 			throwDomainError(
 				"EMAIL_INTEGRATION_NOT_CONNECTED",
 				"Reconnect the outbound email integration before sending.",
@@ -283,7 +294,7 @@ export const queueReply = mutation({
 		const queuedAt = Date.now();
 		const messageId = await ctx.db.insert("emailMessages", {
 			inboxId: inbox._id,
-			integrationId: integration._id,
+			integrationId: integration.integrationId,
 			threadId: thread._id,
 			direction: "outbound",
 			authoredByMemberId: workspace.member._id,
@@ -409,7 +420,7 @@ export const prepareSendAttempt = internalMutation({
 		const [thread, inbox, integration] = await Promise.all([
 			ctx.db.get(message.threadId),
 			ctx.db.get(message.inboxId),
-			ctx.db.get(message.integrationId),
+			getEmailIntegrationAccessContext(ctx, message.integrationId),
 		]);
 		if (
 			!thread ||
@@ -445,7 +456,12 @@ export const prepareSendAttempt = internalMutation({
 		}
 		if (
 			!message.externalMessageId &&
-			(inbox.status !== "active" || integration.status !== "connected")
+			(inbox.status !== "active" ||
+				deriveEmailReadiness(
+					integration.connectionStatus,
+					integration.grantedScopes,
+					integration.resendWebhook !== undefined,
+				).outbound !== "ready")
 		) {
 			await ctx.db.patch(send._id, {
 				status: "failed",
@@ -706,7 +722,7 @@ export const acceptResendSentWebhook = internalMutation({
 			return { status: "ignored" as const };
 		}
 		const [integration, inbox, thread, send] = await Promise.all([
-			ctx.db.get(args.integrationId),
+			getEmailIntegrationAccessContext(ctx, args.integrationId),
 			ctx.db.get(message.inboxId),
 			ctx.db.get(message.threadId),
 			ctx.db

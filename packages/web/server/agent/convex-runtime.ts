@@ -5,10 +5,12 @@ import {
 	type AgentRunSubscriberHost,
 	type AgentRuntimeAdapter,
 	type ClaimedRun,
+	type CustomToolDefinition,
 } from "@merimoar/agent";
 import { api } from "@merimoar/convex/api";
 import type { Id, TableNames } from "@merimoar/convex/data-model";
 import { ConvexClient, type ConnectionState } from "convex/browser";
+import { invokeCustomToolRequest } from "../custom-tools/executor";
 
 const RUN_LEASE_DURATION_MS = 60_000;
 
@@ -128,8 +130,28 @@ function createConvexRuntimeAdapter(
 		runId,
 		claimToken: claim.claimToken,
 	};
+	let customToolSnapshot: ReadonlyMap<string, CustomToolDefinition> | null = null;
 
 	return {
+		async loadCustomTools() {
+			if (customToolSnapshot) return [...customToolSnapshot.values()];
+			const definitions = await client.mutation(
+				api.agent.customTools.loadRunnableToolsForRun,
+				base,
+			);
+			customToolSnapshot = new Map(
+				definitions.map((definition) => [definition.toolId, definition]),
+			);
+			return definitions;
+		},
+		async invokeCustomTool(toolId, input) {
+			const definition = customToolSnapshot?.get(toolId);
+			if (!definition) {
+				throw new Error("Custom tool is not available for this agent run.");
+			}
+			const result = await invokeCustomToolRequest(definition, input);
+			return result.value;
+		},
 		getTranscript() {
 			return client.mutation(api.agent.runtime.getTranscript, {
 				...base,
@@ -174,9 +196,13 @@ function createConvexRuntimeAdapter(
 			});
 		},
 		async recordToolStarted(input) {
+			const { customToolId, ...tool } = input;
 			await client.mutation(api.agent.runtime.recordToolStarted, {
 				...base,
-				...input,
+				...tool,
+				...(customToolId
+					? { customToolId: asConvexId<"agentCustomTools">(customToolId) }
+					: {}),
 			});
 		},
 		async recordToolFinished(input) {

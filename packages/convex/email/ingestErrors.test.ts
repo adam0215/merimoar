@@ -6,7 +6,7 @@ import {
 	isResendAuthorizationError,
 	parseNonRetryableIngestError,
 } from "#/email/ingestErrors";
-import { createTest } from "#/test.setup";
+import { createTest, insertResendIntegration } from "#/test.setup";
 import { internal } from "../_generated/api";
 
 describe("email ingest retry classification", () => {
@@ -63,16 +63,11 @@ describe("email ingest retry classification", () => {
 				referenceSlug: "MER",
 				active: true,
 			});
-			const integrationId = await ctx.db.insert("emailIntegrations", {
+			const { integrationId } = await insertResendIntegration(
+				ctx,
 				organizationId,
-				provider: "resend",
-				status: "connected",
-				workosOrganizationId: "org_merimoar",
-				workosUserId: "user_adam",
-				workosDataIntegrationId: "data_integration_resend",
-				workosConnectedAccountId: "connected_account_resend",
-				workosConnectedAccountUpdatedAt: 1_000,
-			});
+				{ hasWebhook: false, suffix: "ingest_errors" },
+			);
 			const eventId = await ctx.db.insert("emailIngestEvents", {
 				integrationId,
 				externalEventId: "event-completion",

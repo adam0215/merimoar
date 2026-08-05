@@ -237,6 +237,7 @@ export async function startTool(
 	claim: { runId: Id<"agentRuns">; claimToken: string },
 	toolCallId: string,
 	toolName: string,
+	options: { customToolId?: Id<"agentCustomTools"> } = {},
 ) {
 	await fixture.base.mutation(api.agent.runtime.recordToolStarted, {
 		runtimeSecret: RUNTIME_SECRET,
@@ -244,6 +245,7 @@ export async function startTool(
 		claimToken: claim.claimToken,
 		toolCallId,
 		toolName,
+		...(options.customToolId ? { customToolId: options.customToolId } : {}),
 		inputJson: "{}",
 		summary: `Testing ${toolName}`,
 	});

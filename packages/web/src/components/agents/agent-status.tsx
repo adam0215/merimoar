@@ -3,9 +3,9 @@ import {
 	IconBan,
 	IconCircleCheck,
 	IconClock,
+	IconExclamationCircle,
 	IconHandStop,
 	IconLoader,
-	IconPlayerPause,
 } from "@tabler/icons-react";
 import type { AgentTaskStatus } from "#/components/agents/agent-types.ts";
 import { Badge } from "#/components/ui/badge.tsx";
@@ -16,7 +16,7 @@ const STATUS_DETAILS: Record<
 	{
 		label: string;
 		icon: typeof IconClock;
-		badgeVariant: "secondary" | "success" | "destructive";
+		badgeVariant: "secondary" | "alert" | "success" | "destructive";
 		className?: string;
 	}
 > = {
@@ -36,8 +36,7 @@ const STATUS_DETAILS: Record<
 	waiting_for_approval: {
 		label: "Needs approval",
 		icon: IconHandStop,
-		badgeVariant: "secondary",
-		className: "text-amber-700 dark:text-amber-300",
+		badgeVariant: "alert",
 	},
 	completed: {
 		label: "Completed",
@@ -52,7 +51,7 @@ const STATUS_DETAILS: Record<
 	},
 	failed: {
 		label: "Failed",
-		icon: IconPlayerPause,
+		icon: IconExclamationCircle,
 		badgeVariant: "destructive",
 		className: "text-destructive",
 	},

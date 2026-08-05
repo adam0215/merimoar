@@ -21,6 +21,24 @@ export type AgentActivity = {
 	detail?: string;
 };
 
+export type CustomToolParameter = {
+	name: string;
+	type: "string" | "number" | "boolean";
+	description: string;
+	required: boolean;
+};
+
+export type CustomToolDefinition = {
+	toolId: string;
+	name: string;
+	normalizedName: string;
+	description: string;
+	parameters: readonly CustomToolParameter[];
+	requiresApproval: boolean;
+	baseUrl: string;
+	path: string;
+};
+
 export type AgentCaseRelationTarget =
 	| { kind: "contact"; contactId: string }
 	| { kind: "entity"; entityId: string }
@@ -77,6 +95,10 @@ export type AgentCapabilities = {
 		update: TaskStatusUpdate,
 		toolCallId: string,
 	): Promise<TaskStatusUpdate>;
+	invokeCustomTool(
+		toolId: string,
+		input: Record<string, unknown>,
+	): Promise<unknown>;
 };
 
 export type AgentContext = {
@@ -174,6 +196,7 @@ export type AgentRunUsage = {
 };
 
 export type AgentRuntimeAdapter = AgentCapabilities & {
+	loadCustomTools(): Promise<CustomToolDefinition[]>;
 	getTranscript(): Promise<PersistedTranscript>;
 	getSteeringMessages(
 		afterSequence: number,
@@ -184,6 +207,7 @@ export type AgentRuntimeAdapter = AgentCapabilities & {
 	recordToolStarted(input: {
 		toolCallId: string;
 		toolName: string;
+		customToolId?: string;
 		inputJson: string;
 		summary: string;
 	}): Promise<void>;

@@ -1,6 +1,10 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import {
+	customToolParameterValidator,
+	customToolRunSnapshotValidator,
+} from "#/agent/customToolModel";
+import {
 	agentItemValidator,
 	agentRunValidator,
 	agentTaskValidator,
@@ -17,6 +21,10 @@ import {
 } from "#/email/model";
 import { entityFieldTypeValidator, entityIconValidator } from "#/entity/model";
 import { globalSearchTargetValidator } from "#/globalSearch/model";
+import {
+	connectionStatusValidator,
+	resendWebhookValidator,
+} from "#/integrations/model";
 
 export default defineSchema({
 	organizations: defineTable({
@@ -26,30 +34,64 @@ export default defineSchema({
 		active: v.boolean(),
 	}).index("by_workos_organization_id", ["workosOrganizationId"]),
 
+	connectedAccounts: defineTable({
+		organizationId: v.id("organizations"),
+		providerSlug: v.string(),
+		workosUserId: v.string(),
+		workosDataIntegrationId: v.string(),
+		workosConnectedAccountId: v.string(),
+		connectionStatus: connectionStatusValidator,
+		grantedScopes: v.array(v.string()),
+		workosUpdatedAt: v.number(),
+	})
+		.index("by_workos_connected_account_id", ["workosConnectedAccountId"])
+		.index("by_organization_id_and_provider_slug", [
+			"organizationId",
+			"providerSlug",
+		])
+		.index("by_organization_id_and_provider_slug_and_workos_user_id", [
+			"organizationId",
+			"providerSlug",
+			"workosUserId",
+		])
+		.index("by_organization_id_provider_slug_workos_user_id_updated_at", [
+			"organizationId",
+			"providerSlug",
+			"workosUserId",
+			"workosUpdatedAt",
+		]),
+
+	customIntegrations: defineTable({
+		organizationId: v.id("organizations"),
+		name: v.string(),
+		baseUrl: v.string(),
+		updatedAt: v.number(),
+	})
+		.index("by_organization_id", ["organizationId"])
+		.index("by_organization_id_and_name", ["organizationId", "name"]),
+
+	agentCustomTools: defineTable({
+		agentKey: v.string(),
+		integrationId: v.id("customIntegrations"),
+		name: v.string(),
+		normalizedName: v.string(),
+		description: v.string(),
+		path: v.string(),
+		parameters: v.array(customToolParameterValidator),
+		requiresApproval: v.boolean(),
+		testedConfigurationHash: v.string(),
+		updatedAt: v.number(),
+	}).index("by_integration_id", ["integrationId"]),
+
 	caseReferenceSequences: defineTable({
 		organizationId: v.id("organizations"),
 		lastIndex: v.int64(),
 	}).index("by_organization_id", ["organizationId"]),
 
 	emailIntegrations: defineTable({
-		organizationId: v.id("organizations"),
-		provider: v.literal("resend"),
-		status: v.union(
-			v.literal("connected"),
-			v.literal("needs_reauthorization"),
-			v.literal("disconnected"),
-		),
-		workosUserId: v.string(),
-		workosOrganizationId: v.string(),
-		workosDataIntegrationId: v.string(),
-		workosConnectedAccountId: v.string(),
-		workosConnectedAccountUpdatedAt: v.number(),
-		webhookId: v.optional(v.string()),
-		webhookSecret: v.optional(v.string()),
-		webhookProvisionedAt: v.optional(v.number()),
-	})
-		.index("by_organization_id_and_provider", ["organizationId", "provider"])
-		.index("by_workos_connected_account_id", ["workosConnectedAccountId"]),
+		connectedAccountId: v.id("connectedAccounts"),
+		resendWebhook: v.optional(resendWebhookValidator),
+	}).index("by_connected_account_id", ["connectedAccountId"]),
 
 	emailIntegrationWebhookCleanupTasks: defineTable({
 		integrationId: v.id("emailIntegrations"),
@@ -90,6 +132,29 @@ export default defineSchema({
 			v.literal("pipes.connected_account.connected"),
 			v.literal("pipes.connected_account.disconnected"),
 			v.literal("pipes.connected_account.reauthorization_needed"),
+		),
+		processedAt: v.number(),
+	}).index("by_source_and_source_event_id", ["source", "sourceEventId"]),
+
+	connectedAccountSyncEvents: defineTable({
+		source: v.literal("workos_pipes"),
+		sourceEventId: v.string(),
+		eventType: v.union(
+			v.literal("pipes.connected_account.connected"),
+			v.literal("pipes.connected_account.disconnected"),
+			v.literal("pipes.connected_account.reauthorization_needed"),
+		),
+		providerSlug: v.optional(v.string()),
+		workosConnectedAccountId: v.optional(v.string()),
+		connectedAccountId: v.optional(v.id("connectedAccounts")),
+		workosUpdatedAt: v.optional(v.number()),
+		outcome: v.union(
+			v.literal("inserted"),
+			v.literal("updated"),
+			v.literal("stale"),
+			v.literal("unchanged"),
+			v.literal("ignored_unscoped"),
+			v.literal("legacy_backfill"),
 		),
 		processedAt: v.number(),
 	}).index("by_source_and_source_event_id", ["source", "sourceEventId"]),
@@ -318,6 +383,14 @@ export default defineSchema({
 	agentRuns: defineTable(agentRunValidator)
 		.index("by_turn_id_and_requested_at", ["turnId", "requestedAt"])
 		.index("by_status_and_requested_at", ["status", "requestedAt"]),
+
+	// Approval continuation must replay the exact executable definition that was
+	// approved, even if the workspace tool changes before the run resumes.
+	agentRunCustomToolDefinitions: defineTable(
+		customToolRunSnapshotValidator.extend({
+			runId: v.id("agentRuns"),
+		}),
+	).index("by_run_id", ["runId"]),
 
 	agentItems: defineTable(agentItemValidator)
 		.index("by_turn_id_and_sequence", ["turnId", "sequence"])

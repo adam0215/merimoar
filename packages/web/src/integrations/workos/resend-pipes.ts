@@ -33,6 +33,16 @@ export function isResendAuthorizationRejected(statusCode: number) {
 	return statusCode === 401 || statusCode === 403;
 }
 
+export function hasResendEmailScope(accessToken: {
+	scopes: string[];
+	missingScopes: string[];
+}) {
+	return (
+		accessToken.scopes.includes("full_access") &&
+		!accessToken.missingScopes.includes("full_access")
+	);
+}
+
 export function createEmailSettingsReturnTo(requestUrl: URL) {
 	return new URL(EMAIL_SETTINGS_PATH, requestUrl.origin).toString();
 }

@@ -1258,6 +1258,7 @@ export const ACME_BUSINESS_STORY =
 export const ACME_REPLACEABLE_TABLES = [
 	"emailIntegrationWebhookCleanupTasks",
 	"emailIntegrations",
+	"connectedAccounts",
 	"emailInboxes",
 	"emailThreads",
 	"emailThreadExternalReferences",
@@ -1300,6 +1301,7 @@ export function createEmptyAcmeReplacementCounts(): AcmeReplacementCounts {
 export function calculateAcmeCreationCounts(): AcmeReplacementCounts {
 	const counts = createEmptyAcmeReplacementCounts();
 	counts.emailIntegrations = 1;
+	counts.connectedAccounts = 1;
 	counts.emailInboxes = 1;
 	counts.emailThreads = ACME_EMAIL_THREADS.length;
 	counts.emailThreadExternalReferences = ACME_EMAIL_THREADS.length;

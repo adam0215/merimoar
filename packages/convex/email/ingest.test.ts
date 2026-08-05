@@ -1,7 +1,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 import schema from "#/schema";
-import { modules } from "#/test.setup";
+import { insertResendIntegration, modules } from "#/test.setup";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 
@@ -33,16 +33,11 @@ describe("inbound email ingestion", () => {
 					referenceSlug: "MER",
 					active: true,
 				});
-				const integrationId = await ctx.db.insert("emailIntegrations", {
+				const { integrationId } = await insertResendIntegration(
+					ctx,
 					organizationId,
-					provider: "resend",
-					status: "connected",
-					workosOrganizationId: "org_merimoar",
-					workosUserId: "user_adam",
-					workosDataIntegrationId: "data_integration_resend",
-					workosConnectedAccountId: "connected_account_resend",
-					workosConnectedAccountUpdatedAt: 1_000,
-				});
+					{ suffix: "ingest_threading" },
+				);
 				const inboxId = await ctx.db.insert("emailInboxes", {
 					organizationId,
 					displayName: "Support",
@@ -226,16 +221,11 @@ describe("inbound email ingestion", () => {
 				referenceSlug: "MER",
 				active: true,
 			});
-			const integrationId = await ctx.db.insert("emailIntegrations", {
+			const { integrationId } = await insertResendIntegration(
+				ctx,
 				organizationId,
-				provider: "resend",
-				status: "connected",
-				workosOrganizationId: "org_merimoar",
-				workosUserId: "user_adam",
-				workosDataIntegrationId: "data_integration_resend",
-				workosConnectedAccountId: "connected_account_resend",
-				workosConnectedAccountUpdatedAt: 1_000,
-			});
+				{ suffix: "ingest_dedupe" },
+			);
 			const senderContactId = await ctx.db.insert("contacts", {
 				organizationId,
 				address: firstEmail.from.address,
@@ -319,26 +309,14 @@ describe("inbound email ingestion", () => {
 				referenceSlug: "OTHR",
 				active: true,
 			});
-			const firstIntegrationId = await ctx.db.insert("emailIntegrations", {
-				organizationId: firstOrganizationId,
-				provider: "resend",
-				status: "connected",
-				workosOrganizationId: "org_merimoar",
-				workosUserId: "user_adam",
-				workosDataIntegrationId: "data_integration_resend",
-				workosConnectedAccountId: "connected_account_resend",
-				workosConnectedAccountUpdatedAt: 1_000,
-			});
-			const secondIntegrationId = await ctx.db.insert("emailIntegrations", {
-				organizationId: secondOrganizationId,
-				provider: "resend",
-				status: "connected",
-				workosOrganizationId: "org_other",
-				workosUserId: "user_other",
-				workosDataIntegrationId: "data_integration_other",
-				workosConnectedAccountId: "connected_account_other",
-				workosConnectedAccountUpdatedAt: 1_000,
-			});
+			const { integrationId: firstIntegrationId } =
+				await insertResendIntegration(ctx, firstOrganizationId, {
+					suffix: "first_org",
+				});
+			const { integrationId: secondIntegrationId } =
+				await insertResendIntegration(ctx, secondOrganizationId, {
+					suffix: "second_org",
+				});
 			const firstInboxId = await ctx.db.insert("emailInboxes", {
 				organizationId: firstOrganizationId,
 				displayName: "Support",
@@ -474,26 +452,16 @@ describe("inbound email ingestion", () => {
 				referenceSlug: "MER",
 				active: true,
 			});
-			const integrationId = await ctx.db.insert("emailIntegrations", {
+			const { integrationId } = await insertResendIntegration(
+				ctx,
 				organizationId,
-				provider: "resend",
-				status: "connected",
-				workosOrganizationId: "org_merimoar",
-				workosUserId: "user_adam",
-				workosDataIntegrationId: "data_integration_resend",
-				workosConnectedAccountId: "connected_account_resend",
-				workosConnectedAccountUpdatedAt: 1_000,
-			});
-			const secondIntegrationId = await ctx.db.insert("emailIntegrations", {
-				organizationId,
-				provider: "resend",
-				status: "connected",
-				workosOrganizationId: "org_merimoar",
-				workosUserId: "user_alex",
-				workosDataIntegrationId: "data_integration_resend_second",
-				workosConnectedAccountId: "connected_account_resend_second",
-				workosConnectedAccountUpdatedAt: 1_000,
-			});
+				{ suffix: "thread_primary", workosUserId: "user_adam" },
+			);
+			const { integrationId: secondIntegrationId } =
+				await insertResendIntegration(ctx, organizationId, {
+					suffix: "thread_secondary",
+					workosUserId: "user_alex",
+				});
 			const inboxId = await ctx.db.insert("emailInboxes", {
 				organizationId,
 				displayName: "Operations",

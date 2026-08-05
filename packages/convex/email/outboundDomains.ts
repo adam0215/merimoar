@@ -26,9 +26,23 @@ export const listVerified = action({
 
 		const access = await fetchResendAccess(integration);
 		if (!access.active) {
+			if (access.error !== "missing_required_scope") {
+				await ctx.runMutation(
+					internal.email.integrations.recordWorkosAccessFailure,
+					{
+						integrationId: integration.integrationId,
+						expectedConnectedAccountId: integration.connectedAccountId,
+						expectedWorkosUpdatedAt: integration.workosUpdatedAt,
+						error: access.error,
+					},
+				);
+			}
 			throw new ConvexError({
 				code: "EMAIL_INTEGRATION_NOT_CONNECTED",
-				message: "Reconnect the email integration before loading domains.",
+				message:
+					access.error === "missing_required_scope"
+						? "Resend must grant the full_access scope before loading domains."
+						: "Reconnect the email integration before loading domains.",
 			});
 		}
 

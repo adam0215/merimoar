@@ -8,6 +8,7 @@ import { convexTest } from "convex-test";
 import schema from "#/schema";
 import { api, components } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 
 export const modules = import.meta.glob([
 	"./**/*.ts",
@@ -85,19 +86,60 @@ export async function createConnectedResendIntegration(
 	organizationId: Id<"organizations">,
 	suffix = "resend",
 ) {
-	return await test.run(async (ctx) =>
-		ctx.db.insert("emailIntegrations", {
-			organizationId,
-			provider: "resend",
-			status: "connected",
-			workosOrganizationId: `org_${suffix}`,
-			workosUserId: `user_${suffix}`,
-			workosDataIntegrationId: `data_integration_${suffix}`,
-			workosConnectedAccountId: `connected_account_${suffix}`,
-			workosConnectedAccountUpdatedAt: Date.parse("2026-01-01T00:00:00.000Z"),
-			webhookId: `wh_${suffix}`,
-			webhookSecret: `whsec_${suffix}`,
-			webhookProvisionedAt: Date.parse("2026-01-01T00:00:01.000Z"),
-		}),
-	);
+	return await test.run(async (ctx) => {
+		return (await insertResendIntegration(ctx, organizationId, { suffix }))
+			.integrationId;
+	});
+}
+
+export async function setEmailIntegrationConnectionStatus(
+	test: Pick<TestFunctionClient, "run">,
+	integrationId: Id<"emailIntegrations">,
+	connectionStatus: "connected" | "needs_reauthorization" | "disconnected",
+) {
+	await test.run(async (ctx) => {
+		const integration = await ctx.db.get(integrationId);
+		if (!integration) {
+			throw new Error("Expected a connected account-backed email integration");
+		}
+		await ctx.db.patch(integration.connectedAccountId, { connectionStatus });
+	});
+}
+
+export async function insertResendIntegration(
+	ctx: Pick<MutationCtx, "db">,
+	organizationId: Id<"organizations">,
+	options: {
+		connectionStatus?: "connected" | "needs_reauthorization" | "disconnected";
+		hasWebhook?: boolean;
+		suffix?: string;
+		workosUpdatedAt?: number;
+		workosUserId?: string;
+	} = {},
+) {
+	const suffix = options.suffix ?? "resend";
+	const connectionStatus = options.connectionStatus ?? "connected";
+	const connectedAccountId = await ctx.db.insert("connectedAccounts", {
+		organizationId,
+		providerSlug: "resend",
+		workosUserId: options.workosUserId ?? `user_${suffix}`,
+		workosDataIntegrationId: `data_integration_${suffix}`,
+		workosConnectedAccountId: `connected_account_${suffix}`,
+		connectionStatus,
+		grantedScopes: connectionStatus === "connected" ? ["full_access"] : [],
+		workosUpdatedAt:
+			options.workosUpdatedAt ?? Date.parse("2026-01-01T00:00:00.000Z"),
+	});
+	const integrationId = await ctx.db.insert("emailIntegrations", {
+		connectedAccountId,
+		resendWebhook:
+			options.hasWebhook === false
+				? undefined
+				: {
+						webhookId: `wh_${suffix}`,
+						signingSecret: `whsec_${suffix}`,
+						provisionedAt: Date.parse("2026-01-01T00:00:01.000Z"),
+					},
+	});
+	return { connectedAccountId, integrationId };
 }

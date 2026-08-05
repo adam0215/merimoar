@@ -1,14 +1,13 @@
 import { api } from "@merimoar/convex/api";
 import type { Id } from "@merimoar/convex/data-model";
 import {
+	IconAiGateway,
 	IconArrowCurveRight,
-	IconCheck,
 	IconChevronDown,
 	IconFileSearch,
 	IconPencil,
 	IconSearch,
 	IconTool,
-	IconX,
 } from "@tabler/icons-react";
 import { useMutation } from "convex/react";
 import { usePaginatedQuery } from "convex-helpers/react/cache";
@@ -20,7 +19,12 @@ import {
 	getAgentItemText,
 	getRequestedByLabel,
 } from "#/components/agents/agent-types.ts";
+import {
+	type CustomToolNameIndex,
+	useCustomToolNames,
+} from "#/components/agents/custom-tool-names.tsx";
 import { RetryTaskButton } from "#/components/agents/retry-task-button.tsx";
+import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
 	Collapsible,
@@ -36,6 +40,11 @@ import {
 	MessageScrollerProvider,
 	MessageScrollerViewport,
 } from "#/components/ui/message-scroller.tsx";
+import {
+	Tooltip,
+	TooltipContent,
+	TooltipTrigger,
+} from "#/components/ui/tooltip.tsx";
 import { showAppNotification } from "#/lib/app-notifications.ts";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { formatDateTime, formatTime } from "#/lib/date-format.ts";
@@ -197,6 +206,7 @@ export function RecentTaskActivity({
 	items: AgentItemRecord[];
 	animateItems?: boolean;
 }) {
+	const customToolNames = useCustomToolNames();
 	const visibleItems = items.filter(
 		({ item }) => !isStartedWorkingActivity(item),
 	);
@@ -219,7 +229,8 @@ export function RecentTaskActivity({
 						<span className="block size-1 rounded-full bg-border" />
 					</MarkerIcon>
 					<MarkerContent className="flex-1 text-foreground">
-						{getAgentItemText(item)}
+						{getCurrentToolName(item, customToolNames) ??
+							getAgentItemText(item)}
 					</MarkerContent>
 					<time
 						dateTime={new Date(item.createdAt).toISOString()}
@@ -393,7 +404,8 @@ function ActivityItem({
 }
 
 function ToolActivity({ item }: { item: ToolItem }) {
-	const ToolIcon = getToolIcon(item.toolName);
+	const customToolNames = useCustomToolNames();
+	const ToolIcon = getToolIcon(item, customToolNames);
 
 	return (
 		<details className="group">
@@ -436,15 +448,20 @@ function ToolActivityGroup({
 	items: ToolItemRecord[];
 	live: boolean;
 }) {
+	const customToolNames = useCustomToolNames();
 	const latestTool = items.at(-1)?.item;
 	if (!latestTool) return null;
+	const ToolIcon =
+		live || items.every(({ item }) => isCustomTool(item, customToolNames))
+			? getToolIcon(latestTool, customToolNames)
+			: IconTool;
 
 	return (
 		<Collapsible>
 			<CollapsibleTrigger className="group w-full cursor-pointer rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring">
 				<Marker>
 					<MarkerIcon>
-						<IconTool
+						<ToolIcon
 							className={cn(
 								latestTool.status === "failed" && "text-destructive",
 							)}
@@ -476,6 +493,9 @@ function ToolActivityGroup({
 }
 
 function ToolActivityTitle({ item }: { item: ToolItem }) {
+	const customToolNames = useCustomToolNames();
+	const customToolName = getCurrentToolName(item, customToolNames);
+	if (customToolName) return customToolName;
 	if (item.toolName !== "update_task_status") return item.summary;
 	const status = getUpdatedTaskStatus(item);
 	if (!status) return item.summary;
@@ -525,8 +545,9 @@ function getToolCategory(toolName: string): ToolCategory {
 	return "mutation";
 }
 
-function getToolIcon(toolName: string) {
-	switch (getToolCategory(toolName)) {
+function getToolIcon(item: ToolItem, customToolNames: CustomToolNameIndex) {
+	if (isCustomTool(item, customToolNames)) return IconAiGateway;
+	switch (getToolCategory(item.toolName)) {
 		case "search":
 			return IconSearch;
 		case "inspect":
@@ -534,6 +555,25 @@ function getToolIcon(toolName: string) {
 		case "mutation":
 			return IconPencil;
 	}
+}
+
+function getCurrentToolName(
+	item: AgentItem,
+	customToolNames: CustomToolNameIndex,
+) {
+	if (item.kind !== "tool") return undefined;
+	return (
+		(item.customToolId
+			? customToolNames.byId.get(item.customToolId)
+			: undefined) ?? customToolNames.byRuntimeName.get(item.toolName)
+	);
+}
+
+function isCustomTool(item: ToolItem, customToolNames: CustomToolNameIndex) {
+	return (
+		item.customToolId !== undefined ||
+		getCurrentToolName(item, customToolNames) !== undefined
+	);
 }
 
 function summarizeToolGroup(items: ToolItem[]) {
@@ -629,42 +669,118 @@ function ApprovalActivity({
 	taskId: Id<"agentTasks">;
 	canRespond: boolean;
 }) {
+	const customToolNames = useCustomToolNames();
+	const customToolName = tool
+		? getCurrentToolName(tool, customToolNames)
+		: undefined;
+	const request = customToolName
+		? `Approve using "${customToolName}"?`
+		: item.request;
+	const hasDetails = Boolean(tool || item.status !== "pending");
+	const resolution =
+		item.status === "pending"
+			? undefined
+			: {
+					label: item.status === "approved" ? "Approved" : "Rejected",
+					answeredAt: item.answeredAt,
+				};
+
 	return (
-		<details className="group">
-			<summary className="cursor-pointer list-none rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-				<Marker>
-					<MarkerIcon>
-						<span className="mt-1 block size-2 rounded-full bg-amber-500" />
-					</MarkerIcon>
-					<MarkerContent className="flex-1 font-medium text-foreground">
-						{item.request}
-					</MarkerContent>
+		<Collapsible className="w-full overflow-hidden rounded-xl border bg-card">
+			<div className="flex min-w-0 items-center gap-2 border-0 px-4 py-3">
+				{hasDetails ? (
+					<CollapsibleTrigger className="min-w-0 flex-1 cursor-pointer truncate rounded-sm text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+						{request}
+					</CollapsibleTrigger>
+				) : (
+					<p className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
+						{request}
+					</p>
+				)}
+				{!resolution && (
 					<time
 						dateTime={new Date(item.createdAt).toISOString()}
-						className="shrink-0 text-xs"
+						className="shrink-0 text-xs text-muted-foreground"
 					>
 						{formatTime(item.createdAt)}
 					</time>
-					<IconChevronDown className="size-4 shrink-0 transition-transform group-open:rotate-180 motion-reduce:transition-none" />
-				</Marker>
-			</summary>
-			<div className="mt-3 ml-6 max-w-3xl">
-				{tool && <ToolRawDetails tool={tool} />}
-				{canRespond && (
-					<ApprovalActions taskId={taskId} approvalIds={[item.approvalId]} />
 				)}
-				{item.status !== "pending" && <ApprovalResolution item={item} />}
+				{canRespond && (
+					<ApprovalActions
+						taskId={taskId}
+						approvalIds={[item.approvalId]}
+						className="mt-0 flex-nowrap"
+					/>
+				)}
+				{!canRespond && item.status === "pending" && (
+					<Badge variant="secondary">Pending</Badge>
+				)}
+				{resolution && (
+					<Tooltip>
+						<TooltipTrigger className="flex shrink-0 cursor-help items-center gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+							<Badge
+								variant={
+									resolution.label === "Approved" ? "success" : "destructive"
+								}
+							>
+								{resolution.label}
+							</Badge>
+							<time
+								dateTime={new Date(resolution.answeredAt).toISOString()}
+								className="text-xs text-muted-foreground"
+							>
+								{formatTime(resolution.answeredAt)}
+							</time>
+						</TooltipTrigger>
+						<TooltipContent>
+							{resolution.label}{" "}
+							{new Intl.DateTimeFormat(undefined, {
+								dateStyle: "long",
+								timeStyle: "short",
+							}).format(resolution.answeredAt)}
+						</TooltipContent>
+					</Tooltip>
+				)}
+				{hasDetails && (
+					<CollapsibleTrigger
+						className="group"
+						render={
+							<Button
+								variant="ghost"
+								size="icon-sm"
+								aria-label="Toggle approval details"
+							/>
+						}
+					>
+						<IconChevronDown className="transition-transform group-data-panel-open:rotate-180 motion-reduce:transition-none" />
+					</CollapsibleTrigger>
+				)}
 			</div>
-		</details>
+			<CollapsibleContent className="border-0 px-4 py-3">
+				{tool && <ToolRawDetails tool={tool} />}
+				{item.status !== "pending" && item.answerReason && (
+					<p
+						className={cn(
+							"text-xs leading-5 text-muted-foreground",
+							tool && "mt-3",
+						)}
+					>
+						{item.answerReason}
+					</p>
+				)}
+			</CollapsibleContent>
+		</Collapsible>
 	);
 }
 
 export function ApprovalActions({
 	taskId,
 	approvalIds,
+	className,
 }: {
 	taskId: Id<"agentTasks">;
 	approvalIds: string[];
+	className?: string;
 }) {
 	const answerApprovals = useMutation(api.agent.tasks.answerApprovals);
 	const [isAnswering, setIsAnswering] = useState(false);
@@ -690,7 +806,15 @@ export function ApprovalActions({
 	}
 
 	return (
-		<div className="mt-3 flex flex-wrap gap-2">
+		<div className={cn("mt-3 flex flex-wrap gap-2", className)}>
+			<Button
+				size="sm"
+				variant="secondary"
+				disabled={isAnswering}
+				onClick={() => void answer(false)}
+			>
+				Reject
+			</Button>
 			<Button
 				size="sm"
 				disabled={isAnswering}
@@ -698,42 +822,6 @@ export function ApprovalActions({
 			>
 				Approve
 			</Button>
-			<Button
-				size="sm"
-				variant="outline"
-				disabled={isAnswering}
-				onClick={() => void answer(false)}
-			>
-				Reject
-			</Button>
-		</div>
-	);
-}
-
-function ApprovalResolution({
-	item,
-}: {
-	item: Extract<AgentItem, { kind: "approval"; status: "approved" | "denied" }>;
-}) {
-	return (
-		<div className="mt-3 text-xs">
-			<p className="flex items-center gap-1.5 font-medium">
-				{item.status === "approved" ? (
-					<IconCheck className="size-3.5" />
-				) : (
-					<IconX className="size-3.5" />
-				)}
-				{item.status === "approved" ? "Approved" : "Rejected"}
-				<span aria-hidden> · </span>
-				<time dateTime={new Date(item.answeredAt).toISOString()}>
-					{formatDateTime(item.answeredAt)}
-				</time>
-			</p>
-			{item.answerReason && (
-				<p className="mt-1 leading-5 text-muted-foreground">
-					{item.answerReason}
-				</p>
-			)}
 		</div>
 	);
 }

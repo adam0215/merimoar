@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createTest, syncWorkosUser } from "#/test.setup";
+import {
+	createTest,
+	insertResendIntegration,
+	syncWorkosUser,
+} from "#/test.setup";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -58,16 +62,11 @@ async function createCaseLinkingFixture() {
 			status: "active",
 			unreadThreadCount: 0,
 		});
-		const integrationId = await ctx.db.insert("emailIntegrations", {
+		const { integrationId } = await insertResendIntegration(
+			ctx,
 			organizationId,
-			provider: "resend",
-			status: "connected",
-			workosOrganizationId: "org_merimoar",
-			workosUserId: "user_adam",
-			workosDataIntegrationId: "data_integration_resend",
-			workosConnectedAccountId: "connected_account_resend",
-			workosConnectedAccountUpdatedAt: 1_000,
-		});
+			{ hasWebhook: false, suffix: "case_linking" },
+		);
 		const firstThreadId = await ctx.db.insert("emailThreads", {
 			organizationId,
 			inboxId,

@@ -6,6 +6,8 @@ import {
 	emailInboxDetailsSchema,
 } from "#/email/input";
 import { normalizeEmailAddress } from "#/email/normalize";
+import { getEmailIntegrationAccessContext } from "#/integrations/connectedAccounts";
+import { deriveEmailReadiness } from "#/integrations/model";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { mutation } from "../_generated/server";
@@ -34,14 +36,23 @@ async function requireSelectableOutboundIntegration(
 		});
 	}
 
-	const integration = await ctx.db.get(outbound.integrationId);
+	const integration = await getEmailIntegrationAccessContext(
+		ctx,
+		outbound.integrationId,
+	);
 	if (!integration || integration.organizationId !== organizationId) {
 		throw new ConvexError({
 			code: "EMAIL_INTEGRATION_NOT_FOUND",
 			message: "The email integration could not be found.",
 		});
 	}
-	if (integration.status !== "connected") {
+	if (
+		deriveEmailReadiness(
+			integration.connectionStatus,
+			integration.grantedScopes,
+			integration.resendWebhook !== undefined,
+		).outbound !== "ready"
+	) {
 		throw new ConvexError({
 			code: "EMAIL_INTEGRATION_NOT_CONNECTED",
 			message: "Connect the email integration before selecting it.",
@@ -49,7 +60,7 @@ async function requireSelectableOutboundIntegration(
 	}
 
 	return {
-		integrationId: integration._id,
+		integrationId: integration.integrationId,
 		address: normalizeEmailAddress(addressResult.output),
 	};
 }

@@ -1,128 +1,45 @@
 import { v } from "convex/values";
 import { requireActor } from "#/auth/access";
-import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
-import { internalMutation, internalQuery } from "../_generated/server";
+import {
+	getEmailIntegrationAccessContext,
+	synchronizeResendEmailIntegration,
+} from "#/integrations/connectedAccounts";
+import {
+	connectionStatusValidator,
+	deriveEmailReadiness,
+	type EmailIntegrationAccessContext,
+	emailIntegrationAccessContextValidator,
+	emailReadinessValidator,
+	type ResendProvisioningFence,
+	resendProvisioningFenceValidator,
+} from "#/integrations/model";
+import { internalMutation, internalQuery, query } from "../_generated/server";
 
-export type ResendPipesSnapshot = {
-	connectedAccountId: string;
-	dataIntegrationId: string;
-	organizationId: string;
-	scopes: string[];
-	updatedAt: number;
-	userId: string;
-};
-
-export async function synchronizeResendIntegration(
-	ctx: MutationCtx,
-	organizationId: Id<"organizations">,
-	event:
-		| "pipes.connected_account.connected"
-		| "pipes.connected_account.disconnected"
-		| "pipes.connected_account.reauthorization_needed",
-	snapshot: ResendPipesSnapshot,
+function matchesResendProvisioningFence(
+	context: EmailIntegrationAccessContext,
+	fence: ResendProvisioningFence,
 ) {
-	const existing = await ctx.db
-		.query("emailIntegrations")
-		.withIndex("by_workos_connected_account_id", (query) =>
-			query.eq("workosConnectedAccountId", snapshot.connectedAccountId),
-		)
-		.unique();
-
-	if (existing && existing.organizationId !== organizationId) {
-		throw new Error("A connected email account cannot change organization");
-	}
-	if (
-		existing &&
-		(existing.workosUserId !== snapshot.userId ||
-			existing.workosDataIntegrationId !== snapshot.dataIntegrationId)
-	) {
-		throw new Error("A connected email account cannot change identity");
-	}
-	if (
-		existing &&
-		existing.workosConnectedAccountUpdatedAt >= snapshot.updatedAt
-	) {
-		return existing._id;
-	}
-
-	const hasRequiredAccess =
-		event === "pipes.connected_account.connected" &&
-		snapshot.scopes.includes("full_access");
-	const status =
-		event === "pipes.connected_account.disconnected"
-			? ("disconnected" as const)
-			: hasRequiredAccess
-				? ("connected" as const)
-				: ("needs_reauthorization" as const);
-	const fields = {
-		status,
-		workosUserId: snapshot.userId,
-		workosOrganizationId: snapshot.organizationId,
-		workosDataIntegrationId: snapshot.dataIntegrationId,
-		workosConnectedAccountUpdatedAt: snapshot.updatedAt,
-	};
-	const integrationId = existing
-		? existing._id
-		: await ctx.db.insert("emailIntegrations", {
-				organizationId,
-				provider: "resend",
-				workosConnectedAccountId: snapshot.connectedAccountId,
-				...fields,
-			});
-
-	if (existing) {
-		await ctx.db.patch(existing._id, fields);
-	}
-	if (status === "connected") {
-		await ctx.scheduler.runAfter(
-			0,
-			internal.email.integrationActions.reconcileResendWebhook,
-			{
-				integrationId,
-				expectedConnectedAccountUpdatedAt: snapshot.updatedAt,
-				attempt: 0,
-			},
-		);
-	}
-	return integrationId;
+	return (
+		context.providerSlug === "resend" &&
+		context.connectedAccountId === fence.expectedConnectedAccountId &&
+		context.connectionStatus === "connected" &&
+		context.workosUpdatedAt === fence.expectedWorkosUpdatedAt &&
+		context.grantedScopes.includes("full_access")
+	);
 }
 
 export const getResendProvisioningContext = internalQuery({
-	args: {
-		integrationId: v.id("emailIntegrations"),
-		expectedConnectedAccountUpdatedAt: v.number(),
-	},
-	returns: v.union(
-		v.object({
-			integrationId: v.id("emailIntegrations"),
-			webhookId: v.optional(v.string()),
-			workosOrganizationId: v.string(),
-			workosUserId: v.string(),
-		}),
-		v.null(),
-	),
+	args: resendProvisioningFenceValidator.fields,
+	returns: v.union(emailIntegrationAccessContextValidator, v.null()),
 	handler: async (ctx, args) => {
-		const integration = await ctx.db.get(args.integrationId);
-		if (
-			!integration ||
-			integration.provider !== "resend" ||
-			integration.status !== "connected" ||
-			integration.workosConnectedAccountUpdatedAt !==
-				args.expectedConnectedAccountUpdatedAt
-		) {
+		const context = await getEmailIntegrationAccessContext(
+			ctx,
+			args.integrationId,
+		);
+		if (!context || !matchesResendProvisioningFence(context, args)) {
 			return null;
 		}
-		return {
-			integrationId: integration._id,
-			webhookId:
-				integration.webhookSecret !== undefined
-					? integration.webhookId
-					: undefined,
-			workosOrganizationId: integration.workosOrganizationId,
-			workosUserId: integration.workosUserId,
-		};
+		return context;
 	},
 });
 
@@ -130,30 +47,9 @@ export const getOutboundAccessContext = internalQuery({
 	args: {
 		integrationId: v.id("emailIntegrations"),
 	},
-	returns: v.union(
-		v.object({
-			_id: v.id("emailIntegrations"),
-			_creationTime: v.number(),
-			organizationId: v.id("organizations"),
-			provider: v.literal("resend"),
-			status: v.union(
-				v.literal("connected"),
-				v.literal("needs_reauthorization"),
-				v.literal("disconnected"),
-			),
-			workosUserId: v.string(),
-			workosOrganizationId: v.string(),
-			workosDataIntegrationId: v.string(),
-			workosConnectedAccountId: v.string(),
-			workosConnectedAccountUpdatedAt: v.number(),
-			webhookId: v.optional(v.string()),
-			webhookSecret: v.optional(v.string()),
-			webhookProvisionedAt: v.optional(v.number()),
-		}),
-		v.null(),
-	),
+	returns: v.union(emailIntegrationAccessContextValidator, v.null()),
 	handler: async (ctx, args) => {
-		return await ctx.db.get(args.integrationId);
+		return await getEmailIntegrationAccessContext(ctx, args.integrationId);
 	},
 });
 
@@ -161,80 +57,124 @@ export const getSelectableResendAccessContext = internalQuery({
 	args: {
 		integrationId: v.id("emailIntegrations"),
 	},
-	returns: v.union(
-		v.object({
-			_id: v.id("emailIntegrations"),
-			provider: v.literal("resend"),
-			workosOrganizationId: v.string(),
-			workosUserId: v.string(),
-		}),
-		v.null(),
-	),
+	returns: v.union(emailIntegrationAccessContextValidator, v.null()),
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
-		const integration = await ctx.db.get(args.integrationId);
+		const context = await getEmailIntegrationAccessContext(
+			ctx,
+			args.integrationId,
+		);
 		if (
-			!integration ||
-			integration.organizationId !== workspace.organization._id ||
-			integration.provider !== "resend" ||
-			integration.status !== "connected"
+			!context ||
+			context.organizationId !== workspace.organization._id ||
+			context.providerSlug !== "resend" ||
+			deriveEmailReadiness(
+				context.connectionStatus,
+				context.grantedScopes,
+				context.resendWebhook !== undefined,
+			).outbound !== "ready"
 		) {
 			return null;
 		}
-		return {
-			_id: integration._id,
-			provider: integration.provider,
-			workosOrganizationId: integration.workosOrganizationId,
-			workosUserId: integration.workosUserId,
-		};
+		return context;
 	},
 });
 
 export const activateResendWebhook = internalMutation({
 	args: {
-		integrationId: v.id("emailIntegrations"),
-		expectedConnectedAccountUpdatedAt: v.number(),
+		...resendProvisioningFenceValidator.fields,
 		webhookId: v.string(),
 		webhookSecret: v.string(),
 	},
 	returns: v.boolean(),
 	handler: async (ctx, args) => {
-		const integration = await ctx.db.get(args.integrationId);
+		const context = await getEmailIntegrationAccessContext(
+			ctx,
+			args.integrationId,
+		);
 		if (
-			!integration ||
-			integration.status !== "connected" ||
-			integration.workosConnectedAccountUpdatedAt !==
-				args.expectedConnectedAccountUpdatedAt ||
-			integration.webhookId !== undefined ||
-			integration.webhookSecret !== undefined
+			!context ||
+			!matchesResendProvisioningFence(context, args) ||
+			context.resendWebhook !== undefined
 		) {
 			return false;
 		}
 
-		await ctx.db.patch(integration._id, {
-			webhookId: args.webhookId,
-			webhookSecret: args.webhookSecret,
-			webhookProvisionedAt: Date.now(),
+		await ctx.db.patch(args.integrationId, {
+			resendWebhook: {
+				webhookId: args.webhookId,
+				signingSecret: args.webhookSecret,
+				provisionedAt: Date.now(),
+			},
 		});
 		return true;
 	},
 });
 
-export const markNeedsReauthorization = internalMutation({
+export const clearConfirmedMissingResendWebhook = internalMutation({
+	args: {
+		...resendProvisioningFenceValidator.fields,
+		webhookId: v.string(),
+	},
+	returns: v.boolean(),
+	handler: async (ctx, args) => {
+		const context = await getEmailIntegrationAccessContext(
+			ctx,
+			args.integrationId,
+		);
+		if (
+			!context ||
+			!matchesResendProvisioningFence(context, args) ||
+			context.resendWebhook?.webhookId !== args.webhookId
+		) {
+			return false;
+		}
+
+		await ctx.db.patch(args.integrationId, { resendWebhook: undefined });
+		return true;
+	},
+});
+
+export const recordWorkosAccessFailure = internalMutation({
 	args: {
 		integrationId: v.id("emailIntegrations"),
-		expectedConnectedAccountUpdatedAt: v.number(),
+		expectedConnectedAccountId: v.id("connectedAccounts"),
+		expectedWorkosUpdatedAt: v.number(),
+		error: v.union(
+			v.literal("needs_reauthorization"),
+			v.literal("not_installed"),
+		),
 	},
 	returns: v.null(),
 	handler: async (ctx, args) => {
-		const integration = await ctx.db.get(args.integrationId);
+		const context = await getEmailIntegrationAccessContext(
+			ctx,
+			args.integrationId,
+		);
 		if (
-			integration?.status === "connected" &&
-			integration.workosConnectedAccountUpdatedAt ===
-				args.expectedConnectedAccountUpdatedAt
+			!context ||
+			context.connectedAccountId !== args.expectedConnectedAccountId ||
+			context.workosUpdatedAt !== args.expectedWorkosUpdatedAt
 		) {
-			await ctx.db.patch(integration._id, {
-				status: "needs_reauthorization",
+			return null;
+		}
+		const connectedAccount = await ctx.db.get(context.connectedAccountId);
+		if (!connectedAccount) {
+			return null;
+		}
+		if (
+			args.error === "needs_reauthorization" &&
+			connectedAccount.connectionStatus !== "connected"
+		) {
+			return null;
+		}
+		const connectionStatus =
+			args.error === "not_installed" ? "disconnected" : "needs_reauthorization";
+		if (connectionStatus !== connectedAccount.connectionStatus) {
+			await ctx.db.patch(connectedAccount._id, { connectionStatus });
+			await synchronizeResendEmailIntegration(ctx, {
+				...connectedAccount,
+				connectionStatus,
 			});
 		}
 		return null;
@@ -261,14 +201,19 @@ export const getWebhookVerificationContext = internalQuery({
 		if (!integrationId) {
 			return null;
 		}
-		const integration = await ctx.db.get(integrationId);
-		if (!integration?.webhookId || !integration.webhookSecret) {
+		const context = await getEmailIntegrationAccessContext(ctx, integrationId);
+		if (!context?.resendWebhook) {
 			return null;
 		}
+		const readiness = deriveEmailReadiness(
+			context.connectionStatus,
+			context.grantedScopes,
+			true,
+		);
 		return {
-			acceptsEmail: integration.status === "connected",
-			integrationId: integration._id,
-			webhookSecret: integration.webhookSecret,
+			acceptsEmail: readiness.inbound === "ready",
+			integrationId: context.integrationId,
+			webhookSecret: context.resendWebhook.signingSecret,
 		};
 	},
 });
@@ -292,15 +237,18 @@ export const createWebhookCleanupTask = internalMutation({
 			return existing._id;
 		}
 
-		const integration = await ctx.db.get(args.integrationId);
-		if (!integration) {
+		const context = await getEmailIntegrationAccessContext(
+			ctx,
+			args.integrationId,
+		);
+		if (!context) {
 			throw new Error("Email integration not found for webhook cleanup");
 		}
 		return await ctx.db.insert("emailIntegrationWebhookCleanupTasks", {
-			integrationId: integration._id,
+			integrationId: context.integrationId,
 			webhookId: args.webhookId,
-			workosOrganizationId: integration.workosOrganizationId,
-			workosUserId: integration.workosUserId,
+			workosOrganizationId: context.workosOrganizationId,
+			workosUserId: context.workosUserId,
 			attempts: 0,
 			nextAttemptAt: Date.now(),
 		});
@@ -387,5 +335,55 @@ export const claimDueWebhookCleanupTasks = internalMutation({
 			),
 		);
 		return tasks.map((task) => task._id);
+	},
+});
+
+export const getResendConnectionOverview = query({
+	args: {},
+	returns: v.object({
+		connectionStatus: v.union(
+			v.literal("not_connected"),
+			connectionStatusValidator,
+		),
+		inboundReadiness: emailReadinessValidator.fields.inbound,
+		outboundReadiness: emailReadinessValidator.fields.outbound,
+	}),
+	handler: async (ctx) => {
+		const workspace = await requireActor(ctx);
+		const account = await ctx.db
+			.query("connectedAccounts")
+			.withIndex(
+				"by_organization_id_provider_slug_workos_user_id_updated_at",
+				(index) =>
+					index
+						.eq("organizationId", workspace.organization._id)
+						.eq("providerSlug", "resend")
+						.eq("workosUserId", workspace.identity.subject),
+			)
+			.order("desc")
+			.first();
+		if (!account) {
+			return {
+				connectionStatus: "not_connected" as const,
+				inboundReadiness: "connection_inactive" as const,
+				outboundReadiness: "connection_inactive" as const,
+			};
+		}
+		const integration = await ctx.db
+			.query("emailIntegrations")
+			.withIndex("by_connected_account_id", (index) =>
+				index.eq("connectedAccountId", account._id),
+			)
+			.unique();
+		const readiness = deriveEmailReadiness(
+			account.connectionStatus,
+			account.grantedScopes,
+			integration?.resendWebhook !== undefined,
+		);
+		return {
+			connectionStatus: account.connectionStatus,
+			inboundReadiness: readiness.inbound,
+			outboundReadiness: readiness.outbound,
+		};
 	},
 });

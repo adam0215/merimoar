@@ -5,6 +5,7 @@ import type { WorkOS } from "@workos-inc/node";
 import { createWorkOSClient } from "#/integrations/workos/client.ts";
 import {
 	createEmailSettingsReturnTo,
+	hasResendEmailScope,
 	isResendAuthorizationRejected,
 	RESEND_PIPES_PROVIDER,
 	type ResendPipesConnectionState,
@@ -37,6 +38,9 @@ async function validateConnectedResendAccount(
 		return access.error === "needs_reauthorization"
 			? "needs_reauthorization"
 			: "not_connected";
+	}
+	if (!hasResendEmailScope(access.accessToken)) {
+		return "connected";
 	}
 
 	let response: Response;
