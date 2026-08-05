@@ -31,6 +31,7 @@ import {
 	CollapsibleContent,
 	CollapsibleTrigger,
 } from "#/components/ui/collapsible.tsx";
+import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { Marker, MarkerContent, MarkerIcon } from "#/components/ui/marker.tsx";
 import {
 	MessageScroller,
@@ -79,13 +80,14 @@ export function TaskActivity({
 			>
 				<MessageScroller className="before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:z-10 before:h-10 before:bg-linear-to-b before:from-background before:to-transparent before:content-['']">
 					<MessageScrollerViewport>
-						<MessageScrollerContent className="gap-10 px-1 pt-10 pb-36">
+						<MessageScrollerContent className="gap-10 pt-10 pb-36">
 							{turns.results.map(
 								({ turnId, turn, requestedByMember }, index) => (
 									<MessageScrollerItem
 										key={turnId}
 										messageId={turnId}
 										scrollAnchor
+										className="px-1 pb-1"
 									>
 										<section
 											aria-label={`${turn.sequence === 1 ? "Delegated" : "Resumed"} ${formatDateTime(turn.requestedAt)}`}
@@ -114,7 +116,7 @@ export function TaskActivity({
 								),
 							)}
 							{turns.status === "CanLoadMore" && (
-								<MessageScrollerItem>
+								<MessageScrollerItem className="px-1 pb-1">
 									<Button
 										variant="secondary"
 										size="sm"
@@ -125,7 +127,10 @@ export function TaskActivity({
 								</MessageScrollerItem>
 							)}
 							{taskStatus === "failed" && (
-								<MessageScrollerItem messageId="retry-task">
+								<MessageScrollerItem
+									messageId="retry-task"
+									className="px-1 pb-1"
+								>
 									<div className="flex justify-end">
 										<RetryTaskButton taskId={taskId} />
 									</div>
@@ -680,7 +685,9 @@ function ApprovalActivity({
 	const request = customToolName
 		? `Approve using "${customToolName}"?`
 		: item.request;
-	const hasDetails = Boolean(tool || item.status !== "pending");
+	const answerReason =
+		item.status === "pending" ? undefined : item.answerReason;
+	const hasDetails = Boolean(tool || answerReason);
 	const resolution =
 		item.status === "pending"
 			? undefined
@@ -688,88 +695,99 @@ function ApprovalActivity({
 					label: item.status === "approved" ? "Approved" : "Rejected",
 					answeredAt: item.answeredAt,
 				};
+	const approvalSurfaceClassName = cn(
+		"w-full overflow-hidden rounded-xl bg-card",
+		borderedSurfaceClassName,
+	);
+	const approvalSummary = (
+		<div className="flex min-w-0 items-center gap-2 border-0 px-4 py-3">
+			{hasDetails ? (
+				<CollapsibleTrigger className="min-w-0 flex-1 cursor-pointer truncate rounded-sm text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+					{request}
+				</CollapsibleTrigger>
+			) : (
+				<p className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
+					{request}
+				</p>
+			)}
+			{!resolution && (
+				<time
+					dateTime={new Date(item.createdAt).toISOString()}
+					className="shrink-0 text-xs text-muted-foreground"
+				>
+					{formatTime(item.createdAt)}
+				</time>
+			)}
+			{canRespond && (
+				<ApprovalActions
+					taskId={taskId}
+					approvalIds={[item.approvalId]}
+					className="mt-0 flex-nowrap"
+				/>
+			)}
+			{!canRespond && item.status === "pending" && (
+				<Badge variant="secondary">Pending</Badge>
+			)}
+			{resolution && (
+				<Tooltip>
+					<TooltipTrigger className="flex shrink-0 cursor-help items-center gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+						<Badge
+							variant={
+								resolution.label === "Approved" ? "success" : "destructive"
+							}
+						>
+							{resolution.label}
+						</Badge>
+						<time
+							dateTime={new Date(resolution.answeredAt).toISOString()}
+							className="text-xs text-muted-foreground"
+						>
+							{formatTime(resolution.answeredAt)}
+						</time>
+					</TooltipTrigger>
+					<TooltipContent>
+						{resolution.label}{" "}
+						{new Intl.DateTimeFormat(undefined, {
+							dateStyle: "long",
+							timeStyle: "short",
+						}).format(resolution.answeredAt)}
+					</TooltipContent>
+				</Tooltip>
+			)}
+			{hasDetails && (
+				<CollapsibleTrigger
+					className="group"
+					render={
+						<Button
+							variant="ghost"
+							size="icon-sm"
+							aria-label="Toggle approval details"
+						/>
+					}
+				>
+					<IconChevronDown className="transition-transform group-data-panel-open:rotate-180 motion-reduce:transition-none" />
+				</CollapsibleTrigger>
+			)}
+		</div>
+	);
+
+	if (!hasDetails) {
+		return <div className={approvalSurfaceClassName}>{approvalSummary}</div>;
+	}
 
 	return (
-		<Collapsible className="w-full overflow-hidden rounded-xl border bg-card">
-			<div className="flex min-w-0 items-center gap-2 border-0 px-4 py-3">
-				{hasDetails ? (
-					<CollapsibleTrigger className="min-w-0 flex-1 cursor-pointer truncate rounded-sm text-left text-sm font-medium text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
-						{request}
-					</CollapsibleTrigger>
-				) : (
-					<p className="min-w-0 flex-1 break-words text-sm font-medium text-foreground">
-						{request}
-					</p>
-				)}
-				{!resolution && (
-					<time
-						dateTime={new Date(item.createdAt).toISOString()}
-						className="shrink-0 text-xs text-muted-foreground"
-					>
-						{formatTime(item.createdAt)}
-					</time>
-				)}
-				{canRespond && (
-					<ApprovalActions
-						taskId={taskId}
-						approvalIds={[item.approvalId]}
-						className="mt-0 flex-nowrap"
-					/>
-				)}
-				{!canRespond && item.status === "pending" && (
-					<Badge variant="secondary">Pending</Badge>
-				)}
-				{resolution && (
-					<Tooltip>
-						<TooltipTrigger className="flex shrink-0 cursor-help items-center gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-							<Badge
-								variant={
-									resolution.label === "Approved" ? "success" : "destructive"
-								}
-							>
-								{resolution.label}
-							</Badge>
-							<time
-								dateTime={new Date(resolution.answeredAt).toISOString()}
-								className="text-xs text-muted-foreground"
-							>
-								{formatTime(resolution.answeredAt)}
-							</time>
-						</TooltipTrigger>
-						<TooltipContent>
-							{resolution.label}{" "}
-							{new Intl.DateTimeFormat(undefined, {
-								dateStyle: "long",
-								timeStyle: "short",
-							}).format(resolution.answeredAt)}
-						</TooltipContent>
-					</Tooltip>
-				)}
-				{hasDetails && (
-					<CollapsibleTrigger
-						className="group"
-						render={
-							<Button
-								variant="ghost"
-								size="icon-sm"
-								aria-label="Toggle approval details"
-							/>
-						}
-					>
-						<IconChevronDown className="transition-transform group-data-panel-open:rotate-180 motion-reduce:transition-none" />
-					</CollapsibleTrigger>
-				)}
-			</div>
+		<Collapsible className={approvalSurfaceClassName}>
+			{approvalSummary}
 			<CollapsibleContent className="border-0 px-4 py-3">
 				{tool && <ToolRawDetails tool={tool} />}
-				{item.status !== "pending" && item.answerReason && (
+				{answerReason && (
 					<p
 						className={cn(
 							"text-xs leading-5 text-muted-foreground",
 							tool && "mt-3",
 						)}
 					>
-						{item.answerReason}
+						{answerReason}
 					</p>
 				)}
 			</CollapsibleContent>
