@@ -224,6 +224,39 @@ body {
   z-index: 50;
 }
 
+.email-case-actions-hide-button::before,
+.email-case-actions-hide-button::after {
+  position: absolute;
+  right: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  pointer-events: none;
+  content: "";
+}
+
+.email-case-actions-hide-button::before {
+  top: -0.5rem;
+  background: radial-gradient(
+    circle at top left,
+    transparent 0.5rem,
+    black calc(0.5rem + 0.5px)
+  );
+}
+
+.email-case-actions-hide-button::after {
+  bottom: -0.5rem;
+  background: radial-gradient(
+    circle at bottom left,
+    transparent 0.5rem,
+    black calc(0.5rem + 0.5px)
+  );
+}
+
+.email-case-actions-hide-button:hover::before,
+.email-case-actions-hide-button:hover::after {
+  opacity: 0.9;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

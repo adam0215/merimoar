@@ -219,7 +219,7 @@ export function EmailCaseActions({
 
 				<ButtonGroup
 					className={cn(
-						"pointer-events-auto rounded-4xl shadow-lg",
+						"pointer-events-auto gap-px rounded-4xl bg-transparent shadow-lg *:data-slot:border-0",
 						actionMotionClassName,
 					)}
 					aria-label="Case actions"
@@ -255,7 +255,7 @@ export function EmailCaseActions({
 
 				<div
 					className={cn(
-						"group/case-actions-edge pointer-events-none absolute inset-y-0 z-10 flex w-8 items-center justify-end",
+						"group/case-actions-edge pointer-events-none absolute inset-y-0 z-20 flex w-8 items-center justify-end",
 						actionsAreTuckedAway
 							? "right-0 sm:-right-2"
 							: "-right-4 sm:-right-6",
@@ -270,11 +270,13 @@ export function EmailCaseActions({
 					/>
 					<Button
 						type="button"
-						variant="secondary"
+						variant={actionsAreTuckedAway ? "secondary" : "ghost"}
 						size="icon-sm"
 						className={cn(
 							"pointer-events-none origin-right scale-50 opacity-0 shadow-md transition-[scale,opacity,translate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/case-actions-edge:pointer-events-auto group-hover/case-actions-edge:scale-100 group-hover/case-actions-edge:opacity-100 group-hover/case-actions-edge:duration-300 group-hover/case-actions-edge:ease-[cubic-bezier(0.34,1.56,0.64,1)] focus-visible:pointer-events-auto focus-visible:scale-100 focus-visible:opacity-100 focus-visible:duration-300 focus-visible:ease-[cubic-bezier(0.34,1.56,0.64,1)] active:translate-y-0! motion-reduce:transition-none",
-							actionsAreTuckedAway ? "rounded-full" : "rounded-r-none",
+							actionsAreTuckedAway
+								? "rounded-full"
+								: "email-case-actions-hide-button relative rounded-r-none border-0 bg-black text-white hover:bg-black/90 hover:text-white",
 						)}
 						aria-label={actionToggleLabel}
 						title={actionToggleLabel}
