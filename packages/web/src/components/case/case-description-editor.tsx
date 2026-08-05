@@ -10,13 +10,14 @@ import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
 import { Button } from "#/components/ui/button.tsx";
+import { fieldSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { cn } from "#/lib/utils.ts";
 import "#/components/case/case-description-editor.css";
 
 const TEXT_COLORS = [
-	{ label: "Green", value: "var(--case-editor-green)" },
-	{ label: "Red", value: "var(--case-editor-red)" },
-	{ label: "Blue", value: "var(--case-editor-blue)" },
+	{ label: "Green", value: "var(--editor-green)" },
+	{ label: "Red", value: "var(--editor-red)" },
+	{ label: "Blue", value: "var(--editor-blue)" },
 ] as const;
 
 const editorExtensions = [StarterKit, TextStyle, Color];
@@ -106,7 +107,8 @@ export function CaseDescriptionEditor({
 	return (
 		<div
 			className={cn(
-				"case-description-editor overflow-hidden rounded-lg border border-input bg-background shadow-xs has-focus-visible:border-ring has-focus-visible:ring-3 has-focus-visible:ring-ring/50",
+				"case-description-editor overflow-hidden rounded-lg has-focus-visible:ring-1 has-focus-visible:ring-ring has-focus-visible:ring-offset-1 has-focus-visible:ring-offset-background",
+				fieldSurfaceClassName,
 				invalid && "border-destructive ring-3 ring-destructive/20",
 				readOnly && "bg-muted text-muted-foreground",
 			)}

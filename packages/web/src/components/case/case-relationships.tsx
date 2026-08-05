@@ -28,9 +28,11 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "#/components/ui/dialog.tsx";
+import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { SearchCombobox } from "#/components/ui/search-combobox.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { EntityIcon, type EntityIconKey } from "#/lib/entity-icons.tsx";
+import { cn } from "#/lib/utils.ts";
 
 type RelationshipRemoval =
 	| { kind: "contact"; relationId: Id<"caseContactRelations"> }
@@ -150,11 +152,12 @@ function RelationshipRow({ item }: { item: CaseRelationship }) {
 
 	return (
 		<div
-			className={
+			className={cn(
 				item.roomy
-					? "flex min-w-0 items-center gap-3 rounded-xl border bg-background p-3"
-					: "flex min-w-0 items-center gap-2 rounded-xl border bg-background p-2"
-			}
+					? "flex min-w-0 items-center gap-3 rounded-xl bg-background p-3"
+					: "flex min-w-0 items-center gap-2 rounded-xl bg-background p-2",
+				borderedSurfaceClassName,
+			)}
 		>
 			{item.target?.kind === "contact" ? (
 				<Link
@@ -467,7 +470,7 @@ function AddRelationshipDialog({
 				</div>
 
 				<DialogFooter>
-					<Button type="button" variant="outline" onClick={closeDialog}>
+					<Button type="button" variant="secondary" onClick={closeDialog}>
 						Cancel
 					</Button>
 					<Button

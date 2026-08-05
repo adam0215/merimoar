@@ -27,6 +27,7 @@ import type { CaseCreateOptions, CaseDetail } from "#/components/case/types.ts";
 import { Button } from "#/components/ui/button.tsx";
 import { Calendar } from "#/components/ui/calendar.tsx";
 import { Field, FieldError, FieldLabel } from "#/components/ui/field.tsx";
+import { fieldSurfaceClassName } from "#/components/ui/field-surface.ts";
 import {
 	Popover,
 	PopoverContent,
@@ -44,6 +45,7 @@ import { showAppNotification } from "#/lib/app-notifications.ts";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { formatShortDate } from "#/lib/date-format.ts";
 import { formatDateInput, parseDateInput } from "#/lib/date-input.ts";
+import { cn } from "#/lib/utils.ts";
 
 const editableCaseFieldsSchema = v.object({
 	title: caseTitleSchema,
@@ -501,9 +503,13 @@ function DeadlineField({
 					render={
 						<Button
 							type="button"
-							variant="outline"
+							variant="ghost"
 							disabled={disabled}
-							className="w-full justify-start text-left font-normal"
+							className={cn(
+								"w-full justify-start text-left font-normal hover:bg-inherit focus-visible:border-input focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background dark:hover:bg-input/50",
+								fieldSurfaceClassName,
+								!selectedDate && "text-muted-foreground",
+							)}
 						/>
 					}
 				>

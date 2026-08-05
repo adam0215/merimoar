@@ -12,8 +12,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { usePaginatedQuery, useQuery } from "convex-helpers/react/cache";
 import { CaseStatusDot } from "#/components/case/case-status.tsx";
 import { OverviewMetric } from "#/components/overview-metric.tsx";
+import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
 import { formatShortDate } from "#/lib/date-format.ts";
+import { cn } from "#/lib/utils.ts";
 
 const ASSIGNED_CASES_PAGE_SIZE = 8;
 
@@ -167,8 +169,10 @@ function MyOverviewPage() {
 	);
 }
 
-const OVERVIEW_LINK_CLASS_NAME =
-	"flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium text-foreground no-underline outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring";
+const OVERVIEW_LINK_CLASS_NAME = cn(
+	"flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-foreground no-underline outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+	borderedSurfaceClassName,
+);
 
 function OverviewLink({
 	to,

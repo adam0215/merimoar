@@ -9,12 +9,14 @@ import { useQuery } from "convex/react";
 import { useState } from "react";
 import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
 import {
 	Tabs,
 	TabsContent,
 	TabsList,
 	TabsTrigger,
 } from "#/components/ui/tabs.tsx";
+import { cn } from "#/lib/utils.ts";
 import { CustomIntegrationDialog } from "./custom-integration-dialog.tsx";
 import {
 	type CustomIntegrationConfiguration,
@@ -132,7 +134,10 @@ function CustomToolList({
 	return (
 		<div className="mt-3 grid gap-2 sm:grid-cols-2">
 			{tools.map(({ integration, tool }) => (
-				<article key={tool._id} className="rounded-xl border p-4">
+				<article
+					key={tool._id}
+					className={cn("rounded-xl p-4", borderedSurfaceClassName)}
+				>
 					<div className="flex items-start justify-between gap-3">
 						<div className="min-w-0">
 							<div className="flex min-w-0 items-center gap-2">
@@ -198,7 +203,10 @@ function IntegrationList({
 					(tool) => tool.needsRetest,
 				).length;
 				return (
-					<article key={integration._id} className="rounded-xl border p-4">
+					<article
+						key={integration._id}
+						className={cn("rounded-xl p-4", borderedSurfaceClassName)}
+					>
 						<div className="flex items-start justify-between gap-3">
 							<div className="min-w-0">
 								<p className="text-sm font-medium">{integration.name}</p>

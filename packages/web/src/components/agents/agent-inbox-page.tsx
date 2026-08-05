@@ -8,7 +8,9 @@ import type {
 	RecentDelegation,
 } from "#/components/agents/agent-types.ts";
 import { ApprovalActions } from "#/components/agents/task-activity.tsx";
+import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { formatDateTime } from "#/lib/date-format.ts";
+import { cn } from "#/lib/utils.ts";
 
 export function AgentInboxPage() {
 	const groups = useQuery(api.agent.reader.listPendingApprovals, {});
@@ -74,7 +76,10 @@ function RecentDelegationRow({ delegation }: { delegation: RecentDelegation }) {
 		<Link
 			to="/agents"
 			search={{ view: "tasks", task: delegation.taskId }}
-			className="flex items-start gap-3 rounded-xl border p-4 text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+			className={cn(
+				"flex items-start gap-3 rounded-xl p-4 text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+				borderedSurfaceClassName,
+			)}
 			aria-label={`Open task: ${delegation.anchorCase.title}`}
 		>
 			<div className="min-w-0 flex-1">
@@ -107,7 +112,12 @@ function ApprovalGroup({ group }: { group: PendingApprovalGroup }) {
 	);
 
 	return (
-		<article className="rounded-xl border p-4 transition-colors hover:bg-muted">
+		<article
+			className={cn(
+				"rounded-xl p-4 transition-colors hover:bg-muted",
+				borderedSurfaceClassName,
+			)}
+		>
 			<Link
 				to="/agents"
 				search={{ view: "tasks", task: group.taskId }}

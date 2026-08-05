@@ -1,6 +1,8 @@
 import { IconLoader2, IconSearch, IconX } from "@tabler/icons-react";
 import type { ReactNode, RefObject } from "react";
+import { fieldSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { useSearchCombobox } from "#/hooks/use-search-combobox.ts";
+import { cn } from "#/lib/utils.ts";
 
 export function SearchCombobox<Result>({
 	open,
@@ -79,7 +81,12 @@ export function SearchCombobox<Result>({
 
 	return (
 		<div className="relative">
-			<div className="relative flex min-h-12 w-full items-center rounded-xl border border-input bg-input/30 transition-colors focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50">
+			<div
+				className={cn(
+					"relative flex min-h-12 w-full items-center rounded-xl transition-colors focus-within:ring-1 focus-within:ring-ring focus-within:ring-offset-1 focus-within:ring-offset-background",
+					fieldSurfaceClassName,
+				)}
+			>
 				<input
 					ref={inputRef}
 					value={query}

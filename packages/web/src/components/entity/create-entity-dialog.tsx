@@ -25,6 +25,7 @@ import {
 	FieldGroup,
 	FieldLabel,
 } from "#/components/ui/field.tsx";
+import { fieldSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { Input } from "#/components/ui/input.tsx";
 import {
 	Popover,
@@ -267,9 +268,10 @@ function EntityDateFieldInput({
 					render={
 						<Button
 							type="button"
-							variant="outline"
+							variant="ghost"
 							className={cn(
-								"w-full justify-start text-left font-normal",
+								"w-full justify-start text-left font-normal hover:bg-inherit focus-visible:border-input focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background dark:hover:bg-input/50",
+								fieldSurfaceClassName,
 								!selectedDate && "text-muted-foreground",
 							)}
 						/>

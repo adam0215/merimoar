@@ -5,6 +5,7 @@ import { CreateEntityTypeDialog } from "#/components/entity/create-entity-type-d
 import { EntityPreviewDialog } from "#/components/entity/entity-preview-dialog.tsx";
 import { EntityTypeView } from "#/components/entity/entity-type-view.tsx";
 import type { EntityTypeDetail } from "#/components/entity/types.ts";
+import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
 import { EntityIcon } from "#/lib/entity-icons.tsx";
 import { cn } from "#/lib/utils.ts";
@@ -98,7 +99,12 @@ function EntityOverview({
 				Create reusable business objects that cases can relate to, such as
 				properties, appointments, invoices, vehicles, or contracts.
 			</p>
-			<div className="mt-8 max-w-48 rounded-2xl border p-4">
+			<div
+				className={cn(
+					"mt-8 max-w-48 rounded-2xl p-4",
+					borderedSurfaceClassName,
+				)}
+			>
 				<p className="text-xs text-muted-foreground">Entity types</p>
 				<p className="mt-1 text-xl font-semibold">
 					{entityTypes?.length ?? "—"}

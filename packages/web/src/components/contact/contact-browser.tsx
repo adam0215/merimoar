@@ -13,6 +13,7 @@ import { CaseStatusDot } from "#/components/case/case-status.tsx";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
 import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
 import { coverImageForId } from "#/lib/cover-image.ts";
 import { cn } from "#/lib/utils.ts";
@@ -364,7 +365,10 @@ export function ContactView({
 							SKELETON_ROWS.slice(0, 2).map((row) => (
 								<div
 									key={row}
-									className="flex items-center gap-3 rounded-xl border p-3"
+									className={cn(
+										"flex items-center gap-3 rounded-xl p-3",
+										borderedSurfaceClassName,
+									)}
 								>
 									<Skeleton className="size-9 shrink-0 rounded-full" />
 									<div className="min-w-0 flex-1 space-y-2">
@@ -380,7 +384,10 @@ export function ContactView({
 									key={caseRecord._id}
 									to="/cases"
 									search={{ case: caseRecord._id }}
-									className="flex w-full min-w-0 items-center gap-3 rounded-xl border p-3 text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+									className={cn(
+										"flex w-full min-w-0 items-center gap-3 rounded-xl p-3 text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
+										borderedSurfaceClassName,
+									)}
 								>
 									<span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
 										<IconFolder className="size-4" />

@@ -43,9 +43,9 @@ export const CASE_VIEW_OPTIONS = [
 
 const STATUS_DOT_CLASS_NAMES: Record<CaseStatus, string> = {
 	needs_attention: "bg-destructive",
-	waiting: "bg-amber-500",
-	clear: "bg-emerald-500",
-	open: "bg-blue-500",
+	waiting: "bg-alert",
+	clear: "bg-success",
+	open: "bg-system-blue",
 	closed: "bg-muted-foreground/40",
 };
 

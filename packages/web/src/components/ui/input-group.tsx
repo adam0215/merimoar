@@ -2,6 +2,7 @@
 
 import { cva, type VariantProps } from "class-variance-authority";
 import type * as React from "react";
+import { fieldSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { Input } from "#/components/ui/input.tsx";
 import { cn } from "#/lib/utils.ts";
 
@@ -11,8 +12,9 @@ function InputGroup({ className, ...props }: React.ComponentProps<"div">) {
 			data-slot="input-group"
 			role="group"
 			className={cn(
-				"group/input-group relative flex h-9 w-full min-w-0 items-center rounded-lg border border-input bg-input/30 transition-colors outline-none",
-				"has-[[data-slot=input-group-control]:focus-visible]:border-ring has-[[data-slot=input-group-control]:focus-visible]:ring-3 has-[[data-slot=input-group-control]:focus-visible]:ring-ring/50",
+				"group/input-group relative flex h-9 w-full min-w-0 items-center rounded-lg transition-colors outline-none",
+				fieldSurfaceClassName,
+				"has-[[data-slot=input-group-control]:focus-visible]:ring-1 has-[[data-slot=input-group-control]:focus-visible]:ring-ring has-[[data-slot=input-group-control]:focus-visible]:ring-offset-1 has-[[data-slot=input-group-control]:focus-visible]:ring-offset-background",
 				"has-[[data-slot][aria-invalid=true]]:border-destructive has-[[data-slot][aria-invalid=true]]:ring-3 has-[[data-slot][aria-invalid=true]]:ring-destructive/20 dark:has-[[data-slot][aria-invalid=true]]:ring-destructive/40",
 				className,
 			)}

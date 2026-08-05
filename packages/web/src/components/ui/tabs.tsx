@@ -55,7 +55,7 @@ function TabsList({
 				<TabsPrimitive.Indicator
 					renderBeforeHydration
 					data-slot="tabs-indicator"
-					className="pointer-events-none absolute top-0 left-0 z-0 h-(--active-tab-height) w-(--active-tab-width) translate-x-(--active-tab-left) translate-y-(--active-tab-top) rounded-full border border-transparent bg-background transition-transform duration-150 ease-[cubic-bezier(0.77,0,0.175,1)] motion-reduce:transition-none dark:border-input dark:bg-input/30"
+					className="pointer-events-none absolute top-0 left-0 z-0 h-(--active-tab-height) w-(--active-tab-width) translate-x-(--active-tab-left) translate-y-(--active-tab-top) rounded-full border border-transparent bg-background shadow-xs transition-transform duration-150 ease-[cubic-bezier(0.77,0,0.175,1)] motion-reduce:transition-none dark:border-input dark:bg-input/30"
 				/>
 			)}
 			{variant === "divider-line" && (

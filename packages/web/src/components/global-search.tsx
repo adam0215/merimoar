@@ -21,7 +21,9 @@ import {
 	CommandItem,
 	CommandList,
 } from "#/components/ui/command.tsx";
+import { fieldSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { EntityIcon } from "#/lib/entity-icons.tsx";
+import { cn } from "#/lib/utils.ts";
 
 type GlobalSearchResult = FunctionReturnType<
 	typeof api.globalSearch.reader.search
@@ -108,14 +110,17 @@ export function GlobalSearch() {
 			<button
 				type="button"
 				onClick={() => setOpen(true)}
-				className="hidden h-8 w-full max-w-64 items-center gap-2 justify-self-center rounded-lg border border-input bg-input/30 px-3 text-sm text-muted-foreground outline-none transition-[background-color,border-color,transform] hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:translate-y-px md:flex"
+				className={cn(
+					"hidden h-8 w-full max-w-64 items-center gap-2 justify-self-center rounded-lg px-3 text-sm text-muted-foreground outline-none transition-[background-color,border-color,transform] hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background active:translate-y-px md:flex",
+					fieldSurfaceClassName,
+				)}
 				aria-label="Open global search"
 				aria-haspopup="dialog"
 				aria-keyshortcuts="Meta+K Control+K"
 			>
 				<IconSearch className="size-4 shrink-0" />
 				<span>Search</span>
-				<kbd className="ml-auto inline-flex h-5 items-center gap-0.5 rounded-md border border-border bg-background px-1.5 text-[11px] font-medium text-muted-foreground shadow-[0_2px_0_var(--border)]">
+				<kbd className="ml-auto inline-flex h-5 items-center gap-0.5 rounded-md bg-background px-1.5 text-[11px] font-medium text-muted-foreground shadow-[0_1px_1px_color-mix(in_oklch,var(--foreground)_18%,transparent)]">
 					<IconCommand
 						className="mb-[1.5px] size-3"
 						stroke={1.75}
