@@ -3,22 +3,19 @@ import { caseEventBodySchema } from "@merimoar/convex/case/input";
 import type { Id } from "@merimoar/convex/data-model";
 import {
 	IconAsterisk,
-	IconCheck,
-	IconLoader2,
 	IconMail,
 	IconPlus,
 	IconRefresh,
-	IconX,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import * as v from "valibot";
 import { formatAgentTaskLabel } from "#/components/agents/agent-task-label.ts";
+import { CaseEventComposer } from "#/components/case/case-event-composer.tsx";
 import { useCurrentCaseInteractionPolicy } from "#/components/case/case-interaction-policy.tsx";
 import type { CaseDetail } from "#/components/case/types.ts";
 import { Button } from "#/components/ui/button.tsx";
-import { Input } from "#/components/ui/input.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { formatDateTime } from "#/lib/date-format.ts";
 
@@ -35,19 +32,6 @@ export function CaseEvents({
 	const [body, setBody] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const inputRef = useRef<HTMLInputElement>(null);
-
-	useEffect(() => {
-		if (readOnly) {
-			setComposerOpen(false);
-			setBody("");
-			setError(null);
-			return;
-		}
-		if (composerOpen) {
-			inputRef.current?.focus();
-		}
-	}, [composerOpen, readOnly]);
 
 	async function submit() {
 		if (readOnly) return;
@@ -89,62 +73,22 @@ export function CaseEvents({
 
 			{composerOpen && (
 				<div className="mt-3">
-					<div className="flex items-center gap-2 rounded-xl border bg-muted p-2">
-						<Input
-							ref={inputRef}
-							value={body}
-							disabled={readOnly}
-							onChange={(event) => {
-								setBody(event.target.value);
-								setError(null);
-							}}
-							onKeyDown={(event) => {
-								if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-									event.preventDefault();
-									void submit();
-								}
-								if (event.key === "Escape") {
-									setComposerOpen(false);
-									setBody("");
-									setError(null);
-								}
-							}}
-							placeholder="Write an event…  ⌘ Enter to add"
-							className="h-8 border-0 bg-transparent shadow-none focus-visible:ring-0"
-						/>
-						<Button
-							variant="ghost"
-							size="icon-sm"
-							onClick={() => {
-								setComposerOpen(false);
-								setBody("");
-								setError(null);
-							}}
-							disabled={readOnly || isSubmitting}
-							aria-label="Cancel"
-							title="Cancel"
-						>
-							<IconX />
-						</Button>
-						<Button
-							size="icon-sm"
-							onClick={submit}
-							disabled={readOnly || isSubmitting}
-							aria-label="Add event"
-							title="Add event"
-						>
-							{isSubmitting ? (
-								<IconLoader2 className="animate-spin" />
-							) : (
-								<IconCheck />
-							)}
-						</Button>
-					</div>
-					{error && (
-						<p className="mt-1.5 text-xs text-destructive" role="alert">
-							{error}
-						</p>
-					)}
+					<CaseEventComposer
+						body={body}
+						onBodyChange={(nextBody) => {
+							setBody(nextBody);
+							setError(null);
+						}}
+						onCancel={() => {
+							setComposerOpen(false);
+							setBody("");
+							setError(null);
+						}}
+						onSubmit={() => void submit()}
+						isSubmitting={isSubmitting}
+						disabled={readOnly}
+						error={error}
+					/>
 				</div>
 			)}
 

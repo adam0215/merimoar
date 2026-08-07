@@ -27,6 +27,7 @@ export function SearchCombobox<Result>({
 	canSubmit,
 	renderResult,
 	renderUnavailable,
+	autoFocus = true,
 }: {
 	open: boolean;
 	query: string;
@@ -50,6 +51,7 @@ export function SearchCombobox<Result>({
 	canSubmit?: boolean;
 	renderResult: (result: Result) => ReactNode;
 	renderUnavailable?: (result: Result) => ReactNode;
+	autoFocus?: boolean;
 }) {
 	const {
 		clearSelection,
@@ -92,10 +94,15 @@ export function SearchCombobox<Result>({
 					value={query}
 					readOnly={selectedResult !== null}
 					onChange={(event) => handleQueryChange(event.target.value)}
+					onKeyDown={(event) => {
+						if (event.key === "Enter" && !highlightedResult) {
+							event.preventDefault();
+						}
+					}}
 					onFocus={handleInputFocus}
 					placeholder={placeholder}
 					autoComplete="off"
-					autoFocus
+					autoFocus={autoFocus}
 					role="combobox"
 					aria-label={
 						selectedResult ? getSelectedAriaLabel(selectedResult) : placeholder

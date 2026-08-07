@@ -27,11 +27,13 @@ export function CaseDescriptionEditor({
 	onChange,
 	invalid,
 	readOnly,
+	id = "case-description",
 }: {
 	value: string;
 	onChange: (value: string) => void;
 	invalid: boolean;
 	readOnly: boolean;
+	id?: string;
 }) {
 	const readOnlyRef = useRef(readOnly);
 	readOnlyRef.current = readOnly;
@@ -42,7 +44,7 @@ export function CaseDescriptionEditor({
 		editable: !readOnly,
 		editorProps: {
 			attributes: {
-				id: "case-description",
+				id,
 				role: "textbox",
 				"aria-label": "Description",
 				"aria-multiline": "true",

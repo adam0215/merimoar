@@ -1,20 +1,25 @@
 import { api } from "@merimoar/convex/api";
 import {
 	caseDescriptionSchema,
+	caseEventBodySchema,
 	caseTitleSchema,
 	optionalCaseEventBodySchema,
 } from "@merimoar/convex/case/input";
 import type { Id } from "@merimoar/convex/data-model";
-import {
-	IconAddressBook,
-	IconCalendar,
-	IconFolder,
-	IconLoader2,
-	IconPlus,
-} from "@tabler/icons-react";
+import { IconLoader2, IconPlus } from "@tabler/icons-react";
 import { useMutation } from "convex/react";
 import { useEffect, useId, useMemo, useState } from "react";
 import * as v from "valibot";
+import { CaseDeadlineField } from "#/components/case/case-deadline-field.tsx";
+import { CaseDescriptionEditor } from "#/components/case/case-description-editor.tsx";
+import { CaseEventComposer } from "#/components/case/case-event-composer.tsx";
+import {
+	CaseRelationshipCard,
+	getRelationshipKey,
+	type RelationshipSearchCandidate,
+	RelationshipSearchField,
+	relationshipCandidateToCard,
+} from "#/components/case/case-relationships.tsx";
 import type { CaseCreateOptions } from "#/components/case/types.ts";
 import { Button } from "#/components/ui/button.tsx";
 import { Checkbox } from "#/components/ui/checkbox.tsx";
@@ -33,7 +38,6 @@ import {
 	FieldGroup,
 	FieldLabel,
 } from "#/components/ui/field.tsx";
-import { Input } from "#/components/ui/input.tsx";
 import {
 	Select,
 	SelectContent,
@@ -41,10 +45,8 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select.tsx";
-import { Textarea } from "#/components/ui/textarea.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { parseDateInput } from "#/lib/date-input.ts";
-import { EntityIcon } from "#/lib/entity-icons.tsx";
 import { cn } from "#/lib/utils.ts";
 
 const createCaseSchema = v.object({
@@ -92,6 +94,8 @@ export function CreateCaseDialog({
 	variant?: "default" | "email";
 }) {
 	const createCase = useMutation(api.case.mutations.create);
+	const titleInputId = useId();
+	const titleErrorId = useId();
 	const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
 	const open = controlledOpen ?? uncontrolledOpen;
 	const [form, setForm] = useState({
@@ -102,15 +106,40 @@ export function CreateCaseDialog({
 	const [contactIds, setContactIds] = useState<Set<Id<"contacts">>>(
 		new Set(initialContactIds),
 	);
-	const [entityIds, setEntityIds] = useState<Set<Id<"entities">>>(new Set());
-	const [relatedCaseIds, setRelatedCaseIds] = useState<Set<Id<"cases">>>(
-		new Set(),
-	);
+	const [relationships, setRelationships] = useState<
+		Map<string, RelationshipSearchCandidate>
+	>(new Map());
+	const [initialEventComposerOpen, setInitialEventComposerOpen] =
+		useState(false);
+	const [initialEventComposerError, setInitialEventComposerError] = useState<
+		string | null
+	>(null);
 	const [showValidation, setShowValidation] = useState(false);
 	const [submissionError, setSubmissionError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
 	const validation = useMemo(() => v.safeParse(createCaseSchema, form), [form]);
+	const selectedRelationshipIds = useMemo(() => {
+		const selectedContactIds = new Set(contactIds);
+		const selectedEntityIds = new Set<Id<"entities">>();
+		const selectedRelatedCaseIds = new Set<Id<"cases">>();
+
+		for (const { target } of relationships.values()) {
+			if (target.kind === "contact") {
+				selectedContactIds.add(target.contactId);
+			} else if (target.kind === "entity") {
+				selectedEntityIds.add(target.entityId);
+			} else {
+				selectedRelatedCaseIds.add(target.caseId);
+			}
+		}
+
+		return {
+			contactIds: selectedContactIds,
+			entityIds: selectedEntityIds,
+			relatedCaseIds: selectedRelatedCaseIds,
+		};
+	}, [contactIds, relationships]);
 
 	useEffect(() => {
 		if (open && ownerMemberId === "unassigned" && options?.members[0]) {
@@ -122,8 +151,9 @@ export function CreateCaseDialog({
 		setForm({ ...INITIAL_FORM, title: initialTitle });
 		setOwnerMemberId("unassigned");
 		setContactIds(new Set(initialContactIds));
-		setEntityIds(new Set());
-		setRelatedCaseIds(new Set());
+		setRelationships(new Map());
+		setInitialEventComposerOpen(false);
+		setInitialEventComposerError(null);
 		setShowValidation(false);
 		setSubmissionError(null);
 		setIsSubmitting(false);
@@ -149,28 +179,31 @@ export function CreateCaseDialog({
 		});
 	}
 
-	function toggleEntity(entityId: Id<"entities">, checked: boolean) {
-		setEntityIds((current) => {
-			const next = new Set(current);
-			if (checked) {
-				next.add(entityId);
-			} else {
-				next.delete(entityId);
-			}
+	function addRelationship(relationship: RelationshipSearchCandidate) {
+		setRelationships((current) =>
+			new Map(current).set(getRelationshipKey(relationship), relationship),
+		);
+	}
+
+	function removeRelationship(relationship: RelationshipSearchCandidate) {
+		setRelationships((current) => {
+			const next = new Map(current);
+			next.delete(getRelationshipKey(relationship));
 			return next;
 		});
 	}
 
-	function toggleRelatedCase(relatedCaseId: Id<"cases">, checked: boolean) {
-		setRelatedCaseIds((current) => {
-			const next = new Set(current);
-			if (checked) {
-				next.add(relatedCaseId);
-			} else {
-				next.delete(relatedCaseId);
-			}
-			return next;
-		});
+	function confirmInitialEvent() {
+		const result = v.safeParse(caseEventBodySchema, form.initialEventBody);
+		if (!result.success) {
+			setInitialEventComposerError(
+				result.issues[0]?.message ?? "Write an event first.",
+			);
+			return;
+		}
+
+		setInitialEventComposerError(null);
+		setInitialEventComposerOpen(false);
 	}
 
 	async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -193,9 +226,9 @@ export function CreateCaseDialog({
 					ownerMemberId === "unassigned" ? null : (owner?._id ?? null),
 				dueAt: form.dueDate ? parseDateInput(form.dueDate) : null,
 				initialEventBody: validation.output.initialEventBody,
-				contactIds: [...contactIds],
-				entityIds: [...entityIds],
-				relatedCaseIds: [...relatedCaseIds],
+				contactIds: [...selectedRelationshipIds.contactIds],
+				entityIds: [...selectedRelationshipIds.entityIds],
+				relatedCaseIds: [...selectedRelationshipIds.relatedCaseIds],
 				...(emailThreadId ? { emailThreadId } : {}),
 			});
 			handleOpenChange(false);
@@ -209,11 +242,19 @@ export function CreateCaseDialog({
 		}
 	}
 
-	const titleError =
-		showValidation && !validation.success
-			? validation.issues.find((issue) => issue.path?.[0]?.key === "title")
-					?.message
-			: undefined;
+	function getValidationError(
+		field: "title" | "description" | "initialEventBody",
+	) {
+		if (!showValidation || validation.success) {
+			return undefined;
+		}
+		return validation.issues.find((issue) => issue.path?.[0]?.key === field)
+			?.message;
+	}
+
+	const titleError = getValidationError("title");
+	const descriptionError = getValidationError("description");
+	const submittedInitialEventError = getValidationError("initialEventBody");
 	const emailContacts =
 		initialContacts.length > 0
 			? initialContacts
@@ -250,28 +291,42 @@ export function CreateCaseDialog({
 					<DialogDescription>
 						{variant === "email"
 							? "Start a case from this conversation."
-							: "Add the stable details, initial context, and relationships."}
+							: "Add the initial context and relationships of the case."}
 					</DialogDescription>
 				</DialogHeader>
 
 				<form id="create-case-form" onSubmit={submit} noValidate>
 					<FieldGroup>
-						<Field data-invalid={Boolean(titleError) || undefined}>
-							<FieldLabel htmlFor="case-title">Title</FieldLabel>
-							<Input
-								id="case-title"
-								value={form.title}
-								onChange={(event) =>
-									setForm((current) => ({
-										...current,
-										title: event.target.value,
-									}))
-								}
-								placeholder="What needs to be resolved?"
-								aria-invalid={Boolean(titleError) || undefined}
-								autoFocus
-							/>
-							{titleError && <FieldError>{titleError}</FieldError>}
+						<Field
+							data-invalid={Boolean(titleError) || undefined}
+							className="gap-0.5"
+						>
+							<FieldLabel htmlFor={titleInputId}>Title</FieldLabel>
+							<div className="relative">
+								<input
+									id={titleInputId}
+									type="text"
+									value={form.title}
+									onChange={(event) =>
+										setForm((current) => ({
+											...current,
+											title: event.target.value,
+										}))
+									}
+									placeholder="What needs to be resolved?"
+									aria-invalid={Boolean(titleError) || undefined}
+									aria-describedby={titleError ? titleErrorId : undefined}
+									autoFocus
+									className="peer w-full border-0 bg-transparent px-0 py-1 font-heading text-2xl leading-tight font-semibold tracking-tight text-foreground outline-none placeholder:text-muted-foreground md:text-3xl"
+								/>
+								<span
+									aria-hidden="true"
+									className="pointer-events-none absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-transparent peer-focus-visible:bg-ring peer-aria-invalid:bg-destructive"
+								/>
+							</div>
+							{titleError && (
+								<FieldError id={titleErrorId}>{titleError}</FieldError>
+							)}
 						</Field>
 
 						<div
@@ -311,24 +366,12 @@ export function CreateCaseDialog({
 								</Select>
 							</Field>
 							{variant === "default" && (
-								<Field>
-									<FieldLabel htmlFor="case-due-date">Deadline</FieldLabel>
-									<div className="relative">
-										<IconCalendar className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-										<Input
-											id="case-due-date"
-											type="date"
-											value={form.dueDate}
-											onChange={(event) =>
-												setForm((current) => ({
-													...current,
-													dueDate: event.target.value,
-												}))
-											}
-											className="pl-9"
-										/>
-									</div>
-								</Field>
+								<CaseDeadlineField
+									value={form.dueDate}
+									onChange={(dueDate) =>
+										setForm((current) => ({ ...current, dueDate }))
+									}
+								/>
 							)}
 						</div>
 
@@ -351,132 +394,98 @@ export function CreateCaseDialog({
 							</div>
 						) : (
 							<>
-								<Field>
-									<FieldLabel htmlFor="case-description">
+								<Field data-invalid={Boolean(descriptionError) || undefined}>
+									<FieldLabel htmlFor="create-case-description">
 										Description
 									</FieldLabel>
-									<Textarea
-										id="case-description"
+									<CaseDescriptionEditor
+										id="create-case-description"
 										value={form.description}
-										onChange={(event) =>
+										onChange={(description) =>
 											setForm((current) => ({
 												...current,
-												description: event.target.value,
+												description,
 											}))
 										}
-										placeholder="Add the context someone needs before working on this case."
-										className="min-h-24"
+										invalid={Boolean(descriptionError)}
+										readOnly={false}
 									/>
+									{descriptionError && (
+										<FieldError>{descriptionError}</FieldError>
+									)}
 								</Field>
 
-								<Field>
-									<FieldLabel htmlFor="case-initial-event">
-										First event
-									</FieldLabel>
-									<Textarea
-										id="case-initial-event"
-										value={form.initialEventBody}
-										onChange={(event) =>
+								{initialEventComposerOpen ? (
+									<CaseEventComposer
+										body={form.initialEventBody}
+										onBodyChange={(initialEventBody) => {
 											setForm((current) => ({
 												...current,
-												initialEventBody: event.target.value,
-											}))
+												initialEventBody,
+											}));
+											setInitialEventComposerError(null);
+										}}
+										onCancel={() => {
+											setForm((current) => ({
+												...current,
+												initialEventBody: "",
+											}));
+											setInitialEventComposerError(null);
+											setInitialEventComposerOpen(false);
+										}}
+										onSubmit={confirmInitialEvent}
+										error={
+											initialEventComposerError ?? submittedInitialEventError
 										}
-										placeholder="What has happened so far?"
 									/>
-								</Field>
+								) : (
+									<button
+										type="button"
+										onClick={() => setInitialEventComposerOpen(true)}
+										className="flex min-h-12 w-full items-center gap-3 rounded-xl border border-dashed p-2 text-left text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-99"
+									>
+										<span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+											<IconPlus className="size-4" />
+										</span>
+										<span className="min-w-0">
+											<span className="block text-sm font-medium">
+												{form.initialEventBody
+													? "Edit first event"
+													: "Add first event"}
+											</span>
+											{form.initialEventBody && (
+												<span className="block truncate text-xs text-muted-foreground">
+													{form.initialEventBody}
+												</span>
+											)}
+										</span>
+									</button>
+								)}
 
 								<div className="space-y-4">
-									<div>
-										<p className="text-sm font-medium">Relationships</p>
-										<p className="mt-1 text-sm text-muted-foreground">
-											Choose the records connected to this case.
-										</p>
-									</div>
-
-									<div className="rounded-xl border">
-										<div className="flex items-center gap-2 border-b px-3 py-2.5">
-											<IconAddressBook className="size-4 text-muted-foreground" />
-											<p className="text-sm font-medium">Contacts</p>
-										</div>
-										<div className="grid max-h-36 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
-											{options?.contacts.map((contact) => (
-												<RelationCheckbox
-													key={contact._id}
-													checked={contactIds.has(contact._id)}
-													onCheckedChange={(checked) =>
-														toggleContact(contact._id, checked)
-													}
-													label={contact.name || contact.address}
-													description={
-														contact.name ? contact.address : undefined
-													}
-												/>
-											))}
-											{options?.contacts.length === 0 && (
-												<p className="px-2 py-3 text-sm text-muted-foreground">
-													No contacts yet.
-												</p>
-											)}
+									<p className="text-sm font-medium">Relationships</p>
+									<div className="grid gap-2 sm:grid-cols-2">
+										{Array.from(relationships.values()).map((relationship) => (
+											<CaseRelationshipCard
+												key={getRelationshipKey(relationship)}
+												item={relationshipCandidateToCard(relationship)}
+												onRemove={() => removeRelationship(relationship)}
+											/>
+										))}
+										<div className="sm:col-span-2">
+											<RelationshipSearchField
+												active={open}
+												selectedResult={null}
+												currentRelationshipIds={selectedRelationshipIds}
+												resultsId="create-case-relationship-search-results"
+												onSelectResult={addRelationship}
+												onClearSelection={() => {}}
+												onClose={() => handleOpenChange(false)}
+												resetQueryOnSelect
+												autoFocus={false}
+											/>
 										</div>
 									</div>
-
-									<div className="rounded-xl border">
-										<div className="flex items-center gap-2 border-b px-3 py-2.5">
-											<IconFolder className="size-4 text-muted-foreground" />
-											<p className="text-sm font-medium">Cases</p>
-										</div>
-										<div className="grid max-h-36 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
-											{options?.cases.map((relatedCase) => (
-												<RelationCheckbox
-													key={relatedCase._id}
-													checked={relatedCaseIds.has(relatedCase._id)}
-													onCheckedChange={(checked) =>
-														toggleRelatedCase(relatedCase._id, checked)
-													}
-													label={relatedCase.title}
-													description={relatedCase.reference}
-												/>
-											))}
-											{options?.cases.length === 0 && (
-												<p className="px-2 py-3 text-sm text-muted-foreground">
-													No other cases yet.
-												</p>
-											)}
-										</div>
-									</div>
-
-									{options?.entityTypes.map(({ entityType, entities }) => (
-										<div key={entityType._id} className="rounded-xl border">
-											<div className="flex items-center gap-2 border-b px-3 py-2.5">
-												<EntityIcon
-													icon={entityType.icon}
-													className="size-4 text-muted-foreground"
-												/>
-												<p className="text-sm font-medium">
-													{entityType.pluralName}
-												</p>
-											</div>
-											<div className="grid max-h-36 gap-1 overflow-y-auto p-2 sm:grid-cols-2">
-												{entities.map((entity) => (
-													<RelationCheckbox
-														key={entity._id}
-														checked={entityIds.has(entity._id)}
-														onCheckedChange={(checked) =>
-															toggleEntity(entity._id, checked)
-														}
-														label={entity.displayName}
-														description={entity.identifier}
-													/>
-												))}
-												{entities.length === 0 && (
-													<p className="px-2 py-3 text-sm text-muted-foreground">
-														No {entityType.pluralName.toLowerCase()} yet.
-													</p>
-												)}
-											</div>
-										</div>
-									))}
 								</div>
 							</>
 						)}

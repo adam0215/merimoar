@@ -39,7 +39,13 @@ type RelationshipRemoval =
 	| { kind: "entity"; relationId: Id<"caseEntityRelations"> }
 	| { kind: "case"; relationId: Id<"caseCaseRelations"> };
 
-type CaseRelationship = {
+type RelationshipIds = {
+	contactIds: Set<Id<"contacts">>;
+	entityIds: Set<Id<"entities">>;
+	relatedCaseIds: Set<Id<"cases">>;
+};
+
+export type CaseRelationshipCardData = {
 	id: string;
 	title: string;
 	detail: string;
@@ -50,43 +56,48 @@ type CaseRelationship = {
 	target?: { kind: "contact"; id: string } | { kind: "case"; id: string };
 	roomy?: boolean;
 	removeLabel: string;
-	removal: RelationshipRemoval;
+	removal?: RelationshipRemoval;
 };
 
 export function CaseRelationships({ detail }: { detail: CaseDetail }) {
-	const currentContactIds = new Set(
-		detail.contacts.flatMap((item) => (item.contact ? [item.contact._id] : [])),
-	);
-	const currentEntityIds = new Set(
-		detail.entities.flatMap((item) => (item.entity ? [item.entity._id] : [])),
-	);
-	const currentRelatedCaseIds = new Set(
-		detail.relatedCases.flatMap((item) =>
-			item.relatedCase ? [item.relatedCase._id] : [],
+	const currentRelationshipIds: RelationshipIds = {
+		contactIds: new Set(
+			detail.contacts.flatMap((item) =>
+				item.contact ? [item.contact._id] : [],
+			),
 		),
-	);
+		entityIds: new Set(
+			detail.entities.flatMap((item) => (item.entity ? [item.entity._id] : [])),
+		),
+		relatedCaseIds: new Set(
+			detail.relatedCases.flatMap((item) =>
+				item.relatedCase ? [item.relatedCase._id] : [],
+			),
+		),
+	};
 
-	const items: CaseRelationship[] = [
-		...detail.contacts.flatMap(({ relation, contact }): CaseRelationship[] =>
-			contact
-				? [
-						{
-							id: relation._id,
-							title: contact.name || contact.address,
-							detail: contact.name ? contact.address : "Contact",
-							visual: {
-								kind: "avatar",
-								fallback: initials(contact.name || contact.address),
+	const items: CaseRelationshipCardData[] = [
+		...detail.contacts.flatMap(
+			({ relation, contact }): CaseRelationshipCardData[] =>
+				contact
+					? [
+							{
+								id: relation._id,
+								title: contact.name || contact.address,
+								detail: contact.name ? contact.address : "Contact",
+								visual: {
+									kind: "avatar",
+									fallback: initials(contact.name || contact.address),
+								},
+								target: { kind: "contact", id: contact._id },
+								removeLabel: contact.name || contact.address,
+								removal: { kind: "contact", relationId: relation._id },
 							},
-							target: { kind: "contact", id: contact._id },
-							removeLabel: contact.name || contact.address,
-							removal: { kind: "contact", relationId: relation._id },
-						},
-					]
-				: [],
+						]
+					: [],
 		),
 		...detail.entities.flatMap(
-			({ relation, entity, entityType }): CaseRelationship[] =>
+			({ relation, entity, entityType }): CaseRelationshipCardData[] =>
 				entity && entityType
 					? [
 							{
@@ -102,7 +113,7 @@ export function CaseRelationships({ detail }: { detail: CaseDetail }) {
 					: [],
 		),
 		...detail.relatedCases.flatMap(
-			({ relation, relatedCase }): CaseRelationship[] =>
+			({ relation, relatedCase }): CaseRelationshipCardData[] =>
 				relatedCase
 					? [
 							{
@@ -124,20 +135,24 @@ export function CaseRelationships({ detail }: { detail: CaseDetail }) {
 			<h2 className="text-sm font-semibold">Relationships</h2>
 			<div className="mt-4 grid gap-2 sm:grid-cols-2">
 				{items.map((item) => (
-					<RelationshipRow key={item.id} item={item} />
+					<CaseRelationshipCard key={item.id} item={item} />
 				))}
 				<AddRelationshipDialog
 					caseId={detail.case._id}
-					currentContactIds={currentContactIds}
-					currentEntityIds={currentEntityIds}
-					currentRelatedCaseIds={currentRelatedCaseIds}
+					currentRelationshipIds={currentRelationshipIds}
 				/>
 			</div>
 		</section>
 	);
 }
 
-function RelationshipRow({ item }: { item: CaseRelationship }) {
+export function CaseRelationshipCard({
+	item,
+	onRemove,
+}: {
+	item: CaseRelationshipCardData;
+	onRemove?: () => void;
+}) {
 	const content = (
 		<>
 			<RelationshipVisual visual={item.visual} />
@@ -178,10 +193,17 @@ function RelationshipRow({ item }: { item: CaseRelationship }) {
 			) : (
 				content
 			)}
-			<RemoveRelationshipButton
-				label={item.removeLabel}
-				relation={item.removal}
-			/>
+			{onRemove ? (
+				<RelationshipRemoveButton
+					label={item.removeLabel}
+					onRemove={onRemove}
+				/>
+			) : item.removal ? (
+				<RemoveRelationshipButton
+					label={item.removeLabel}
+					relation={item.removal}
+				/>
+			) : null}
 		</div>
 	);
 }
@@ -189,7 +211,7 @@ function RelationshipRow({ item }: { item: CaseRelationship }) {
 function RelationshipVisual({
 	visual,
 }: {
-	visual: CaseRelationship["visual"];
+	visual: CaseRelationshipCardData["visual"];
 }) {
 	if (visual.kind === "avatar") {
 		return (
@@ -253,13 +275,40 @@ function RemoveRelationshipButton({
 	}
 
 	return (
+		<RelationshipRemoveButton
+			label={label}
+			onRemove={() => void remove()}
+			disabled={readOnly || isRemoving}
+			disabledReason={readOnly ? readOnlyReason : undefined}
+			isRemoving={isRemoving}
+			error={error}
+		/>
+	);
+}
+
+function RelationshipRemoveButton({
+	label,
+	onRemove,
+	disabled = false,
+	disabledReason,
+	isRemoving = false,
+	error,
+}: {
+	label: string;
+	onRemove: () => void;
+	disabled?: boolean;
+	disabledReason?: string;
+	isRemoving?: boolean;
+	error?: string | null;
+}) {
+	return (
 		<button
 			type="button"
-			onClick={remove}
-			disabled={readOnly || isRemoving}
+			onClick={onRemove}
+			disabled={disabled}
 			className="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground active:scale-97 disabled:opacity-50"
 			aria-label={`${error ? "Retry removing" : "Remove"} ${label}`}
-			title={readOnly ? readOnlyReason : (error ?? `Remove ${label}`)}
+			title={disabledReason ?? error ?? `Remove ${label}`}
 		>
 			{isRemoving ? (
 				<IconLoader2 className="size-3.5 animate-spin" />
@@ -274,68 +323,24 @@ function RemoveRelationshipButton({
 
 function AddRelationshipDialog({
 	caseId,
-	currentContactIds,
-	currentEntityIds,
-	currentRelatedCaseIds,
+	currentRelationshipIds,
 }: {
 	caseId: Id<"cases">;
-	currentContactIds: Set<Id<"contacts">>;
-	currentEntityIds: Set<Id<"entities">>;
-	currentRelatedCaseIds: Set<Id<"cases">>;
+	currentRelationshipIds: RelationshipIds;
 }) {
 	const { readOnly, readOnlyReason } = useCurrentCaseInteractionPolicy();
 	const addContact = useMutation(api.case.mutations.addContactRelation);
 	const addEntity = useMutation(api.case.mutations.addEntityRelation);
 	const addCase = useMutation(api.case.mutations.addCaseRelation);
-	const dialogRef = useRef<HTMLDivElement>(null);
 	const [open, setOpen] = useState(false);
-	const [query, setQuery] = useState("");
-	const [debouncedQuery, setDebouncedQuery] = useState("");
 	const [selectedResult, setSelectedResult] =
 		useState<RelationshipSearchResult | null>(null);
-	const [recentRelationshipsRequested, setRecentRelationshipsRequested] =
-		useState(false);
 	const [isAdding, setIsAdding] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const isMetaHeld = useKeyHold("Meta");
-	const normalizedQuery = query.trim();
-	const searchResults = useQuery(
-		api.globalSearch.reader.search,
-		debouncedQuery ? { query: debouncedQuery } : "skip",
-	);
-	const recentRelationships = useQuery(
-		api.globalSearch.reader.listRecentRelationshipCandidates,
-		recentRelationshipsRequested && !normalizedQuery ? {} : "skip",
-	);
-	const candidates: RelationshipSearchCandidate[] = debouncedQuery
-		? (searchResults ?? [])
-		: (recentRelationships ?? []);
-	const results = candidates.map((result) => ({
-		...result,
-		unavailableReason: getUnavailableReason(result, {
-			caseId,
-			currentContactIds,
-			currentEntityIds,
-			currentRelatedCaseIds,
-		}),
-	}));
-	const isWaitingForResults = normalizedQuery
-		? normalizedQuery !== debouncedQuery || searchResults === undefined
-		: recentRelationshipsRequested && recentRelationships === undefined;
-
-	useEffect(() => {
-		const timeoutId = window.setTimeout(() => {
-			setDebouncedQuery(normalizedQuery);
-		}, 250);
-
-		return () => window.clearTimeout(timeoutId);
-	}, [normalizedQuery]);
 
 	function resetDialog() {
-		setQuery("");
-		setDebouncedQuery("");
 		setSelectedResult(null);
-		setRecentRelationshipsRequested(false);
 		setIsAdding(false);
 		setError(null);
 	}
@@ -407,7 +412,7 @@ function AddRelationshipDialog({
 				</span>
 				<span className="text-sm font-medium">Add relationship</span>
 			</DialogTrigger>
-			<DialogContent ref={dialogRef} className="overflow-visible sm:max-w-lg">
+			<DialogContent className="overflow-visible sm:max-w-lg">
 				<DialogHeader>
 					<DialogTitle>Add relationship</DialogTitle>
 					<DialogDescription>
@@ -416,46 +421,21 @@ function AddRelationshipDialog({
 				</DialogHeader>
 
 				<div className="space-y-3">
-					<SearchCombobox
-						open={open}
-						query={query}
-						results={results}
+					<RelationshipSearchField
+						active={open}
 						selectedResult={selectedResult}
-						isWaitingForResults={isWaitingForResults}
+						currentCaseId={caseId}
+						currentRelationshipIds={currentRelationshipIds}
 						resultsId="relationship-search-results"
-						placeholder="Search relationships…"
-						emptyText="No results"
-						clearAriaLabel="Clear selected relationship"
-						hotkeyTargetRef={dialogRef}
-						getResultId={getResultOptionId}
-						getSelectedAriaLabel={(result) =>
-							`Selected relationship: ${result.label}`
-						}
-						isResultUnavailable={isRelationshipResultUnavailable}
-						onQueryChange={(nextQuery) => {
-							setQuery(nextQuery);
-							setError(null);
-						}}
 						onSelectResult={(result) => {
 							setSelectedResult(result);
 							setError(null);
 						}}
 						onClearSelection={() => setSelectedResult(null)}
-						onRequestEmptyResults={() => setRecentRelationshipsRequested(true)}
+						onInteraction={() => setError(null)}
 						onClose={closeDialog}
 						onSubmit={() => void addSelectedRelationship()}
 						canSubmit={selectedResult !== null && !isAdding}
-						renderResult={(result) => (
-							<RelationshipResultContent result={result} />
-						)}
-						renderUnavailable={(result) =>
-							result.unavailableReason ? (
-								<span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-									<IconCircleCheckFilled className="size-4 text-accent" />
-									{result.unavailableReason}
-								</span>
-							) : null
-						}
 					/>
 
 					{error && (
@@ -495,20 +475,146 @@ function AddRelationshipDialog({
 	);
 }
 
+export function RelationshipSearchField({
+	active,
+	selectedResult,
+	currentCaseId,
+	currentRelationshipIds,
+	resultsId,
+	onSelectResult,
+	onClearSelection,
+	onInteraction,
+	onClose,
+	onSubmit,
+	canSubmit,
+	resetQueryOnSelect = false,
+	autoFocus = true,
+}: {
+	active: boolean;
+	selectedResult: RelationshipSearchResult | null;
+	currentCaseId?: Id<"cases">;
+	currentRelationshipIds: RelationshipIds;
+	resultsId: string;
+	onSelectResult: (result: RelationshipSearchResult) => void;
+	onClearSelection: () => void;
+	onInteraction?: () => void;
+	onClose: () => void;
+	onSubmit?: () => void;
+	canSubmit?: boolean;
+	resetQueryOnSelect?: boolean;
+	autoFocus?: boolean;
+}) {
+	const searchFieldRef = useRef<HTMLDivElement>(null);
+	const [query, setQuery] = useState("");
+	const [debouncedQuery, setDebouncedQuery] = useState("");
+	const [recentRelationshipsRequested, setRecentRelationshipsRequested] =
+		useState(false);
+	const normalizedQuery = query.trim();
+	const searchResults = useQuery(
+		api.globalSearch.reader.search,
+		debouncedQuery ? { query: debouncedQuery } : "skip",
+	);
+	const recentRelationships = useQuery(
+		api.globalSearch.reader.listRecentRelationshipCandidates,
+		recentRelationshipsRequested && !normalizedQuery ? {} : "skip",
+	);
+	const candidates: RelationshipSearchCandidate[] = debouncedQuery
+		? (searchResults ?? [])
+		: (recentRelationships ?? []);
+	const results = candidates.map((result) => ({
+		...result,
+		unavailableReason: getUnavailableReason(
+			result,
+			currentRelationshipIds,
+			currentCaseId,
+		),
+	}));
+	const isWaitingForResults = normalizedQuery
+		? normalizedQuery !== debouncedQuery || searchResults === undefined
+		: recentRelationshipsRequested && recentRelationships === undefined;
+
+	useEffect(() => {
+		const timeoutId = window.setTimeout(() => {
+			setDebouncedQuery(normalizedQuery);
+		}, 250);
+
+		return () => window.clearTimeout(timeoutId);
+	}, [normalizedQuery]);
+
+	useEffect(() => {
+		if (active) {
+			return;
+		}
+
+		setQuery("");
+		setDebouncedQuery("");
+		setRecentRelationshipsRequested(false);
+	}, [active]);
+
+	return (
+		<div ref={searchFieldRef}>
+			<SearchCombobox
+				open={active}
+				query={query}
+				results={results}
+				selectedResult={selectedResult}
+				isWaitingForResults={isWaitingForResults}
+				resultsId={resultsId}
+				placeholder="Search and Add Relationships"
+				emptyText="No results"
+				clearAriaLabel="Clear selected relationship"
+				hotkeyTargetRef={searchFieldRef}
+				getResultId={(result) => `${resultsId}-${getRelationshipKey(result)}`}
+				getSelectedAriaLabel={(result) =>
+					`Selected relationship: ${result.label}`
+				}
+				isResultUnavailable={isRelationshipResultUnavailable}
+				onQueryChange={(nextQuery) => {
+					setQuery(nextQuery);
+					onInteraction?.();
+				}}
+				onSelectResult={(result) => {
+					if (resetQueryOnSelect) {
+						setQuery("");
+						setDebouncedQuery("");
+					}
+					onSelectResult(result);
+					onInteraction?.();
+				}}
+				onClearSelection={onClearSelection}
+				onRequestEmptyResults={() => setRecentRelationshipsRequested(true)}
+				onClose={onClose}
+				onSubmit={onSubmit}
+				canSubmit={canSubmit}
+				renderResult={(result) => <RelationshipResultContent result={result} />}
+				renderUnavailable={(result) =>
+					result.unavailableReason ? (
+						<span className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+							<IconCircleCheckFilled className="size-4 text-accent" />
+							{result.unavailableReason}
+						</span>
+					) : null
+				}
+				autoFocus={autoFocus}
+			/>
+		</div>
+	);
+}
+
 type GlobalSearchResult = FunctionReturnType<
 	typeof api.globalSearch.reader.search
 >[number];
 
-type RelationshipSearchCandidate = Pick<
+export type RelationshipSearchCandidate = Pick<
 	GlobalSearchResult,
 	"target" | "identifier" | "label" | "descriptor" | "icon"
 >;
 
-type RelationshipSearchResult = RelationshipSearchCandidate & {
+export type RelationshipSearchResult = RelationshipSearchCandidate & {
 	unavailableReason: string | null;
 };
 
-function getResultKey(result: RelationshipSearchResult) {
+export function getRelationshipKey(result: RelationshipSearchCandidate) {
 	switch (result.target.kind) {
 		case "contact":
 			return `contact-${result.target.contactId}`;
@@ -519,37 +625,29 @@ function getResultKey(result: RelationshipSearchResult) {
 	}
 }
 
-function getResultOptionId(result: RelationshipSearchResult) {
-	return `relationship-result-${getResultKey(result)}`;
-}
-
 function isRelationshipResultUnavailable(result: RelationshipSearchResult) {
 	return Boolean(result.unavailableReason);
 }
 
 function getUnavailableReason(
 	result: RelationshipSearchCandidate,
-	context: {
-		caseId: Id<"cases">;
-		currentContactIds: Set<Id<"contacts">>;
-		currentEntityIds: Set<Id<"entities">>;
-		currentRelatedCaseIds: Set<Id<"cases">>;
-	},
+	currentRelationshipIds: RelationshipIds,
+	currentCaseId?: Id<"cases">,
 ) {
 	switch (result.target.kind) {
 		case "contact":
-			return context.currentContactIds.has(result.target.contactId)
+			return currentRelationshipIds.contactIds.has(result.target.contactId)
 				? "Added"
 				: null;
 		case "entity":
-			return context.currentEntityIds.has(result.target.entityId)
+			return currentRelationshipIds.entityIds.has(result.target.entityId)
 				? "Added"
 				: null;
 		case "case":
-			if (result.target.caseId === context.caseId) {
+			if (currentCaseId && result.target.caseId === currentCaseId) {
 				return "Current case";
 			}
-			return context.currentRelatedCaseIds.has(result.target.caseId)
+			return currentRelationshipIds.relatedCaseIds.has(result.target.caseId)
 				? "Added"
 				: null;
 	}
@@ -589,7 +687,7 @@ function RelationshipResultContent({
 	);
 }
 
-function getResultDescription(result: RelationshipSearchResult) {
+function getResultDescription(result: RelationshipSearchCandidate) {
 	if (result.target.kind === "contact") {
 		return result.label === result.identifier
 			? result.descriptor
@@ -599,4 +697,25 @@ function getResultDescription(result: RelationshipSearchResult) {
 	return result.target.kind === "entity"
 		? `${result.descriptor} · ${result.identifier}`
 		: `${result.identifier} · ${result.descriptor}`;
+}
+
+export function relationshipCandidateToCard(
+	result: RelationshipSearchCandidate,
+): CaseRelationshipCardData {
+	return {
+		id: getRelationshipKey(result),
+		title: result.label,
+		detail: getResultDescription(result),
+		visual:
+			result.target.kind === "contact"
+				? {
+						kind: "avatar",
+						fallback: initials(result.label || result.identifier),
+					}
+				: result.target.kind === "entity" && result.icon
+					? { kind: "entity", icon: result.icon }
+					: { kind: "folder" },
+		roomy: result.target.kind === "entity",
+		removeLabel: result.label,
+	};
 }
