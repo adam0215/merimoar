@@ -206,6 +206,15 @@ describe("contact reader", () => {
 			relatedCaseId,
 		]);
 		await expect(
+			actor.query(api.contact.reader.listMessages, {
+				contactId: otherContactId,
+				paginationOpts: {
+					numItems: 10,
+					cursor: null,
+				},
+			}),
+		).rejects.toThrow("Contact not found");
+		await expect(
 			actor.query(api.contact.reader.listCases, {
 				contactId: otherContactId,
 				paginationOpts: {

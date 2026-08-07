@@ -8,13 +8,15 @@ const ISSUER = "https://api.workos.com/user_management/client_test";
 const ALTERNATE_ISSUER = "https://auth.example.com/";
 const WORKOS_USER_ID = "user_adam";
 
-async function createFixture(active?: boolean) {
+async function createFixture(active?: boolean, syncUser = true) {
 	const base = createTest();
-	await syncWorkosUser(base, {
-		id: WORKOS_USER_ID,
-		name: "Adam Gustafsson",
-		email: "adam@example.com",
-	});
+	if (syncUser) {
+		await syncWorkosUser(base, {
+			id: WORKOS_USER_ID,
+			name: "Adam Gustafsson",
+			email: "adam@example.com",
+		});
+	}
 	const organizationId = await base.run(async (ctx) => {
 		const id = await ctx.db.insert("organizations", {
 			name: "Merimoar",
@@ -40,8 +42,27 @@ async function createFixture(active?: boolean) {
 }
 
 describe("WorkOS member access", () => {
+	it("reports unauthenticated access without a signed-in identity", async () => {
+		const { base } = await createFixture(true);
+
+		expect(await base.query(api.auth.members.currentAccess, {})).toBe(
+			"unauthenticated",
+		);
+	});
+
 	it("does not create a membership from client data", async () => {
 		const { actor } = await createFixture();
+
+		expect(await actor.query(api.auth.members.currentAccess, {})).toBe(
+			"not_synced",
+		);
+		await expect(
+			actor.query(api.case.reader.getCreateOptions, {}),
+		).rejects.toThrow("active WorkOS");
+	});
+
+	it("requires both the projected member and WorkOS user", async () => {
+		const { actor } = await createFixture(true, false);
 
 		expect(await actor.query(api.auth.members.currentAccess, {})).toBe(
 			"not_synced",

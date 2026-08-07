@@ -1,5 +1,5 @@
 export const RESEND_PIPES_PROVIDER = "resend";
-export const EMAIL_SETTINGS_PATH = "/settings/organization/email";
+const EMAIL_SETTINGS_PATH = "/settings/organization/email";
 
 export type ResendPipesConnectionState =
 	| "connected"

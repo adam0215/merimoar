@@ -1361,7 +1361,7 @@ export function calculateAcmeCreationCounts(): AcmeReplacementCounts {
 	return counts;
 }
 
-function hashAcmeDatasetPayload(payload: string) {
+export function hashAcmePayload(payload: string) {
 	let hash = 0x811c9dc5;
 	for (let index = 0; index < payload.length; index += 1) {
 		hash ^= payload.charCodeAt(index);
@@ -1371,7 +1371,7 @@ function hashAcmeDatasetPayload(payload: string) {
 }
 
 export function calculateAcmeDatasetFingerprint() {
-	return hashAcmeDatasetPayload(
+	return hashAcmePayload(
 		JSON.stringify({
 			version: ACME_DATASET_VERSION,
 			inbox: ACME_INBOX,

@@ -32,6 +32,7 @@ import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { SearchCombobox } from "#/components/ui/search-combobox.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { EntityIcon, type EntityIconKey } from "#/lib/entity-icons.tsx";
+import { getSearchResultDescription } from "#/lib/search-result-description.ts";
 import { cn } from "#/lib/utils.ts";
 
 type RelationshipRemoval =
@@ -680,23 +681,11 @@ function RelationshipResultContent({
 					{result.label}
 				</span>
 				<span className="block truncate text-xs text-muted-foreground">
-					{getResultDescription(result)}
+					{getSearchResultDescription(result)}
 				</span>
 			</span>
 		</>
 	);
-}
-
-function getResultDescription(result: RelationshipSearchCandidate) {
-	if (result.target.kind === "contact") {
-		return result.label === result.identifier
-			? result.descriptor
-			: result.identifier;
-	}
-
-	return result.target.kind === "entity"
-		? `${result.descriptor} · ${result.identifier}`
-		: `${result.identifier} · ${result.descriptor}`;
 }
 
 export function relationshipCandidateToCard(
@@ -705,7 +694,7 @@ export function relationshipCandidateToCard(
 	return {
 		id: getRelationshipKey(result),
 		title: result.label,
-		detail: getResultDescription(result),
+		detail: getSearchResultDescription(result),
 		visual:
 			result.target.kind === "contact"
 				? {

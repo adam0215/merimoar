@@ -1,7 +1,21 @@
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { requireActor } from "#/auth/access";
+import type { Id } from "../_generated/dataModel";
+import type { QueryCtx } from "../_generated/server";
 import { query } from "../_generated/server";
+
+async function requireContact(
+	ctx: QueryCtx,
+	organizationId: Id<"organizations">,
+	contactId: Id<"contacts">,
+) {
+	const contact = await ctx.db.get(contactId);
+	if (contact?.organizationId !== organizationId) {
+		throw new Error("Contact not found");
+	}
+	return contact;
+}
 
 export const list = query({
 	args: {
@@ -45,10 +59,11 @@ export const listMessages = query({
 	},
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
-		const contact = await ctx.db.get(args.contactId);
-		if (contact?.organizationId !== workspace.organization._id) {
-			throw new Error("Contact not found");
-		}
+		const contact = await requireContact(
+			ctx,
+			workspace.organization._id,
+			args.contactId,
+		);
 
 		const result = await ctx.db
 			.query("emailMessages")
@@ -94,10 +109,11 @@ export const listCases = query({
 	},
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
-		const contact = await ctx.db.get(args.contactId);
-		if (contact?.organizationId !== workspace.organization._id) {
-			throw new Error("Contact not found");
-		}
+		const contact = await requireContact(
+			ctx,
+			workspace.organization._id,
+			args.contactId,
+		);
 
 		const result = await ctx.db
 			.query("caseContactRelations")

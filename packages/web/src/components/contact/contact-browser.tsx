@@ -16,6 +16,7 @@ import { Button } from "#/components/ui/button.tsx";
 import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
 import { coverImageForId } from "#/lib/cover-image.ts";
+import { formatShortDate } from "#/lib/date-format.ts";
 import { cn } from "#/lib/utils.ts";
 
 type Contact = NonNullable<FunctionReturnType<typeof api.contact.reader.get>>;
@@ -52,17 +53,6 @@ function initials(contact: Pick<Contact, "address" | "name">) {
 		.map((part) => part[0])
 		.join("")
 		.toUpperCase();
-}
-
-function formatListDate(timestamp: number) {
-	const date = new Date(timestamp);
-	const today = new Date();
-
-	return new Intl.DateTimeFormat(undefined, {
-		month: "short",
-		day: "numeric",
-		...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
-	}).format(date);
 }
 
 function formatBadgeDate(timestamp: number) {
@@ -138,7 +128,7 @@ export function ContactList({
 									{contactLabel(contact)}
 								</p>
 								<time className="shrink-0 text-xs text-muted-foreground">
-									{formatListDate(contact.lastSeenAt)}
+									{formatShortDate(contact.lastSeenAt)}
 								</time>
 							</div>
 							{contact.name && (
@@ -326,7 +316,7 @@ export function ContactView({
 											)}
 										</p>
 										<time className="shrink-0 text-muted-foreground">
-											{formatListDate(message.receivedAt)}
+											{formatShortDate(message.receivedAt)}
 										</time>
 									</Link>
 								);

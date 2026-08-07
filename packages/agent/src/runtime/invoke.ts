@@ -1,10 +1,11 @@
-import type { LanguageModel } from "ai";
+import type { LanguageModel, TextStreamPart, ToolSet } from "ai";
 import { createMerimoarAgent } from "../agent";
 import {
 	AGENT_RUN_SHUTDOWN,
 	type AgentContext,
 	type AgentRuntimeAdapter,
 	type ClaimedRun,
+	type CustomToolDefinition,
 } from "../types";
 import { CoalescedTextWriter } from "./coalesced-text-writer";
 import {
@@ -23,15 +24,7 @@ export async function invokeAgentRun(input: {
 	executionTimeoutMs?: number;
 	abortSignal?: AbortSignal;
 }) {
-	const executionTimeoutMs =
-		input.executionTimeoutMs ?? DEFAULT_EXECUTION_TIMEOUT_MS;
-	if (
-		!Number.isInteger(executionTimeoutMs) ||
-		executionTimeoutMs < 1 ||
-		executionTimeoutMs > 60 * 60_000
-	) {
-		throw new Error("Agent execution timeout must be 1 ms to 1 hour.");
-	}
+	const executionTimeoutMs = resolveExecutionTimeout(input.executionTimeoutMs);
 
 	const textWriters = new Map<string, CoalescedTextWriter>();
 	const flushPendingText = async () => {
@@ -174,53 +167,17 @@ export async function invokeAgentRun(input: {
 			abortSignal: abortController.signal,
 		});
 
-		for await (const part of result.stream) {
-			switch (part.type) {
-				case "text-start": {
-					textWriters.set(
-						part.id,
-						new CoalescedTextWriter(
-							(body) => input.runtime.startAgentMessage(body),
-							(messageItemId, body) =>
-								input.runtime.updateAgentMessage(messageItemId, body),
-						),
-					);
-					break;
-				}
-				case "text-delta":
-					textWriters.get(part.id)?.append(part.text);
-					break;
-				case "text-end": {
-					await textWriters.get(part.id)?.finish();
-					textWriters.delete(part.id);
-					break;
-				}
-				case "tool-call":
-					await recordToolStart(part);
-					break;
-				case "tool-approval-request":
-					await recordToolStart(part.toolCall);
-					await flushPendingText();
-					const customTool = customToolsByName.get(part.toolCall.toolName);
-					await input.runtime.recordToolApprovalRequest({
-						toolCallId: part.toolCall.toolCallId,
-						approvalId: part.approvalId,
-						request: customTool
-							? `Approve using "${customTool.name}"?`
-							: `Approve ${describeToolCall(part.toolCall.toolName).toLocaleLowerCase()}?`,
-						...(part.signature ? { signature: part.signature } : {}),
-					});
-					break;
-				case "error":
-					throw part.error;
-				case "abort":
-					throw (
-						abortReason ??
-						abortController.signal.reason ??
-						new Error(part.reason || "Agent run aborted")
-					);
-			}
-		}
+		await persistAgentStream(result.stream, {
+			runtime: input.runtime,
+			textWriters,
+			customToolsByName,
+			flushPendingText,
+			recordToolStart,
+			getAbortReason: (streamReason) =>
+				abortReason ??
+				abortController.signal.reason ??
+				new Error(streamReason || "Agent run aborted"),
+		});
 		await finishPendingText();
 
 		const usage = await result.usage;
@@ -236,33 +193,131 @@ export async function invokeAgentRun(input: {
 				: { totalTokens: usage.totalTokens }),
 		});
 	} catch (error) {
-		await Promise.allSettled([finishPendingText()]);
-		if (abortReason === AGENT_RUN_SHUTDOWN) return;
-		if (taskStatusSelected) {
-			const [finalization] = await Promise.allSettled([
-				input.runtime.finishRun(),
-			]);
-			if (finalization.status === "fulfilled") return;
-			throwSanitizedBoundaryError(finalization.reason);
-		}
-		const [failure] = await Promise.allSettled([
-			input.runtime.failRun(
-				"Agent execution failed.",
-				getDiagnosticErrorMessage(abortReason ?? error),
-			),
-		]);
-		if (
-			failure.status === "fulfilled" &&
-			failure.value === "finalized_selected_status"
-		) {
-			return;
-		}
-		throwSanitizedBoundaryError(abortReason ?? error);
+		await handleRunFailure({
+			error,
+			abortReason,
+			taskStatusSelected,
+			runtime: input.runtime,
+			finishPendingText,
+		});
 	} finally {
 		clearInterval(leaseTimer);
 		clearTimeout(deadlineTimer);
 		input.abortSignal?.removeEventListener("abort", abortFromCaller);
 	}
+}
+
+function resolveExecutionTimeout(executionTimeoutMs?: number) {
+	const resolvedTimeout = executionTimeoutMs ?? DEFAULT_EXECUTION_TIMEOUT_MS;
+	if (
+		!Number.isInteger(resolvedTimeout) ||
+		resolvedTimeout < 1 ||
+		resolvedTimeout > 60 * 60_000
+	) {
+		throw new Error("Agent execution timeout must be 1 ms to 1 hour.");
+	}
+	return resolvedTimeout;
+}
+
+type AgentStreamPersistence = {
+	runtime: AgentRuntimeAdapter;
+	textWriters: Map<string, CoalescedTextWriter>;
+	customToolsByName: Map<string, CustomToolDefinition>;
+	flushPendingText(): Promise<void>;
+	recordToolStart(toolCall: {
+		toolCallId: string;
+		toolName: string;
+		input: unknown;
+	}): Promise<void>;
+	getAbortReason(streamReason: string | undefined): unknown;
+};
+
+async function persistAgentStream<TOOLS extends ToolSet>(
+	stream: AsyncIterable<TextStreamPart<TOOLS>>,
+	persistence: AgentStreamPersistence,
+) {
+	const {
+		runtime,
+		textWriters,
+		customToolsByName,
+		flushPendingText,
+		recordToolStart,
+		getAbortReason,
+	} = persistence;
+	for await (const part of stream) {
+		switch (part.type) {
+			case "text-start":
+				textWriters.set(
+					part.id,
+					new CoalescedTextWriter(
+						(body) => runtime.startAgentMessage(body),
+						(messageItemId, body) =>
+							runtime.updateAgentMessage(messageItemId, body),
+					),
+				);
+				break;
+			case "text-delta":
+				textWriters.get(part.id)?.append(part.text);
+				break;
+			case "text-end":
+				await textWriters.get(part.id)?.finish();
+				textWriters.delete(part.id);
+				break;
+			case "tool-call":
+				await recordToolStart(part);
+				break;
+			case "tool-approval-request": {
+				await recordToolStart(part.toolCall);
+				await flushPendingText();
+				const customTool = customToolsByName.get(part.toolCall.toolName);
+				await runtime.recordToolApprovalRequest({
+					toolCallId: part.toolCall.toolCallId,
+					approvalId: part.approvalId,
+					request: customTool
+						? `Approve using "${customTool.name}"?`
+						: `Approve ${describeToolCall(part.toolCall.toolName).toLocaleLowerCase()}?`,
+					...(part.signature ? { signature: part.signature } : {}),
+				});
+				break;
+			}
+			case "error":
+				throw part.error;
+			case "abort":
+				throw getAbortReason(part.reason);
+		}
+	}
+}
+
+async function handleRunFailure(input: {
+	error: unknown;
+	abortReason: unknown;
+	taskStatusSelected: boolean;
+	runtime: AgentRuntimeAdapter;
+	finishPendingText(): Promise<void>;
+}) {
+	await Promise.allSettled([input.finishPendingText()]);
+	if (input.abortReason === AGENT_RUN_SHUTDOWN) return;
+	if (input.taskStatusSelected) {
+		const [finalization] = await Promise.allSettled([
+			input.runtime.finishRun(),
+		]);
+		if (finalization.status === "fulfilled") return;
+		throwSanitizedBoundaryError(finalization.reason);
+	}
+	const error = input.abortReason ?? input.error;
+	const [failure] = await Promise.allSettled([
+		input.runtime.failRun(
+			"Agent execution failed.",
+			getDiagnosticErrorMessage(error),
+		),
+	]);
+	if (
+		failure.status === "fulfilled" &&
+		failure.value === "finalized_selected_status"
+	) {
+		return;
+	}
+	throwSanitizedBoundaryError(error);
 }
 
 function getLatestSteeringSequence(

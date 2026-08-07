@@ -103,11 +103,17 @@ export async function appendCaseChangeEvent(
 	);
 }
 
-export async function appendInboundEmailCaseEvent(
+async function appendEmailCaseEvent(
 	ctx: MutationCtx,
 	caseRecord: Doc<"cases">,
 	emailMessageId: Id<"emailMessages">,
 	occurredAt: number,
+	event:
+		| { type: "inbound_email"; createdByMemberId: null }
+		| {
+				type: "outbound_email";
+				createdByMemberId: Id<"organizationMembers">;
+		  },
 ) {
 	const existingEvent = await ctx.db
 		.query("caseEvents")
@@ -122,14 +128,31 @@ export async function appendInboundEmailCaseEvent(
 	const createdAt = Date.now();
 	const eventId = await ctx.db.insert("caseEvents", {
 		caseId: caseRecord._id,
-		type: "inbound_email",
+		...event,
 		emailMessageId,
 		occurredAt,
 		createdAt,
-		createdByMemberId: null,
 	});
 	await updateCaseActivity(ctx, caseRecord, occurredAt, createdAt);
 	return eventId;
+}
+
+export async function appendInboundEmailCaseEvent(
+	ctx: MutationCtx,
+	caseRecord: Doc<"cases">,
+	emailMessageId: Id<"emailMessages">,
+	occurredAt: number,
+) {
+	return await appendEmailCaseEvent(
+		ctx,
+		caseRecord,
+		emailMessageId,
+		occurredAt,
+		{
+			type: "inbound_email",
+			createdByMemberId: null,
+		},
+	);
 }
 
 export async function appendOutboundEmailCaseEvent(
@@ -139,25 +162,14 @@ export async function appendOutboundEmailCaseEvent(
 	actorMemberId: Id<"organizationMembers">,
 	occurredAt: number,
 ) {
-	const existingEvent = await ctx.db
-		.query("caseEvents")
-		.withIndex("by_case_id_and_email_message_id", (index) =>
-			index.eq("caseId", caseRecord._id).eq("emailMessageId", emailMessageId),
-		)
-		.unique();
-	if (existingEvent) {
-		return existingEvent._id;
-	}
-
-	const createdAt = Date.now();
-	const eventId = await ctx.db.insert("caseEvents", {
-		caseId: caseRecord._id,
-		type: "outbound_email",
+	return await appendEmailCaseEvent(
+		ctx,
+		caseRecord,
 		emailMessageId,
 		occurredAt,
-		createdAt,
-		createdByMemberId: actorMemberId,
-	});
-	await updateCaseActivity(ctx, caseRecord, occurredAt, createdAt);
-	return eventId;
+		{
+			type: "outbound_email",
+			createdByMemberId: actorMemberId,
+		},
+	);
 }

@@ -7,7 +7,7 @@ import {
 	type CustomToolParameter,
 } from "@merimoar/convex/agent/custom-tool-model";
 
-export const CUSTOM_TOOL_TIMEOUT_MS = 10_000;
+const CUSTOM_TOOL_TIMEOUT_MS = 10_000;
 export const CUSTOM_TOOL_MAX_RESPONSE_BYTES = 65_536;
 
 export type CustomToolRequestConfiguration = {

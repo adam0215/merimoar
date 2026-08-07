@@ -29,13 +29,13 @@ async function findThreadByInternetMessageId(
 	return message ? await ctx.db.get(message.threadId) : null;
 }
 
-async function findThreadByExternalThreadId(
+async function findExternalThreadReference(
 	ctx: MutationCtx,
 	inboxId: Id<"emailInboxes">,
 	integrationId: Id<"emailIntegrations">,
 	externalThreadId: string,
 ) {
-	const reference = await ctx.db
+	return await ctx.db
 		.query("emailThreadExternalReferences")
 		.withIndex(
 			"by_inbox_id_and_integration_id_and_external_thread_id",
@@ -46,6 +46,20 @@ async function findThreadByExternalThreadId(
 					.eq("externalThreadId", externalThreadId),
 		)
 		.unique();
+}
+
+async function findThreadByExternalThreadId(
+	ctx: MutationCtx,
+	inboxId: Id<"emailInboxes">,
+	integrationId: Id<"emailIntegrations">,
+	externalThreadId: string,
+) {
+	const reference = await findExternalThreadReference(
+		ctx,
+		inboxId,
+		integrationId,
+		externalThreadId,
+	);
 	return reference ? await ctx.db.get(reference.threadId) : null;
 }
 
@@ -294,17 +308,12 @@ export const storeInboundEmail = internalMutation({
 			const externalThreadId = args.email.externalThreadId;
 			const inboxId = event.inboxId;
 			const integrationId = event.integrationId;
-			const existingReference = await ctx.db
-				.query("emailThreadExternalReferences")
-				.withIndex(
-					"by_inbox_id_and_integration_id_and_external_thread_id",
-					(query) =>
-						query
-							.eq("inboxId", inboxId)
-							.eq("integrationId", integrationId)
-							.eq("externalThreadId", externalThreadId),
-				)
-				.unique();
+			const existingReference = await findExternalThreadReference(
+				ctx,
+				inboxId,
+				integrationId,
+				externalThreadId,
+			);
 			if (!existingReference) {
 				await ctx.db.insert("emailThreadExternalReferences", {
 					threadId: thread._id,

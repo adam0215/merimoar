@@ -1,3 +1,4 @@
+// fallow-ignore-file circular-dependency -- import.meta.glob creates false-positive cycles through test files.
 /// <reference types="vite/client" />
 
 import { register as registerActionCacheTest } from "@convex-dev/action-cache/test";

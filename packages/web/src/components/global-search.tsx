@@ -23,6 +23,7 @@ import {
 } from "#/components/ui/command.tsx";
 import { fieldSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { EntityIcon } from "#/lib/entity-icons.tsx";
+import { getSearchResultDescription } from "#/lib/search-result-description.ts";
 import { cn } from "#/lib/utils.ts";
 
 type GlobalSearchResult = FunctionReturnType<
@@ -170,7 +171,7 @@ export function GlobalSearch() {
 												{result.label}
 											</span>
 											<span className="block truncate text-xs text-muted-foreground">
-												{getResultDescription(result)}
+												{getSearchResultDescription(result)}
 											</span>
 										</span>
 									</CommandItem>
@@ -208,16 +209,4 @@ function SearchResultVisual({ result }: { result: GlobalSearchResult }) {
 			)}
 		</span>
 	);
-}
-
-function getResultDescription(result: GlobalSearchResult) {
-	if (result.target.kind === "contact") {
-		return result.label === result.identifier
-			? result.descriptor
-			: result.identifier;
-	}
-
-	return result.target.kind === "entity"
-		? `${result.descriptor} · ${result.identifier}`
-		: `${result.identifier} · ${result.descriptor}`;
 }

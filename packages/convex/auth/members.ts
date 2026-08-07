@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { getWorkosUser } from "#/workos";
+import { resolveActorAccess } from "#/auth/access";
 import { query } from "../_generated/server";
 
 const accessStatusValidator = v.union(
@@ -14,41 +14,10 @@ export const currentAccess = query({
 	args: {},
 	returns: accessStatusValidator,
 	handler: async (ctx) => {
-		const identity = await ctx.auth.getUserIdentity();
-		if (!identity) {
-			return "unauthenticated";
-		}
-		const workosOrganizationId = identity.org_id;
-		if (typeof workosOrganizationId !== "string" || !workosOrganizationId) {
-			return "not_provisioned";
-		}
-		const organization = await ctx.db
-			.query("organizations")
-			.withIndex("by_workos_organization_id", (index) =>
-				index.eq("workosOrganizationId", workosOrganizationId),
-			)
-			.unique();
-		if (!organization || !organization.active) {
-			return "not_provisioned";
-		}
-
-		const [member, user] = await Promise.all([
-			ctx.db
-				.query("organizationMembers")
-				.withIndex("by_organization_id_and_workos_user_id", (index) =>
-					index
-						.eq("organizationId", organization._id)
-						.eq("workosUserId", identity.subject),
-				)
-				.unique(),
-			getWorkosUser(ctx, identity.subject),
-		]);
-		if (!member || !user) {
-			return "not_synced";
-		}
-		if (!member.active) {
-			return "inactive";
-		}
-		return "active";
+		const access = await resolveActorAccess(ctx);
+		return access.status === "organization_required" ||
+			access.status === "organization_not_provisioned"
+			? "not_provisioned"
+			: access.status;
 	},
 });

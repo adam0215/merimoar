@@ -1,0 +1,59 @@
+{
+	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+	"entry": ["packages/web/server/plugins/agent-subscriber.ts"],
+	"ignorePatterns": ["packages/convex/_generated/**"],
+	"ignoreExports": [
+		{
+			"file": "packages/web/src/components/canvasui/RetroDither.tsx",
+			"exports": ["*"]
+		},
+		{
+			"file": "packages/web/src/components/ui/**",
+			"exports": ["*"]
+		},
+		{
+			"file": "packages/convex/agent/reader.ts",
+			"exports": ["get"]
+		},
+		{
+			"file": "packages/convex/agent/tools.ts",
+			"exports": ["addCaseRelation", "search"]
+		},
+		{
+			"file": "packages/convex/case/mutations.ts",
+			"exports": ["addCaseRelation", "create", "update"]
+		},
+		{
+			"file": "packages/convex/case/reader.ts",
+			"exports": ["get", "list"]
+		},
+		{
+			"file": "packages/convex/contact/reader.ts",
+			"exports": ["get", "list"]
+		},
+		{
+			"file": "packages/convex/email/inboxes.ts",
+			"exports": ["create", "update"]
+		},
+		{
+			"file": "packages/convex/globalSearch/reader.ts",
+			"exports": ["search"]
+		},
+		{
+			"file": "packages/convex/organization/settings.ts",
+			"exports": ["get"]
+		}
+	],
+	"duplicates": {
+		"ignore": [
+			"packages/web/src/components/canvasui/RetroDither.tsx",
+			"packages/web/src/components/ui/**"
+		]
+	},
+	"health": {
+		"ignore": [
+			"packages/web/src/components/canvasui/RetroDither.tsx",
+			"packages/web/src/components/ui/**"
+		]
+	}
+}
