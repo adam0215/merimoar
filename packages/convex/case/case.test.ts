@@ -702,8 +702,244 @@ describe("cases", () => {
 		});
 	});
 
+	it("deletes the complete case-owned graph while preserving shared records", async () => {
+		const {
+			actor,
+			actorMemberId,
+			base,
+			contactId,
+			entityId,
+			organizationId,
+			ownerMemberId,
+			relatedCaseId,
+		} = await createFixture();
+		const caseId = await actor.mutation(api.case.mutations.create, {
+			title: "Case to delete",
+			description: "Delete the case-owned graph.",
+			ownerMemberId,
+			dueAt: null,
+			initialEventBody: "This event should be deleted.",
+			contactIds: [contactId],
+			entityIds: [entityId],
+			relatedCaseIds: [relatedCaseId],
+		});
+
+		const graph = await base.run(async (ctx) => {
+			const inboxId = await ctx.db.insert("emailInboxes", {
+				organizationId,
+				displayName: "Cases",
+				address: "cases@example.com",
+				status: "active",
+				unreadThreadCount: 0,
+			});
+			const threadId = await ctx.db.insert("emailThreads", {
+				organizationId,
+				inboxId,
+				lastActivityAt: 100,
+			});
+			const emailRelationId = await ctx.db.insert("caseEmailThreadRelations", {
+				caseId,
+				threadId,
+				startedAt: 100,
+				endedAt: null,
+				linkedByMemberId: actorMemberId,
+				unlinkedByMemberId: null,
+			});
+			const embeddingId = await ctx.db.insert("caseEmbeddings", {
+				caseId,
+				organizationId,
+				embedding: TEST_CASE_EMBEDDING,
+			});
+			const taskId = await ctx.db.insert("agentTasks", {
+				organizationId,
+				anchorCaseId: caseId,
+				agentKey: "agent-v1",
+				requestedAt: 100,
+				requestedBy: "member",
+				requestedByMemberId: actorMemberId,
+				status: "completed",
+				result: "Done",
+				ownershipReleasedAt: 200,
+				activeRunIds: [],
+				activeApprovalIds: [],
+			});
+			const turnId = await ctx.db.insert("agentTurns", {
+				taskId,
+				sequence: 0,
+				requestedAt: 100,
+				requestedBy: "member",
+				requestedByMemberId: actorMemberId,
+			});
+			const runId = await ctx.db.insert("agentRuns", {
+				turnId,
+				requestedAt: 100,
+				attemptCount: 1,
+				leaseGeneration: 1,
+				status: "completed",
+				endedAt: 200,
+			});
+			const itemId = await ctx.db.insert("agentItems", {
+				turnId,
+				sequence: 0,
+				createdAt: 100,
+				kind: "agent_message",
+				runId,
+				body: "Completed work",
+			});
+			const integrationId = await ctx.db.insert("customIntegrations", {
+				organizationId,
+				name: "Case test integration",
+				baseUrl: "https://example.com/",
+				updatedAt: 100,
+			});
+			const customToolId = await ctx.db.insert("agentCustomTools", {
+				agentKey: "agent-v1",
+				integrationId,
+				name: "Case test tool",
+				normalizedName: "case_test_tool",
+				description: "Tests case deletion.",
+				path: "case-test",
+				parameters: [],
+				requiresApproval: false,
+				testedConfigurationHash: "hash",
+				updatedAt: 100,
+			});
+			const customToolDefinitionId = await ctx.db.insert(
+				"agentRunCustomToolDefinitions",
+				{
+					runId,
+					toolId: customToolId,
+					normalizedName: "case_test_tool",
+					description: "Tests case deletion.",
+					parameters: [],
+					requiresApproval: false,
+					baseUrl: "https://example.com/",
+					path: "case-test",
+					configurationHash: "hash",
+				},
+			);
+			const caseRecord = await ctx.db.get(caseId);
+			if (!caseRecord?.globalSearchEntryId) {
+				throw new Error("Expected case search entry");
+			}
+
+			return {
+				customToolDefinitionId,
+				customToolId,
+				emailRelationId,
+				embeddingId,
+				globalSearchEntryId: caseRecord.globalSearchEntryId,
+				integrationId,
+				itemId,
+				runId,
+				taskId,
+				threadId,
+				turnId,
+			};
+		});
+
+		await actor.mutation(api.case.mutations.remove, { caseId });
+
+		const state = await base.run(async (ctx) => ({
+			caseRecord: await ctx.db.get(caseId),
+			contact: await ctx.db.get(contactId),
+			customTool: await ctx.db.get(graph.customToolId),
+			customToolDefinition: await ctx.db.get(graph.customToolDefinitionId),
+			emailRelation: await ctx.db.get(graph.emailRelationId),
+			embedding: await ctx.db.get(graph.embeddingId),
+			entity: await ctx.db.get(entityId),
+			globalSearchEntry: await ctx.db.get(graph.globalSearchEntryId),
+			integration: await ctx.db.get(graph.integrationId),
+			item: await ctx.db.get(graph.itemId),
+			relatedCase: await ctx.db.get(relatedCaseId),
+			run: await ctx.db.get(graph.runId),
+			task: await ctx.db.get(graph.taskId),
+			thread: await ctx.db.get(graph.threadId),
+			turn: await ctx.db.get(graph.turnId),
+			caseEvents: await ctx.db
+				.query("caseEvents")
+				.withIndex("by_case_id_and_occurred_at", (index) =>
+					index.eq("caseId", caseId),
+				)
+				.collect(),
+			contactRelations: await ctx.db
+				.query("caseContactRelations")
+				.withIndex("by_case_id_and_ended_at", (index) =>
+					index.eq("caseId", caseId),
+				)
+				.collect(),
+			entityRelations: await ctx.db
+				.query("caseEntityRelations")
+				.withIndex("by_case_id_and_ended_at", (index) =>
+					index.eq("caseId", caseId),
+				)
+				.collect(),
+			caseRelationsAsParent: await ctx.db
+				.query("caseCaseRelations")
+				.withIndex("by_case_id_and_ended_at", (index) =>
+					index.eq("caseId", caseId),
+				)
+				.collect(),
+			caseRelationsAsRelated: await ctx.db
+				.query("caseCaseRelations")
+				.withIndex("by_related_case_id_and_ended_at", (index) =>
+					index.eq("relatedCaseId", caseId),
+				)
+				.collect(),
+		}));
+
+		expect(state).toMatchObject({
+			caseRecord: null,
+			customToolDefinition: null,
+			emailRelation: null,
+			embedding: null,
+			globalSearchEntry: null,
+			item: null,
+			run: null,
+			task: null,
+			turn: null,
+			caseEvents: [],
+			contactRelations: [],
+			entityRelations: [],
+			caseRelationsAsParent: [],
+			caseRelationsAsRelated: [],
+		});
+		expect(state.contact).not.toBeNull();
+		expect(state.customTool).not.toBeNull();
+		expect(state.entity).not.toBeNull();
+		expect(state.integration).not.toBeNull();
+		expect(state.relatedCase).not.toBeNull();
+		expect(state.thread).not.toBeNull();
+	});
+
+	it("does not delete a case while an agent owns it", async () => {
+		const { actor, actorMemberId, base, organizationId, relatedCaseId } =
+			await createFixture();
+		await base.run(async (ctx) => {
+			await ctx.db.insert("agentTasks", {
+				organizationId,
+				anchorCaseId: relatedCaseId,
+				agentKey: "agent-v1",
+				requestedAt: 100,
+				requestedBy: "member",
+				requestedByMemberId: actorMemberId,
+				status: "active",
+				ownershipReleasedAt: null,
+				activeRunIds: [],
+				activeApprovalIds: [],
+			});
+		});
+
+		await expect(
+			actor.mutation(api.case.mutations.remove, { caseId: relatedCaseId }),
+		).rejects.toThrow("Agent is working on this case");
+		expect(
+			await base.run(async (ctx) => ctx.db.get(relatedCaseId)),
+		).not.toBeNull();
+	});
+
 	it("rejects unauthenticated calls", async () => {
-		const { base, ownerMemberId } = await createFixture();
+		const { base, ownerMemberId, relatedCaseId } = await createFixture();
 		await expect(
 			base.mutation(api.case.mutations.create, {
 				title: "Unauthenticated",
@@ -718,6 +954,9 @@ describe("cases", () => {
 		).rejects.toThrow("Sign in");
 		await expect(
 			base.query(api.case.reader.getCreateOptions, {}),
+		).rejects.toThrow("Sign in");
+		await expect(
+			base.mutation(api.case.mutations.remove, { caseId: relatedCaseId }),
 		).rejects.toThrow("Sign in");
 	});
 
@@ -786,6 +1025,10 @@ describe("cases", () => {
 				status: "open",
 			}),
 		).rejects.toThrow("could not be found");
+		await expect(
+			otherActor.mutation(api.case.mutations.remove, { caseId }),
+		).rejects.toThrow("could not be found");
+		expect(await actor.query(api.case.reader.get, { caseId })).not.toBeNull();
 	});
 
 	it("normalizes inline events and attributes them to the actor", async () => {

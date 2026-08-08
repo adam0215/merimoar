@@ -6,6 +6,7 @@ import {
 	requireHumanCaseWriteAccess,
 	validateCaseOwner,
 } from "#/case/access";
+import { deleteCaseAndDependents } from "#/case/deletion";
 import {
 	getActiveCaseRelationForEmailThread,
 	linkEmailThreadToCase,
@@ -277,6 +278,24 @@ export const update = mutation({
 				},
 			});
 		}
+		return null;
+	},
+});
+
+export const remove = mutation({
+	args: {
+		caseId: v.id("cases"),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const actor = await requireActor(ctx);
+		const caseRecord = await requireHumanWritableCase(
+			ctx,
+			actor.organization._id,
+			args.caseId,
+		);
+
+		await deleteCaseAndDependents(ctx, caseRecord);
 		return null;
 	},
 });

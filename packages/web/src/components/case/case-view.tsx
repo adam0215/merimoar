@@ -12,10 +12,12 @@ export function CaseView({
 	detail,
 	createOptions,
 	closeButton,
+	onCaseDeleted,
 }: {
 	detail: CaseDetail | null | undefined;
 	createOptions: CaseCreateOptions | undefined;
 	closeButton: React.ReactNode;
+	onCaseDeleted: () => void;
 }) {
 	if (detail === undefined) {
 		return <CaseViewSkeleton />;
@@ -38,13 +40,12 @@ export function CaseView({
 			<div className="relative h-full">
 				<div className="h-full overflow-y-auto overscroll-none">
 					<div className="relative mx-auto w-full max-w-6xl p-6 pb-28">
-						<div className="mb-2 hidden h-8 items-center justify-end sm:flex">
-							{closeButton}
-						</div>
 						<div aria-readonly={detail.activeAgentTask ? true : undefined}>
 							<CaseHeader
 								detail={detail}
 								members={createOptions?.members ?? []}
+								closeButton={closeButton}
+								onDeleted={onCaseDeleted}
 							/>
 							<CaseRelationships detail={detail} />
 							<CaseEmailThreads detail={detail} />

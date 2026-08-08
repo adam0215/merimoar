@@ -190,6 +190,11 @@ function CasesPage() {
 								detail={selectedDetail}
 								createOptions={createOptions}
 								closeButton={closeCaseButton}
+								onCaseDeleted={() => {
+									void navigate({
+										search: { view: selectedView },
+									});
+								}}
 							/>
 						</div>
 					</div>

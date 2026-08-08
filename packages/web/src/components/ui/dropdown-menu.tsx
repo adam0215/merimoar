@@ -3,6 +3,7 @@
 import { Menu as MenuPrimitive } from "@base-ui/react/menu";
 import { IconCheck, IconChevronRight } from "@tabler/icons-react";
 import type * as React from "react";
+import { floatingPopupSurfaceClassName } from "#/components/ui/floating-popup-surface.ts";
 import { cn } from "#/lib/utils.ts";
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
@@ -44,7 +45,8 @@ function DropdownMenuContent({
 				<MenuPrimitive.Popup
 					data-slot="dropdown-menu-content"
 					className={cn(
-						"z-50 max-h-(--available-height) w-(--anchor-width) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-2xl p-1 text-popover-foreground shadow-2xl ring-1 ring-foreground/5 duration-100 outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 dark:ring-foreground/10 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95 animate-none! relative bg-popover/70 before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:rounded-[inherit] before:backdrop-blur-2xl before:backdrop-saturate-150 **:data-[slot$=-item]:focus:bg-muted **:data-[slot$=-item]:focus:text-foreground **:data-[slot$=-item]:data-highlighted:bg-muted **:data-[slot$=-item]:data-highlighted:text-foreground **:data-[slot$=-separator]:bg-border **:data-[slot$=-trigger]:focus:bg-muted **:data-[slot$=-trigger]:focus:text-foreground **:data-[slot$=-trigger]:aria-expanded:bg-muted! **:data-[slot$=-trigger]:aria-expanded:text-foreground! **:data-[variant=destructive]:focus:bg-muted! **:data-[variant=destructive]:text-destructive!",
+						"z-50 max-h-(--available-height) w-(--anchor-width) min-w-48 origin-(--transform-origin) overflow-x-hidden overflow-y-auto p-1 duration-100 outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95 animate-none! **:data-[slot$=-item]:focus:bg-muted **:data-[slot$=-item]:focus:text-foreground **:data-[slot$=-item]:data-highlighted:bg-muted **:data-[slot$=-item]:data-highlighted:text-foreground **:data-[slot$=-separator]:bg-border **:data-[slot$=-trigger]:focus:bg-muted **:data-[slot$=-trigger]:focus:text-foreground **:data-[slot$=-trigger]:aria-expanded:bg-muted! **:data-[slot$=-trigger]:aria-expanded:text-foreground!",
+						floatingPopupSurfaceClassName,
 						className,
 					)}
 					{...props}
@@ -93,7 +95,7 @@ function DropdownMenuItem({
 			data-inset={inset}
 			data-variant={variant}
 			className={cn(
-				"group/dropdown-menu-item relative flex cursor-default items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-hidden select-none focus:bg-muted focus:text-foreground focus:**:text-foreground data-inset:pl-9.5 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-muted data-[variant=destructive]:focus:text-destructive data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-[variant=destructive]:*:[svg]:text-destructive",
+				"group/dropdown-menu-item relative flex cursor-default items-center gap-2.5 rounded-xl px-3 py-2 text-sm outline-hidden select-none focus:bg-muted focus:text-foreground data-inset:pl-9.5 data-[variant=destructive]:text-destructive! data-[variant=destructive]:focus:bg-destructive/5! data-[variant=destructive]:data-highlighted:bg-destructive/5! data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
 				className,
 			)}
 			{...props}
@@ -141,7 +143,8 @@ function DropdownMenuSubContent({
 		<DropdownMenuContent
 			data-slot="dropdown-menu-sub-content"
 			className={cn(
-				"w-auto min-w-36 rounded-2xl p-1 text-popover-foreground shadow-2xl ring-1 ring-foreground/5 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 animate-none! relative bg-popover/70 before:pointer-events-none before:absolute before:inset-0 before:-z-1 before:rounded-[inherit] before:backdrop-blur-2xl before:backdrop-saturate-150 **:data-[slot$=-item]:focus:bg-muted **:data-[slot$=-item]:focus:text-foreground **:data-[slot$=-item]:data-highlighted:bg-muted **:data-[slot$=-item]:data-highlighted:text-foreground **:data-[slot$=-separator]:bg-border **:data-[slot$=-trigger]:focus:bg-muted **:data-[slot$=-trigger]:focus:text-foreground **:data-[slot$=-trigger]:aria-expanded:bg-muted! **:data-[slot$=-trigger]:aria-expanded:text-foreground! **:data-[variant=destructive]:focus:bg-muted! **:data-[variant=destructive]:text-destructive!",
+				"w-auto min-w-36 p-1 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 animate-none! **:data-[slot$=-item]:focus:bg-muted **:data-[slot$=-item]:focus:text-foreground **:data-[slot$=-item]:data-highlighted:bg-muted **:data-[slot$=-item]:data-highlighted:text-foreground **:data-[slot$=-separator]:bg-border **:data-[slot$=-trigger]:focus:bg-muted **:data-[slot$=-trigger]:focus:text-foreground **:data-[slot$=-trigger]:aria-expanded:bg-muted! **:data-[slot$=-trigger]:aria-expanded:text-foreground!",
+				floatingPopupSurfaceClassName,
 				className,
 			)}
 			align={align}

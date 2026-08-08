@@ -15,6 +15,7 @@ import {
 import { useMutation } from "convex/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as v from "valibot";
+import { CaseActionsMenu } from "#/components/case/case-actions-menu.tsx";
 import { CaseDeadlineField } from "#/components/case/case-deadline-field.tsx";
 import { CaseDescriptionEditor } from "#/components/case/case-description-editor.tsx";
 import { useCurrentCaseInteractionPolicy } from "#/components/case/case-interaction-policy.tsx";
@@ -64,11 +65,16 @@ type SaveState =
 export function CaseHeader({
 	detail,
 	members,
+	closeButton,
+	onDeleted,
 }: {
 	detail: CaseDetail;
 	members: CaseCreateOptions["members"];
+	closeButton: React.ReactNode;
+	onDeleted: () => void;
 }) {
 	const updateCase = useMutation(api.case.mutations.update);
+	const removeCase = useMutation(api.case.mutations.remove);
 	const { readOnly, readOnlyReason } = useCurrentCaseInteractionPolicy();
 	const [form, setForm] = useState(() => caseToForm(detail.case));
 	const [saveState, setSaveState] = useState<SaveState>({ kind: "saved" });
@@ -77,15 +83,9 @@ export function CaseHeader({
 	const lastQueuedSignatureRef = useRef<string | null>(null);
 	const saveChainRef = useRef(Promise.resolve());
 	const isMountedRef = useRef(true);
+	const deletionRequestedRef = useRef(false);
 
-	const validation = useMemo(
-		() =>
-			v.safeParse(editableCaseFieldsSchema, {
-				title: form.title,
-				description: form.description,
-			}),
-		[form.description, form.title],
-	);
+	const validation = useMemo(() => parseEditableCaseFields(form), [form]);
 
 	useEffect(() => {
 		latestFormRef.current = form;
@@ -109,7 +109,7 @@ export function CaseHeader({
 
 	const queueSave = useCallback(
 		(snapshot: CaseForm) => {
-			if (readOnly) return;
+			if (readOnly || deletionRequestedRef.current) return;
 			const signature = formSignature(snapshot);
 			if (signature === lastQueuedSignatureRef.current) {
 				return;
@@ -127,10 +127,7 @@ export function CaseHeader({
 					return;
 				}
 
-				const snapshotValidation = v.safeParse(editableCaseFieldsSchema, {
-					title: snapshot.title,
-					description: snapshot.description,
-				});
+				const snapshotValidation = parseEditableCaseFields(snapshot);
 				if (!snapshotValidation.success) {
 					return;
 				}
@@ -201,10 +198,7 @@ export function CaseHeader({
 		return () => {
 			isMountedRef.current = false;
 			const pendingForm = latestFormRef.current;
-			const pendingValidation = v.safeParse(editableCaseFieldsSchema, {
-				title: pendingForm.title,
-				description: pendingForm.description,
-			});
+			const pendingValidation = parseEditableCaseFields(pendingForm);
 			if (
 				!readOnly &&
 				pendingValidation.success &&
@@ -251,6 +245,28 @@ export function CaseHeader({
 		queueSave(latestFormRef.current);
 	}
 
+	async function deleteCase() {
+		deletionRequestedRef.current = true;
+		try {
+			await saveChainRef.current;
+			await removeCase({ caseId: detail.case._id });
+		} catch (error) {
+			deletionRequestedRef.current = false;
+			const pendingForm = latestFormRef.current;
+			const pendingValidation = parseEditableCaseFields(pendingForm);
+			if (
+				pendingValidation.success &&
+				!formsMatch(pendingForm, lastSavedFormRef.current)
+			) {
+				queueSave(pendingForm);
+			}
+			throw error;
+		}
+
+		showAppNotification({ title: `${detail.case.reference} deleted` });
+		onDeleted();
+	}
+
 	const titleError = !validation.success
 		? validation.issues.find((issue) => issue.path?.[0]?.key === "title")
 				?.message
@@ -261,6 +277,14 @@ export function CaseHeader({
 		: undefined;
 	return (
 		<header>
+			<div className="mb-2 hidden h-8 items-center justify-end gap-1 sm:flex">
+				<CaseActionsMenu
+					caseReference={detail.case.reference}
+					disabled={readOnly}
+					onDelete={deleteCase}
+				/>
+				{closeButton}
+			</div>
 			<div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
 				<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
 					<span className="font-medium tracking-wide">
@@ -478,6 +502,10 @@ function caseToForm(caseRecord: Doc<"cases">) {
 		dueDate: caseRecord.dueAt === null ? "" : formatDateInput(caseRecord.dueAt),
 		status: caseRecord.status,
 	};
+}
+
+function parseEditableCaseFields(form: CaseForm) {
+	return v.safeParse(editableCaseFieldsSchema, form);
 }
 
 function formsMatch(left: CaseForm, right: CaseForm) {

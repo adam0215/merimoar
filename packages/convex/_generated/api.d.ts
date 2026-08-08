@@ -27,6 +27,7 @@ import type * as auth_access from "../auth/access.js";
 import type * as auth_members from "../auth/members.js";
 import type * as case_access from "../case/access.js";
 import type * as case_agentOwnership from "../case/agentOwnership.js";
+import type * as case_deletion from "../case/deletion.js";
 import type * as case_emailRelations from "../case/emailRelations.js";
 import type * as case_embedding from "../case/embedding.js";
 import type * as case_embeddingData from "../case/embeddingData.js";
@@ -114,6 +115,7 @@ declare const fullApi: ApiFromModules<{
   "auth/members": typeof auth_members;
   "case/access": typeof case_access;
   "case/agentOwnership": typeof case_agentOwnership;
+  "case/deletion": typeof case_deletion;
   "case/emailRelations": typeof case_emailRelations;
   "case/embedding": typeof case_embedding;
   "case/embeddingData": typeof case_embeddingData;
