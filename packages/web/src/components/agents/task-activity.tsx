@@ -41,12 +41,12 @@ import {
 	MessageScrollerProvider,
 	MessageScrollerViewport,
 } from "#/components/ui/message-scroller.tsx";
+import { toast } from "#/components/ui/toast.tsx";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
-import { showAppNotification } from "#/lib/app-notifications.ts";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { formatDateTime, formatTime } from "#/lib/date-format.ts";
 import { cn } from "#/lib/utils.ts";
@@ -818,9 +818,10 @@ export function ApprovalActions({
 				})),
 			});
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Could not answer the approval",
 				description: getConvexErrorMessage(error),
+				type: "error",
 			});
 		} finally {
 			setIsAnswering(false);

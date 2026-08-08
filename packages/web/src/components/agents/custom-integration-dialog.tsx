@@ -13,7 +13,7 @@ import {
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { Label } from "#/components/ui/label.tsx";
-import { showAppNotification } from "#/lib/app-notifications.ts";
+import { toast } from "#/components/ui/toast.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 
 export function CustomIntegrationDialog({
@@ -52,7 +52,7 @@ export function CustomIntegrationDialog({
 			}
 			onSaved(integrationId);
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: integration
 					? "Integration could not be updated"
 					: "Integration could not be created",
@@ -60,6 +60,7 @@ export function CustomIntegrationDialog({
 					error,
 					"Check the values and try again.",
 				),
+				type: "error",
 			});
 		} finally {
 			setSaving(false);

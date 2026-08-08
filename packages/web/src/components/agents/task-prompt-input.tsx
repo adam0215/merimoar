@@ -5,7 +5,7 @@ import { useMutation } from "convex/react";
 import { useState } from "react";
 import type { AgentTaskStatus } from "#/components/agents/agent-types.ts";
 import { Button } from "#/components/ui/button.tsx";
-import { showAppNotification } from "#/lib/app-notifications.ts";
+import { toast } from "#/components/ui/toast.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 
 export function TaskPromptInput({
@@ -29,9 +29,10 @@ export function TaskPromptInput({
 			await sendMessage({ taskId, input });
 			setValue("");
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Could not send the message",
 				description: getConvexErrorMessage(error),
+				type: "error",
 			});
 		} finally {
 			setIsSending(false);

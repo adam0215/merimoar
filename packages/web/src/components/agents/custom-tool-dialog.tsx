@@ -34,11 +34,11 @@ import {
 	SelectValue,
 } from "#/components/ui/select.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
+import { toast } from "#/components/ui/toast.tsx";
 import {
 	saveCustomTool,
 	testCustomTool,
 } from "#/integrations/custom-tools/functions.ts";
-import { showAppNotification } from "#/lib/app-notifications.ts";
 import { CustomIntegrationDialog } from "./custom-integration-dialog.tsx";
 
 export type CustomToolConfiguration = Doc<"agentCustomTools"> & {
@@ -259,9 +259,10 @@ export function CustomToolDialog({
 			setResult({ ...tested, binding: currentTestBinding });
 		} catch (error) {
 			setResult(null);
-			showAppNotification({
+			toast.add({
 				title: "Test failed",
 				description: errorMessage(error),
+				type: "error",
 			});
 		} finally {
 			setPending(null);
@@ -288,9 +289,10 @@ export function CustomToolDialog({
 			});
 			onClose();
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Tool could not be saved",
 				description: errorMessage(error),
+				type: "error",
 			});
 		} finally {
 			setPending(null);

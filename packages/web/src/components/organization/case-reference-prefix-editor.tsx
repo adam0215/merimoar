@@ -23,7 +23,7 @@ import {
 	InputGroupAddon,
 	InputGroupInput,
 } from "#/components/ui/input-group.tsx";
-import { showAppNotification } from "#/lib/app-notifications.ts";
+import { toast } from "#/components/ui/toast.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 
 interface CaseReferencePrefixEditorProps {
@@ -83,9 +83,10 @@ export function CaseReferencePrefixEditor({
 			setConfirmationOpen(false);
 			setIsEditing(false);
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Prefix could not be updated",
 				description: getConvexErrorMessage(error, "Try again."),
+				type: "error",
 			});
 		} finally {
 			setIsSaving(false);

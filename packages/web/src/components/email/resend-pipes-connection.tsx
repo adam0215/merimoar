@@ -10,9 +10,9 @@ import {
 	CardHeader,
 	CardTitle,
 } from "#/components/ui/card.tsx";
+import { toast } from "#/components/ui/toast.tsx";
 import type { ResendPipesConnectionState } from "#/integrations/workos/resend-pipes.ts";
 import { createResendPipesAuthorization } from "#/integrations/workos/resend-pipes-functions.ts";
-import { showAppNotification } from "#/lib/app-notifications.ts";
 
 const CONNECTION_COPY: Record<
 	ResendPipesConnectionState,
@@ -52,10 +52,11 @@ export function ResendPipesConnection({
 			const { url } = await createResendPipesAuthorization();
 			window.location.assign(url);
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Resend could not be connected",
 				description:
 					error instanceof Error ? error.message : "Try again in a moment.",
+				type: "error",
 			});
 			setIsConnecting(false);
 		}

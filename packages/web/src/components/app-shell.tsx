@@ -14,7 +14,6 @@ import {
 	isAgentView,
 } from "#/components/agents/agent-navigation.ts";
 import { AgentsSidebar } from "#/components/agents/agents-sidebar.tsx";
-import { AppNotificationCenter } from "#/components/app-notification-center.tsx";
 import { GlobalSearch } from "#/components/global-search.tsx";
 import { MerimoarLogo } from "#/components/merimoar-logo.tsx";
 import { OrganizationSwitcher } from "#/components/organization-switcher.tsx";
@@ -25,6 +24,7 @@ import {
 	useSidebar,
 } from "#/components/ui/sidebar.tsx";
 import { Tabs, TabsList, TabsTrigger } from "#/components/ui/tabs.tsx";
+import { Toaster } from "#/components/ui/toast.tsx";
 import {
 	Tooltip,
 	TooltipContent,
@@ -98,7 +98,7 @@ export function AppShell({
 
 	return (
 		<SidebarProvider className="app-shell-enter pt-14">
-			<AppNotificationCenter />
+			<Toaster />
 			{isAgentsArea ? (
 				<AgentsSidebar selectedView={agentView} />
 			) : (

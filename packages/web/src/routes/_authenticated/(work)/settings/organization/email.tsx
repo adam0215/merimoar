@@ -23,9 +23,9 @@ import {
 	CardHeader,
 	CardTitle,
 } from "#/components/ui/card.tsx";
+import { toast } from "#/components/ui/toast.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
 import { refreshResendPipesConnectionState } from "#/integrations/workos/resend-pipes-functions.ts";
-import { showAppNotification } from "#/lib/app-notifications.ts";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 
 const preloadEmailSettings = createServerFn({ method: "GET" }).handler(
@@ -237,7 +237,8 @@ function FailedIngestEvents({
 		setReplayingEventId(eventId);
 		try {
 			const result = await replayFailedEvent({ inboxId, eventId });
-			showAppNotification({
+			toast.add({
+				type: result.status === "queued" ? "success" : "info",
 				title:
 					result.status === "queued"
 						? "Email queued"
@@ -246,12 +247,13 @@ function FailedIngestEvents({
 							: "Email is already being processed",
 			});
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Email could not be retried",
 				description: getConvexErrorMessage(
 					error,
 					"Try again after checking the inbox and integration.",
 				),
+				type: "error",
 			});
 		} finally {
 			setReplayingEventId(undefined);

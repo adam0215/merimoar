@@ -7,9 +7,9 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "#/components/ui/select.tsx";
+import { toast } from "#/components/ui/toast.tsx";
 import { switchActiveOrganization } from "#/integrations/workos/organization-functions.ts";
 import type { AvailableOrganization } from "#/integrations/workos/organizations.ts";
-import { showAppNotification } from "#/lib/app-notifications.ts";
 import { cn } from "#/lib/utils.ts";
 
 const ORGANIZATION_NAME_TYPOGRAPHY_CLASS_NAME =
@@ -71,10 +71,11 @@ export function OrganizationSwitcher({
 						window.location.reload();
 					})
 					.catch((error: unknown) => {
-						showAppNotification({
+						toast.add({
 							title: "Organization could not be changed",
 							description:
 								error instanceof Error ? error.message : String(error),
+							type: "error",
 						});
 						setIsSwitching(false);
 					});

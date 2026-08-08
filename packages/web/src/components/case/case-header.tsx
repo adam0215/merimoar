@@ -34,7 +34,7 @@ import {
 	SelectValue,
 } from "#/components/ui/select.tsx";
 import { Textarea } from "#/components/ui/textarea.tsx";
-import { showAppNotification } from "#/lib/app-notifications.ts";
+import { toast } from "#/components/ui/toast.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { formatShortDate } from "#/lib/date-format.ts";
 import { formatDateInput, parseDateInput } from "#/lib/date-input.ts";
@@ -182,9 +182,10 @@ export function CaseHeader({
 							message,
 						});
 					} else if (!isMountedRef.current && failedLatestSave) {
-						showAppNotification({
+						toast.add({
 							title: `${detail.case.reference} was not saved`,
 							description: message,
+							type: "error",
 						});
 					}
 				}
@@ -263,7 +264,7 @@ export function CaseHeader({
 			throw error;
 		}
 
-		showAppNotification({ title: `${detail.case.reference} deleted` });
+		toast.add({ title: `${detail.case.reference} deleted`, type: "success" });
 		onDeleted();
 	}
 

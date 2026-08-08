@@ -14,7 +14,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "#/components/ui/dialog.tsx";
-import { showAppNotification } from "#/lib/app-notifications.ts";
+import { toast } from "#/components/ui/toast.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 
 export function TakeOverTaskDialog({
@@ -36,9 +36,10 @@ export function TakeOverTaskDialog({
 		try {
 			await takeOverCase({ caseId });
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Could not take over the case",
 				description: getConvexErrorMessage(error),
+				type: "error",
 			});
 		} finally {
 			setIsTakingOver(false);

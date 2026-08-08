@@ -4,7 +4,7 @@ import { IconAlertCircle, IconLoader2, IconX } from "@tabler/icons-react";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { Button } from "#/components/ui/button.tsx";
-import { showAppNotification } from "#/lib/app-notifications.ts";
+import { toast } from "#/components/ui/toast.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { cn } from "#/lib/utils.ts";
 
@@ -40,9 +40,10 @@ export function UnlinkEmailThreadButton({
 				"The email thread could not be unlinked.",
 			);
 			setError(message);
-			showAppNotification({
+			toast.add({
 				title: "Email thread could not be unlinked",
 				description: message,
+				type: "error",
 			});
 		} finally {
 			setIsUnlinking(false);

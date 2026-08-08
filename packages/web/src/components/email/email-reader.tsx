@@ -39,12 +39,12 @@ import {
 } from "#/components/ui/collapsible.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
+import { toast } from "#/components/ui/toast.tsx";
 import {
 	Tooltip,
 	TooltipContent,
 	TooltipTrigger,
 } from "#/components/ui/tooltip.tsx";
-import { showAppNotification } from "#/lib/app-notifications.ts";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { cn } from "#/lib/utils.ts";
 
@@ -256,12 +256,13 @@ function ThreadEmailComposer({ thread }: { thread: EmailThreadDetail }) {
 			setDraftRevision(0);
 			setPendingSend(null);
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Reply could not be sent",
 				description: getConvexErrorMessage(
 					error,
 					"The email reply could not be sent.",
 				),
+				type: "error",
 			});
 		} finally {
 			setIsSending(false);
@@ -339,12 +340,13 @@ function OutboundSendFailure({
 		try {
 			await retryFailedSend({ messageId });
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Email could not be retried",
 				description: getConvexErrorMessage(
 					error,
 					"This email cannot be retried safely.",
 				),
+				type: "error",
 			});
 		} finally {
 			setIsRetrying(false);
@@ -635,12 +637,13 @@ export function ThreadView({
 				isUnread: !(thread.thread.isUnread ?? false),
 			});
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Thread could not be updated",
 				description: getConvexErrorMessage(
 					error,
 					"The email thread could not be updated.",
 				),
+				type: "error",
 			});
 		}
 	}

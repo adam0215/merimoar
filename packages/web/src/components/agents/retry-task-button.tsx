@@ -4,7 +4,7 @@ import { IconLoader, IconReload } from "@tabler/icons-react";
 import { useMutation } from "convex/react";
 import { useState } from "react";
 import { Button } from "#/components/ui/button.tsx";
-import { showAppNotification } from "#/lib/app-notifications.ts";
+import { toast } from "#/components/ui/toast.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 
 export function RetryTaskButton({ taskId }: { taskId: Id<"agentTasks"> }) {
@@ -17,9 +17,10 @@ export function RetryTaskButton({ taskId }: { taskId: Id<"agentTasks"> }) {
 		try {
 			await retryTask({ taskId });
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Could not retry the task",
 				description: getConvexErrorMessage(error),
+				type: "error",
 			});
 		} finally {
 			setIsRetrying(false);

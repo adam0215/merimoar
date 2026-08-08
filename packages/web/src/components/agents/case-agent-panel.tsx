@@ -42,7 +42,7 @@ import {
 } from "#/components/ui/dropdown-menu.tsx";
 import { Field, FieldLabel } from "#/components/ui/field.tsx";
 import { Textarea } from "#/components/ui/textarea.tsx";
-import { showAppNotification } from "#/lib/app-notifications.ts";
+import { toast } from "#/components/ui/toast.tsx";
 import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { formatShortDate } from "#/lib/date-format.ts";
 import { cn } from "#/lib/utils.ts";
@@ -307,9 +307,10 @@ function DelegateDialog({
 			await delegateCase({ caseId, input: instruction });
 			handleOpenChange(false);
 		} catch (error) {
-			showAppNotification({
+			toast.add({
 				title: "Could not delegate the case",
 				description: getConvexErrorMessage(error),
+				type: "error",
 			});
 		} finally {
 			setIsDelegating(false);
