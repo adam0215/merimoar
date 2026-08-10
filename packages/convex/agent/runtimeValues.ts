@@ -3,45 +3,27 @@ import type { AgentTaskStatusUpdate } from "#/agent/model";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 
-const MAX_PRODUCT_TEXT_LENGTH = 20_000;
-const MAX_DEBUG_TEXT_LENGTH = 40_000;
 const MAX_RUNTIME_IDENTIFIER_LENGTH = 200;
 const MIN_CLAIM_TOKEN_LENGTH = 32;
 
-export function normalizeProductText(
+export function requireProductText(
 	value: string,
 	fieldName: string,
-	maxLength = MAX_PRODUCT_TEXT_LENGTH,
+	maxLength?: number,
 ) {
-	const normalized = value.trim();
-	if (!normalized) {
+	if (!value.trim()) {
 		throw new ConvexError({
 			code: "INVALID_AGENT_RUNTIME_INPUT",
 			message: `${fieldName} is required.`,
 		});
 	}
-	if (normalized.length > maxLength) {
+	if (maxLength !== undefined && value.length > maxLength) {
 		throw new ConvexError({
 			code: "INVALID_AGENT_RUNTIME_INPUT",
 			message: `${fieldName} is too long.`,
 		});
 	}
-	return normalized;
-}
-
-export function clampDebugText(value: string) {
-	return value.slice(0, MAX_DEBUG_TEXT_LENGTH);
-}
-
-export function normalizeAgentMessageBody(value: string) {
-	const bounded = value.slice(0, MAX_PRODUCT_TEXT_LENGTH);
-	if (!bounded.trim()) {
-		throw new ConvexError({
-			code: "INVALID_AGENT_RUNTIME_INPUT",
-			message: "Agent message text is required.",
-		});
-	}
-	return bounded;
+	return value;
 }
 
 export function normalizeRuntimeIdentifier(value: string, fieldName: string) {
@@ -73,12 +55,12 @@ export function normalizeTaskStatusUpdate(
 		case "unable_to_continue":
 			return {
 				status: update.status,
-				result: normalizeProductText(update.result, "Result"),
+				result: requireProductText(update.result, "Result"),
 			};
 		case "waiting":
 			return {
 				status: "waiting",
-				reason: normalizeProductText(update.reason, "Waiting reason"),
+				reason: requireProductText(update.reason, "Waiting reason"),
 			};
 		case "waiting_for_approval":
 			return {
@@ -87,7 +69,7 @@ export function normalizeTaskStatusUpdate(
 					update.approvalId,
 					"Approval ID",
 				),
-				approvalRequest: normalizeProductText(
+				approvalRequest: requireProductText(
 					update.approvalRequest,
 					"Approval request",
 				),

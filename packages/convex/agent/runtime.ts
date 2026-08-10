@@ -1,8 +1,10 @@
+import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 import {
 	requireAgentRuntimeSecret,
 	requireClaimedAgentRun,
 } from "#/agent/access";
+import { EMAIL_TOOL_KEY, isBuiltInToolActive } from "#/agent/builtInTools";
 import {
 	agentRunBaseFields,
 	agentRunUsageValidator,
@@ -10,13 +12,11 @@ import {
 } from "#/agent/model";
 import { finalizeClaimedRun } from "#/agent/runFinalization";
 import {
-	clampDebugText,
 	nextItemSequence,
-	normalizeAgentMessageBody,
 	normalizeClaimToken,
-	normalizeProductText,
 	normalizeRuntimeIdentifier,
 	normalizeTaskStatusUpdate,
+	requireProductText,
 	requireRunToolItem,
 	taskStatusUpdatesEqual,
 } from "#/agent/runtimeValues";
@@ -28,8 +28,9 @@ import {
 	terminalizeAgentTask,
 } from "#/agent/tasks";
 import {
-	loadRuntimeTranscript,
-	runtimeTranscriptValidator,
+	projectTranscriptItem,
+	runtimeTranscriptPageValidator,
+	transcriptItemPageValidator,
 } from "#/agent/transcript";
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
@@ -285,8 +286,9 @@ export const getTranscript = mutation({
 		runtimeSecret: v.string(),
 		runId: v.id("agentRuns"),
 		claimToken: v.string(),
+		paginationOpts: paginationOptsValidator,
 	},
-	returns: runtimeTranscriptValidator,
+	returns: runtimeTranscriptPageValidator,
 	handler: async (ctx, args) => {
 		requireAgentRuntimeSecret(args.runtimeSecret);
 		const { run, task } = await requireClaimedAgentRun(
@@ -294,7 +296,58 @@ export const getTranscript = mutation({
 			args,
 			"current_run",
 		);
-		return await loadRuntimeTranscript(ctx, { run, task });
+		const turns = await ctx.db
+			.query("agentTurns")
+			.withIndex("by_task_id_and_sequence", (index) =>
+				index.eq("taskId", task._id),
+			)
+			.order("asc")
+			.paginate(args.paginationOpts);
+		return {
+			taskId: task._id,
+			...(run.selectedStatusItemId
+				? { selectedStatusItemId: run.selectedStatusItemId }
+				: {}),
+			turns: {
+				...turns,
+				page: turns.page.map((turn) => ({
+					turnId: turn._id,
+					sequence: turn.sequence,
+				})),
+			},
+		};
+	},
+});
+
+export const getTranscriptItems = mutation({
+	args: {
+		runtimeSecret: v.string(),
+		runId: v.id("agentRuns"),
+		claimToken: v.string(),
+		turnId: v.id("agentTurns"),
+		paginationOpts: paginationOptsValidator,
+	},
+	returns: transcriptItemPageValidator,
+	handler: async (ctx, args) => {
+		requireAgentRuntimeSecret(args.runtimeSecret);
+		const { task } = await requireClaimedAgentRun(ctx, args, "current_run");
+		const turn = await ctx.db.get(args.turnId);
+		if (!turn || turn.taskId !== task._id) {
+			throw new ConvexError(
+				"Transcript turn does not belong to the claimed task",
+			);
+		}
+		const items = await ctx.db
+			.query("agentItems")
+			.withIndex("by_turn_id_and_sequence", (index) =>
+				index.eq("turnId", turn._id),
+			)
+			.order("asc")
+			.paginate(args.paginationOpts);
+		return {
+			...items,
+			page: items.page.map(projectTranscriptItem),
+		};
 	},
 });
 
@@ -359,14 +412,14 @@ export const updateActivity = mutation({
 			createdAt: Date.now(),
 			kind: "activity",
 			runId: args.runId,
-			title: normalizeProductText(
+			title: requireProductText(
 				args.title,
 				"Activity title",
 				MAX_ACTIVITY_TITLE_LENGTH,
 			),
 			...(args.detail
 				? {
-						detail: normalizeProductText(
+						detail: requireProductText(
 							args.detail,
 							"Activity detail",
 							MAX_ACTIVITY_DETAIL_LENGTH,
@@ -400,7 +453,7 @@ export const startAgentMessage = mutation({
 			createdAt: Date.now(),
 			kind: "agent_message",
 			runId: args.runId,
-			body: normalizeAgentMessageBody(args.body),
+			body: requireProductText(args.body, "Agent message text"),
 		});
 	},
 });
@@ -438,7 +491,7 @@ export const updateAgentMessage = mutation({
 			createdAt: item.createdAt,
 			kind: "agent_message",
 			runId: item.runId,
-			body: normalizeAgentMessageBody(args.body),
+			body: requireProductText(args.body, "Agent message text"),
 		});
 		return null;
 	},
@@ -476,8 +529,8 @@ export const recordToolStarted = mutation({
 			"Tool call ID",
 		);
 		const toolName = normalizeRuntimeIdentifier(args.toolName, "Tool name");
-		const inputJson = clampDebugText(args.inputJson);
-		const summary = normalizeProductText(args.summary, "Tool summary");
+		const inputJson = args.inputJson;
+		const summary = requireProductText(args.summary, "Tool summary");
 		const existing = await ctx.db
 			.query("agentItems")
 			.withIndex("by_run_id_and_tool_call_id", (index) =>
@@ -580,7 +633,7 @@ export const recordToolFinished = mutation({
 				? {
 						...base,
 						status: "completed",
-						outputJson: clampDebugText(args.result.outputJson),
+						outputJson: args.result.outputJson,
 						...(args.result.durationMs === undefined
 							? {}
 							: { durationMs: args.result.durationMs }),
@@ -588,7 +641,7 @@ export const recordToolFinished = mutation({
 				: {
 						...base,
 						status: "failed",
-						error: normalizeProductText(args.result.error, "Tool error"),
+						error: requireProductText(args.result.error, "Tool error"),
 						...(args.result.durationMs === undefined
 							? {}
 							: { durationMs: args.result.durationMs }),
@@ -650,6 +703,10 @@ export const recordToolApprovalRequest = mutation({
 			)
 			.unique();
 		if (existingApproval) throw new Error("Approval ID already exists");
+		const createdAt = Date.now();
+		const emailToolDisabled =
+			toolItem.toolName === EMAIL_TOOL_KEY &&
+			!(await isBuiltInToolActive(ctx, task.organizationId, EMAIL_TOOL_KEY));
 
 		await ctx.db.replace("agentItems", toolItem._id, {
 			turnId: toolItem.turnId,
@@ -667,14 +724,22 @@ export const recordToolApprovalRequest = mutation({
 		const approvalItemId = await ctx.db.insert("agentItems", {
 			turnId: turn._id,
 			sequence: await nextItemSequence(ctx, turn._id),
-			createdAt: Date.now(),
+			createdAt,
 			kind: "approval",
 			approvalKind: "tool",
 			toolItemId: toolItem._id,
 			approvalId,
-			request: normalizeProductText(args.request, "Approval request"),
-			status: "pending",
-			...(args.signature ? { signature: clampDebugText(args.signature) } : {}),
+			request: requireProductText(args.request, "Approval request"),
+			...(emailToolDisabled
+				? {
+						status: "invalidated" as const,
+						invalidatedAt: createdAt,
+						invalidationCause: {
+							kind: "email_tool_disabled" as const,
+						},
+					}
+				: { status: "pending" as const }),
+			...(args.signature ? { signature: args.signature } : {}),
 		});
 		await addActiveApproval(ctx, task, approvalItemId, task.activeRunIds);
 		if (task.status !== "waiting_for_approval") {
@@ -829,7 +894,7 @@ export const failRun = mutation({
 			return "finalized_selected_status";
 		}
 		const now = Date.now();
-		const message = normalizeProductText(args.message, "Error");
+		const message = requireProductText(args.message, "Error");
 		await ctx.db.insert("agentItems", {
 			turnId: turn._id,
 			sequence: await nextItemSequence(ctx, turn._id),
@@ -837,7 +902,7 @@ export const failRun = mutation({
 			kind: "error",
 			runId: run._id,
 			message,
-			...(args.debug ? { debug: clampDebugText(args.debug) } : {}),
+			...(args.debug ? { debug: args.debug } : {}),
 		});
 		await ctx.db.replace("agentRuns", run._id, {
 			...agentRunBaseFields(run),

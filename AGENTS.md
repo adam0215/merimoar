@@ -6,6 +6,12 @@ This is a new project that has no users and no requirements for backwards compat
 
 This also means you don't have to write regression tests. Instead focus on writing good correct tests that test both real world positive and negative/adversarial scenarios.
 
+## Project principles
+
+- Robustness and maintainability before laziness. Sweeping changes are preferred if they improve long term implementation-ROI and leverage.
+- Reuse functionality and derive data before implementing something new. If something can be derived or reused cleanly without unreasonable costs that is preferred.
+- Solve for the current vertical and let complexity and needs reveal themselves with time. Be prepared, but not paranoid.
+
 ## Code principles
 
 - Function names should always signal the intent of the function.
@@ -21,7 +27,7 @@ Always refer to instructions in the DESIGN.md when implementing UI. Then use exi
 
 ## When modeling databases
 
-Make sure to take normalization and deduplication into accoount when modeling data and especially databases. Data should not be duplicated or denormalized if there is no good reasong for it, like increased performance, cost reduction or security. Make sure to follow standard database practices to a reasonable degree. Always double check your data model for deduplication opportunities, like if you could derive a piece of data from a join or alike instead of duplicating the data onto another table. In this project for example the organization and owner of a piece of that could usually be derived a step or two higher in the data tree. Also check for duplicated intentions. If you have two tables and they share similar intentions, maybe they should be one? This is not law and should be approached pragmatically.
+Make sure to take normalization and deduplication into account when modelling data and especially databases. Data should not be duplicated or denormalized if there is no good reason for it, like increased performance, cost reduction or security. Make sure to follow standard database practices to a reasonable degree. Always double check your data model for deduplication opportunities, like if you could derive a piece of data from a join or alike instead of duplicating the data onto another table or if you could derive it later in code from the data already in the data model. In this project for example the organization and owner of a piece of data could usually be derived a step or two higher in the data tree. Also check for duplicated intentions. If you have two tables and they share similar intentions, maybe they should be one? This is not law and should be approached pragmatically.
 
 ## Task Completion Requirements
 

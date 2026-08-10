@@ -4,6 +4,7 @@ import {
 	createFixture,
 	delegateAndClaim,
 	finishWithTaskStatus,
+	loadCompleteRuntimeTranscript,
 	RUNTIME_SECRET,
 	startTool,
 } from "./testSupport.test-helper";
@@ -82,7 +83,6 @@ describe("agent approvals", () => {
 					{
 						approvalId: "approval-1",
 						approved: true,
-						reason: "The work is verified.",
 					},
 				],
 			},
@@ -244,7 +244,6 @@ describe("agent approvals", () => {
 					{
 						approvalId: "approval-b",
 						approved: true,
-						reason: "The update is safe.",
 					},
 				],
 			},
@@ -270,7 +269,6 @@ describe("agent approvals", () => {
 					{
 						approvalId: "approval-a",
 						approved: false,
-						reason: "Use a non-destructive alternative.",
 					},
 				],
 			},
@@ -304,14 +302,8 @@ describe("agent approvals", () => {
 			ownershipReleasedAt: null,
 		});
 		expect(state.turns).toHaveLength(2);
-		expect(state.firstApproval).toMatchObject({
-			status: "denied",
-			answerReason: "Use a non-destructive alternative.",
-		});
-		expect(state.secondApproval).toMatchObject({
-			status: "approved",
-			answerReason: "The update is safe.",
-		});
+		expect(state.firstApproval).toMatchObject({ status: "denied" });
+		expect(state.secondApproval).toMatchObject({ status: "approved" });
 
 		await expect(
 			fixture.actor.mutation(api.agent.tasks.answerApprovals, {
@@ -341,14 +333,10 @@ describe("agent approvals", () => {
 		);
 		expect(continuationClaim?.runId).toBe(resumed.runId);
 		if (!continuationClaim) throw new Error("Expected approval continuation");
-		const replayTranscript = await fixture.base.mutation(
-			api.agent.runtime.getTranscript,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				runId: continuationClaim.runId,
-				claimToken: continuationToken,
-			},
-		);
+		const replayTranscript = await loadCompleteRuntimeTranscript(fixture, {
+			runId: continuationClaim.runId,
+			claimToken: continuationToken,
+		});
 		expect(
 			replayTranscript.turns
 				.flatMap((turn) => turn.items)
@@ -814,8 +802,9 @@ describe("agent approvals", () => {
 			caseId: fixture.caseId,
 			reason: "A member must handle the case.",
 		});
-		const approvals = await fixture.base.run(async (ctx) =>
-			Promise.all(
+		const takeoverState = await fixture.base.run(async (ctx) => ({
+			task: await ctx.db.get(claim.taskId),
+			approvals: await Promise.all(
 				["takeover-a", "takeover-b"].map(async (approvalId) =>
 					ctx.db
 						.query("agentItems")
@@ -825,17 +814,15 @@ describe("agent approvals", () => {
 						.unique(),
 				),
 			),
-		);
-		expect(approvals).toEqual([
-			expect.objectContaining({
-				status: "denied",
-				answerReason: expect.stringContaining("member takeover"),
-			}),
-			expect.objectContaining({
-				status: "denied",
-				answerReason: expect.stringContaining("member takeover"),
-			}),
+		}));
+		expect(takeoverState.approvals).toEqual([
+			expect.objectContaining({ status: "denied" }),
+			expect.objectContaining({ status: "denied" }),
 		]);
+		expect(takeoverState.task).toMatchObject({
+			status: "cancelled",
+			reason: "A member must handle the case.",
+		});
 		await expect(
 			fixture.actor.mutation(api.agent.tasks.answerApprovals, {
 				taskId: claim.taskId,

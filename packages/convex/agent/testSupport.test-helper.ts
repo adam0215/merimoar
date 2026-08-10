@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 
+import type { FunctionReturnType } from "convex/server";
 import { vi } from "vitest";
 import { createTest, syncWorkosUser } from "#/test.setup";
 import { api } from "../_generated/api";
@@ -230,6 +231,70 @@ export async function delegateAndClaim(
 	});
 	if (!claim) throw new Error("Expected a claimed run");
 	return { ...delegation, ...claim, claimToken };
+}
+
+type TranscriptTurnPage = FunctionReturnType<
+	typeof api.agent.runtime.getTranscript
+>;
+type TranscriptItemPage = FunctionReturnType<
+	typeof api.agent.runtime.getTranscriptItems
+>;
+
+export async function loadCompleteRuntimeTranscript(
+	fixture: Awaited<ReturnType<typeof createFixture>>,
+	claim: { runId: Id<"agentRuns">; claimToken: string },
+	pageSize = 50,
+) {
+	let turnCursor: string | null = null;
+	let taskId: Id<"agentTasks"> | undefined;
+	let selectedStatusItemId: Id<"agentItems"> | undefined;
+	const turns: Array<
+		TranscriptTurnPage["turns"]["page"][number] & {
+			items: TranscriptItemPage["page"];
+		}
+	> = [];
+
+	do {
+		const turnPage: TranscriptTurnPage = await fixture.base.mutation(
+			api.agent.runtime.getTranscript,
+			{
+				runtimeSecret: RUNTIME_SECRET,
+				runId: claim.runId,
+				claimToken: claim.claimToken,
+				paginationOpts: { numItems: pageSize, cursor: turnCursor },
+			},
+		);
+		taskId ??= turnPage.taskId;
+		selectedStatusItemId ??= turnPage.selectedStatusItemId;
+
+		for (const turn of turnPage.turns.page) {
+			let itemCursor: string | null = null;
+			const items: TranscriptItemPage["page"] = [];
+			do {
+				const itemPage: TranscriptItemPage = await fixture.base.mutation(
+					api.agent.runtime.getTranscriptItems,
+					{
+						runtimeSecret: RUNTIME_SECRET,
+						runId: claim.runId,
+						claimToken: claim.claimToken,
+						turnId: turn.turnId,
+						paginationOpts: { numItems: pageSize, cursor: itemCursor },
+					},
+				);
+				items.push(...itemPage.page);
+				itemCursor = itemPage.isDone ? null : itemPage.continueCursor;
+			} while (itemCursor !== null);
+			turns.push({ ...turn, items });
+		}
+		turnCursor = turnPage.turns.isDone ? null : turnPage.turns.continueCursor;
+	} while (turnCursor !== null);
+
+	if (!taskId) throw new Error("Expected transcript task metadata");
+	return {
+		taskId,
+		...(selectedStatusItemId ? { selectedStatusItemId } : {}),
+		turns,
+	};
 }
 
 export async function startTool(

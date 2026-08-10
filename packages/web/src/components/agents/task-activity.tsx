@@ -4,11 +4,14 @@ import {
 	IconAiGateway,
 	IconArrowCurveRight,
 	IconChevronDown,
+	IconExternalLink,
 	IconFileSearch,
+	IconMail,
 	IconPencil,
 	IconSearch,
 	IconTool,
 } from "@tabler/icons-react";
+import { Link } from "@tanstack/react-router";
 import { useMutation } from "convex/react";
 import { usePaginatedQuery } from "convex-helpers/react/cache";
 import { useState } from "react";
@@ -556,6 +559,7 @@ function getToolCategory(toolName: string): ToolCategory {
 
 function getToolIcon(item: ToolItem, customToolNames: CustomToolNameIndex) {
 	if (isCustomTool(item, customToolNames)) return IconAiGateway;
+	if (item.toolName === "send_email") return IconMail;
 	switch (getToolCategory(item.toolName)) {
 		case "search":
 			return IconSearch;
@@ -684,17 +688,29 @@ function ApprovalActivity({
 		: undefined;
 	const request = customToolName
 		? `Approve using "${customToolName}"?`
-		: item.request;
-	const answerReason =
-		item.status === "pending" ? undefined : item.answerReason;
-	const hasDetails = Boolean(tool || answerReason);
+		: tool?.toolName === "send_email"
+			? "Approve this email reply?"
+			: item.request;
+	const invalidationExplanation =
+		item.status === "invalidated"
+			? describeApprovalInvalidation(item.invalidationCause)
+			: undefined;
+	const hasDetails = Boolean(tool || invalidationExplanation);
 	const resolution =
 		item.status === "pending"
 			? undefined
-			: {
-					label: item.status === "approved" ? "Approved" : "Rejected",
-					answeredAt: item.answeredAt,
-				};
+			: item.status === "invalidated"
+				? {
+						label: "Invalidated" as const,
+						resolvedAt: item.invalidatedAt,
+					}
+				: {
+						label:
+							item.status === "approved"
+								? ("Approved" as const)
+								: ("Rejected" as const),
+						resolvedAt: item.answeredAt,
+					};
 	const approvalSurfaceClassName = cn(
 		"w-full overflow-hidden rounded-xl bg-card",
 		borderedSurfaceClassName,
@@ -733,16 +749,20 @@ function ApprovalActivity({
 					<TooltipTrigger className="flex shrink-0 cursor-help items-center gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
 						<Badge
 							variant={
-								resolution.label === "Approved" ? "success" : "destructive"
+								resolution.label === "Approved"
+									? "success"
+									: resolution.label === "Rejected"
+										? "destructive"
+										: "secondary"
 							}
 						>
 							{resolution.label}
 						</Badge>
 						<time
-							dateTime={new Date(resolution.answeredAt).toISOString()}
+							dateTime={new Date(resolution.resolvedAt).toISOString()}
 							className="text-xs text-muted-foreground"
 						>
-							{formatTime(resolution.answeredAt)}
+							{formatTime(resolution.resolvedAt)}
 						</time>
 					</TooltipTrigger>
 					<TooltipContent>
@@ -750,7 +770,7 @@ function ApprovalActivity({
 						{new Intl.DateTimeFormat(undefined, {
 							dateStyle: "long",
 							timeStyle: "short",
-						}).format(resolution.answeredAt)}
+						}).format(resolution.resolvedAt)}
 					</TooltipContent>
 				</Tooltip>
 			)}
@@ -779,20 +799,74 @@ function ApprovalActivity({
 		<Collapsible className={approvalSurfaceClassName}>
 			{approvalSummary}
 			<CollapsibleContent className="border-0 px-4 py-3">
-				{tool && <ToolRawDetails tool={tool} />}
-				{answerReason && (
+				{tool?.toolName === "send_email" ? (
+					<EmailSendApprovalDetails tool={tool} />
+				) : (
+					tool && <ToolRawDetails tool={tool} />
+				)}
+				{invalidationExplanation && (
 					<p
 						className={cn(
 							"text-xs leading-5 text-muted-foreground",
 							tool && "mt-3",
 						)}
 					>
-						{answerReason}
+						{invalidationExplanation}
 					</p>
 				)}
 			</CollapsibleContent>
 		</Collapsible>
 	);
+}
+
+function EmailSendApprovalDetails({ tool }: { tool: ToolItem }) {
+	const input = JSON.parse(tool.inputJson) as {
+		threadId: string;
+		body: string;
+	};
+
+	return (
+		<dl className="grid max-w-3xl gap-4 text-sm">
+			<div>
+				<dt className="text-xs font-medium text-muted-foreground">Thread</dt>
+				<dd className="mt-1">
+					<Link
+						to="/email"
+						search={{ thread: input.threadId }}
+						className="inline-flex items-center gap-1.5 font-medium text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
+					>
+						Open email thread
+						<IconExternalLink className="size-3.5" />
+					</Link>
+					<p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+						{input.threadId}
+					</p>
+				</dd>
+			</div>
+			<div>
+				<dt className="text-xs font-medium text-muted-foreground">
+					Email written by the agent
+				</dt>
+				<dd className="mt-1 whitespace-pre-wrap rounded-lg bg-muted px-3 py-2.5 leading-6 text-foreground">
+					{input.body}
+				</dd>
+			</div>
+		</dl>
+	);
+}
+
+function describeApprovalInvalidation(
+	cause: Extract<
+		AgentItem,
+		{ kind: "approval"; status: "invalidated" }
+	>["invalidationCause"],
+) {
+	switch (cause.kind) {
+		case "inbound_email_received":
+			return "A new email arrived in this thread, so the request was invalidated. The agent will reread the thread before proposing another reply.";
+		case "email_tool_disabled":
+			return "Email sending was disabled, so the request was invalidated.";
+	}
 }
 
 export function ApprovalActions({

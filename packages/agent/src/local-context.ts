@@ -75,6 +75,9 @@ export function createLocalAgentContext(): AgentContext {
 				threadId,
 				messages: [],
 			}),
+			sendEmail: async () => {
+				throw new Error("Email sending is not available in the local TUI.");
+			},
 			updateActivity: async () => {},
 			updateTaskStatus: async (update: TaskStatusUpdate) => update,
 			invokeCustomTool: async () => {

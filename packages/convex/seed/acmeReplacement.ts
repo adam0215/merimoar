@@ -844,7 +844,9 @@ async function requireNoCrossOrganizationReferences(
 			);
 		} else {
 			requireSubset(
-				memberIds.has(message.authoredByMemberId),
+				"authoredByMemberId" in message
+					? memberIds.has(message.authoredByMemberId)
+					: taskIds.has(message.authoredByAgentTaskId),
 				"email author is outside Acme",
 			);
 		}
@@ -857,7 +859,9 @@ async function requireNoCrossOrganizationReferences(
 	}
 	for (const send of graph.emailSends) {
 		requireSubset(
-			messageIds.has(send.messageId) && memberIds.has(send.requestedByMemberId),
+			messageIds.has(send.messageId) &&
+				(!("requestedByMemberId" in send) ||
+					memberIds.has(send.requestedByMemberId)),
 			"email send crosses organization scope",
 		);
 	}
@@ -932,7 +936,9 @@ async function requireNoCrossOrganizationReferences(
 			integrationIds.has(message.integrationId) ||
 			(message.direction === "inbound"
 				? contactIds.has(message.senderContactId)
-				: memberIds.has(message.authoredByMemberId));
+				: "authoredByMemberId" in message
+					? memberIds.has(message.authoredByMemberId)
+					: taskIds.has(message.authoredByAgentTaskId));
 		if (touchesAcme) {
 			requireSubset(
 				messageIds.has(message._id),

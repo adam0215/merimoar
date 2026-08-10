@@ -162,6 +162,22 @@ const agentApprovalItemBaseValidator = agentItemBaseValidator.extend({
 	request: v.string(),
 });
 
+// Historical approvals may still contain a reason. New decisions do not write
+// or project it, but retaining the optional field keeps that audit data intact.
+const deprecatedApprovalAnswerReasonValidator = {
+	answerReason: v.optional(v.string()),
+};
+
+export const agentApprovalInvalidationCauseValidator = v.union(
+	v.object({
+		kind: v.literal("inbound_email_received"),
+		messageId: v.id("emailMessages"),
+	}),
+	v.object({
+		kind: v.literal("email_tool_disabled"),
+	}),
+);
+
 export const agentItemValidator = v.union(
 	agentItemBaseValidator.extend({
 		kind: v.literal("member_message"),
@@ -222,7 +238,17 @@ export const agentItemValidator = v.union(
 		signature: v.optional(v.string()),
 		answeredByMemberId: v.id("organizationMembers"),
 		answeredAt: v.number(),
-		answerReason: v.optional(v.string()),
+		...deprecatedApprovalAnswerReasonValidator,
+		continuationRunId: v.optional(v.id("agentRuns")),
+		consumedAt: v.optional(v.number()),
+	}),
+	agentApprovalItemBaseValidator.extend({
+		approvalKind: v.literal("tool"),
+		toolItemId: v.id("agentItems"),
+		status: v.literal("invalidated"),
+		signature: v.optional(v.string()),
+		invalidatedAt: v.number(),
+		invalidationCause: agentApprovalInvalidationCauseValidator,
 		continuationRunId: v.optional(v.id("agentRuns")),
 		consumedAt: v.optional(v.number()),
 	}),
@@ -231,7 +257,7 @@ export const agentItemValidator = v.union(
 		status: v.union(v.literal("approved"), v.literal("denied")),
 		answeredByMemberId: v.id("organizationMembers"),
 		answeredAt: v.number(),
-		answerReason: v.optional(v.string()),
+		...deprecatedApprovalAnswerReasonValidator,
 		continuationRunId: v.optional(v.id("agentRuns")),
 		consumedAt: v.optional(v.number()),
 	}),

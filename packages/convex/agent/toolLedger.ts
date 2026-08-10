@@ -1,5 +1,6 @@
 import { ConvexError } from "convex/values";
 import { requireClaimedAgentRun } from "#/agent/access";
+import { getActiveAgentTaskApprovals } from "#/case/agentOwnership";
 import { canonicalCasePair } from "#/case/relations";
 import type { Doc, Id, TableNames } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
@@ -56,10 +57,10 @@ export async function requireMutatingToolLedger(
 	return { ...runtime, item };
 }
 
-export async function commitMutatingToolResult(
+export async function commitMutatingToolResult<Output>(
 	ctx: MutationCtx,
 	item: Extract<Doc<"agentItems">, { kind: "tool" }>,
-	output: string | null,
+	output: Output,
 ) {
 	const outputJson = JSON.stringify(output);
 	await ctx.db.replace("agentItems", item._id, {
@@ -76,6 +77,36 @@ export async function commitMutatingToolResult(
 		status: "completed",
 		outputJson,
 	});
+}
+
+export async function requireApprovedToolExecution(
+	ctx: MutationCtx,
+	args: {
+		task: Doc<"agentTasks">;
+		runId: Id<"agentRuns">;
+		toolCallId: string;
+		toolName: string;
+	},
+) {
+	for (const approval of await getActiveAgentTaskApprovals(ctx, args.task)) {
+		if (
+			approval.approvalKind !== "tool" ||
+			approval.status !== "approved" ||
+			approval.continuationRunId !== args.runId ||
+			approval.consumedAt !== undefined
+		) {
+			continue;
+		}
+		const sourceTool = await ctx.db.get(approval.toolItemId);
+		if (
+			sourceTool?.kind === "tool" &&
+			sourceTool.toolCallId === args.toolCallId &&
+			sourceTool.toolName === args.toolName
+		) {
+			return sourceTool;
+		}
+	}
+	throw invalidToolLedger("The tool call has not been approved.");
 }
 
 export function requireCompletedToolOutput(

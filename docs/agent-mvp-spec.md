@@ -236,7 +236,8 @@ While a task retains ownership:
 
 Takeover must atomically:
 
-- deny every pending approval with an auditable reason;
+- deny every pending approval and store the takeover reason once on the task's
+  cancellation record;
 - cancel every queued or running run for the task;
 - release ownership;
 - terminalize the task as `cancelled`; and
@@ -303,13 +304,13 @@ primitive.
 - Pending text is flushed before tool cards, approvals, activities, status
   changes, errors, and finalization.
 - The database must not receive one write per provider token delta.
-- Tool input/output and debug strings are size-bounded and sanitized.
-- Model context preserves the initial delegated input and prioritizes recent
-  turns/items under both document-count and serialized-byte budgets. Complete
-  audit history remains separately reachable through paginated task, turn,
-  item, and run readers.
-- Secrets, authorization headers, claim tokens, provider payloads, and unsafe
-  stack details must never be persisted or sent to normal observability.
+- Tool inputs and outputs are persisted as their exact JSON representation.
+  They are never silently truncated, summarized, or redacted.
+- Model context includes every model-relevant transcript item. Activities and
+  error audit items remain durable but are not sent to the model.
+- Runtime credentials and authorization headers stay outside model-facing tool
+  schemas and results. Canonical failure messages remain exact; provider
+  failures are redacted only at observability boundaries.
 - A member message sent while the current run is `running` is persisted as a
   `member_message_steer` on that run's turn and becomes model-visible before
   the next model step. It does not create another turn or run.
@@ -338,14 +339,16 @@ Approval requirements:
 - one continuation run is created only after all active approvals are resolved
   and the source run has finished;
 - approved and denied decisions are both replayed to the continuation;
+- system-invalidated email decisions are replayed as declined approvals with a
+  cause-derived reason;
 - decisions are assigned to exactly one continuation run;
 - consumed decisions are never replayed again;
 - new approvals created by a continuation remain independently pending; and
 - takeover rejects late answers and denies unresolved approvals.
 
-The framework may support tool approvals before any current built-in requires
-one. The MVP must not invent a destructive tool merely to exercise the
-mechanism.
+The email built-in uses AI SDK tool approval for every proposed send. Human
+approval and denial continue to use the generic approval path; system
+invalidation is a third durable resolution, not a second approval mechanism.
 
 ## 11. Agent package and built-in tools
 
@@ -381,12 +384,25 @@ Required built-ins:
 - `search_emails`, including relevant organization mail outside the anchor
   case;
 - `read_email_thread`;
+- `send_email`, which always requires approval, accepts at most 50,000 body
+  characters, may reply only in a thread with an active relation to the anchor
+  case, and queues a whitespace-trimmed body through the same outbound pipeline
+  as a member-authored reply without changing the canonical tool input;
 - `update_activity`; and
 - `update_task_status`.
 
 All capability reads and writes derive organization scope from the claimed
 task's verified anchor case. The root task's organization partition supports
 member-facing reads; neither the member nor the model supplies it.
+
+Every built-in has an effective organization-level active flag whose default
+is defined in the portable catalog. Only email sending is user-configurable in
+this version, and it defaults off. Inactive tools are omitted from the runtime
+tool map except when a continuation must replay an already-approved call. The
+email execute mutation repeats the active check immediately before queueing, so
+that replay becomes a failed tool result if the toggle changed; disabling the
+tool invalidates pending email approvals but does not cancel sends already
+accepted by the outbound queue.
 
 The agent searches before relating records. It uses `global_search` for
 contacts, entities, and cases, then inspects or reads each candidate before
@@ -494,6 +510,6 @@ The backend is ready to commit only when all of the following are true:
     - every terminal state and its case-history trace;
     - active ownership projections for case and email readers;
     - corrupt or cross-linked persisted IDs; and
-    - redaction and bounded diagnostics.
+    - exact transcript persistence and boundary-only provider-error redaction.
 12. The smallest relevant `bun run check`, package typechecks, focused tests,
     schema/code generation validation, and `git diff --check` all pass.

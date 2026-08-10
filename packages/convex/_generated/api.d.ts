@@ -9,7 +9,9 @@
  */
 
 import type * as agent_access from "../agent/access.js";
+import type * as agent_approvalInvalidation from "../agent/approvalInvalidation.js";
 import type * as agent_auditModel from "../agent/auditModel.js";
+import type * as agent_builtInTools from "../agent/builtInTools.js";
 import type * as agent_customToolModel from "../agent/customToolModel.js";
 import type * as agent_customTools from "../agent/customTools.js";
 import type * as agent_leases from "../agent/leases.js";
@@ -97,7 +99,9 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "agent/access": typeof agent_access;
+  "agent/approvalInvalidation": typeof agent_approvalInvalidation;
   "agent/auditModel": typeof agent_auditModel;
+  "agent/builtInTools": typeof agent_builtInTools;
   "agent/customToolModel": typeof agent_customToolModel;
   "agent/customTools": typeof agent_customTools;
   "agent/leases": typeof agent_leases;

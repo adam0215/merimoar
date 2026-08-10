@@ -21,22 +21,18 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { mutation } from "../_generated/server";
 
-const MAX_TASK_INPUT_LENGTH = 20_000;
 const MAX_RUNTIME_IDENTIFIER_LENGTH = 200;
 const MAX_APPROVAL_ANSWERS = 20;
-const MAX_APPROVAL_REASON_LENGTH = 500;
+const MAX_TAKEOVER_REASON_LENGTH = 500;
 
 function invalidAgentTask(message: string) {
 	return new ConvexError({ code: "INVALID_AGENT_TASK", message });
 }
 
-function normalizeTaskInput(input: string) {
-	const normalized = input.trim();
-	if (!normalized) throw invalidAgentTask("Describe what the agent should do.");
-	if (normalized.length > MAX_TASK_INPUT_LENGTH) {
-		throw invalidAgentTask("Use no more than 20,000 characters.");
-	}
-	return normalized;
+function requireTaskInput(input: string) {
+	if (!input.trim())
+		throw invalidAgentTask("Describe what the agent should do.");
+	return input;
 }
 
 function normalizeRuntimeIdentifier(value: string) {
@@ -48,12 +44,12 @@ function normalizeRuntimeIdentifier(value: string) {
 	return value;
 }
 
-function normalizeReason(input: string | undefined, subject: string) {
+function normalizeTakeoverReason(input: string | undefined) {
 	const normalized = input?.trim();
 	if (!normalized) return undefined;
-	if (normalized.length > MAX_APPROVAL_REASON_LENGTH) {
+	if (normalized.length > MAX_TAKEOVER_REASON_LENGTH) {
 		throw invalidAgentTask(
-			`Use no more than ${MAX_APPROVAL_REASON_LENGTH} characters for ${subject}.`,
+			`Use no more than ${MAX_TAKEOVER_REASON_LENGTH} characters for a takeover reason.`,
 		);
 	}
 	return normalized;
@@ -417,7 +413,7 @@ export async function createAgentTask(
 		);
 	}
 
-	const input = normalizeTaskInput(args.input);
+	const input = requireTaskInput(args.input);
 	const taskId = await ctx.db.insert("agentTasks", {
 		organizationId: args.anchorCase.organizationId,
 		anchorCaseId: args.anchorCase._id,
@@ -530,7 +526,7 @@ export const sendMessage = mutation({
 			args.taskId,
 			actor.organization._id,
 		);
-		const input = normalizeTaskInput(args.input);
+		const input = requireTaskInput(args.input);
 		const now = Date.now();
 
 		if (task.status === "active") {
@@ -596,7 +592,6 @@ export const answerApprovals = mutation({
 			v.object({
 				approvalId: v.string(),
 				approved: v.boolean(),
-				reason: v.optional(v.string()),
 			}),
 		),
 	},
@@ -628,7 +623,6 @@ export const answerApprovals = mutation({
 			.map((answer) => ({
 				...answer,
 				approvalId: normalizeRuntimeIdentifier(answer.approvalId),
-				reason: normalizeReason(answer.reason, "an approval reason"),
 			}))
 			.sort((left, right) => left.approvalId.localeCompare(right.approvalId));
 		if (
@@ -673,7 +667,6 @@ export const answerApprovals = mutation({
 				status: answer.approved ? ("approved" as const) : ("denied" as const),
 				answeredByMemberId: actor.member._id,
 				answeredAt,
-				...(answer.reason ? { answerReason: answer.reason } : {}),
 			});
 		}
 
@@ -712,18 +705,13 @@ export const takeOverCase = mutation({
 
 		const now = Date.now();
 		const reason =
-			normalizeReason(args.reason, "a takeover reason") ??
-			"A member took over the case.";
+			normalizeTakeoverReason(args.reason) ?? "A member took over the case.";
 		for (const approval of await getActiveAgentTaskApprovals(ctx, task)) {
 			if (approval.status !== "pending") continue;
 			await ctx.db.patch(approval._id, {
 				status: "denied" as const,
 				answeredByMemberId: actor.member._id,
 				answeredAt: now,
-				answerReason: `Cancelled by member takeover: ${reason}`.slice(
-					0,
-					MAX_APPROVAL_REASON_LENGTH,
-				),
 			});
 		}
 		await terminalizeAgentTask(ctx, {

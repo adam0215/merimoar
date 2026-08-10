@@ -84,6 +84,129 @@ async function enqueueSendWork(
 	await ctx.db.patch(sendId, { workId });
 }
 
+type OutboundReplyActor =
+	| {
+			kind: "member";
+			memberId: Id<"organizationMembers">;
+			clientRequestId: string;
+	  }
+	| {
+			kind: "agent";
+			taskId: Id<"agentTasks">;
+	  };
+
+export async function queueEmailReply(
+	ctx: MutationCtx,
+	args: {
+		thread: Doc<"emailThreads">;
+		body: string;
+		actor: OutboundReplyActor;
+	},
+) {
+	const thread = args.thread;
+	const inbox = await ctx.db.get(thread.inboxId);
+	if (
+		!inbox ||
+		inbox.organizationId !== thread.organizationId ||
+		inbox.status !== "active"
+	) {
+		throwDomainError("EMAIL_ROUTE_INACTIVE", "The email inbox is not active.");
+	}
+	const outbound = inbox.outbound;
+	if (!outbound) {
+		throwDomainError(
+			"EMAIL_OUTBOUND_NOT_CONFIGURED",
+			"Choose an outbound email integration and address for this inbox.",
+		);
+	}
+	const integration = await getEmailIntegrationAccessContext(
+		ctx,
+		outbound.integrationId,
+	);
+	if (!integration || integration.organizationId !== thread.organizationId) {
+		throwDomainError(
+			"EMAIL_OUTBOUND_ROUTE_INVALID",
+			"The outbound email integration does not belong to this inbox organization.",
+		);
+	}
+	if (
+		deriveEmailReadiness(
+			integration.connectionStatus,
+			integration.grantedScopes,
+			integration.resendWebhook !== undefined,
+		).outbound !== "ready"
+	) {
+		throwDomainError(
+			"EMAIL_INTEGRATION_NOT_CONNECTED",
+			"Reconnect the outbound email integration before sending.",
+		);
+	}
+	const body = args.body.trim();
+	if (!body) {
+		throwDomainError("EMAIL_DRAFT_EMPTY", "Write a reply before sending.");
+	}
+
+	const replyTarget = await findLatestInboundMessage(ctx, thread._id);
+	if (!replyTarget) {
+		throwDomainError(
+			"EMAIL_REPLY_TARGET_NOT_FOUND",
+			"The thread has no inbound email to reply to.",
+		);
+	}
+	const recipient = selectReplyRecipient(replyTarget, inbox.address);
+	if (!recipient) {
+		throwDomainError(
+			"EMAIL_REPLY_RECIPIENT_INVALID",
+			"The reply would be addressed to the inbox itself.",
+		);
+	}
+	if (isReservedNonDeliverableAddress(recipient.address)) {
+		throwDomainError(
+			"EMAIL_RECIPIENT_NON_DELIVERABLE",
+			"Replies to reserved demo addresses cannot be sent.",
+		);
+	}
+
+	const queuedAt = Date.now();
+	const messageId = await ctx.db.insert("emailMessages", {
+		inboxId: inbox._id,
+		integrationId: integration.integrationId,
+		threadId: thread._id,
+		direction: "outbound",
+		...(args.actor.kind === "member"
+			? { authoredByMemberId: args.actor.memberId }
+			: { authoredByAgentTaskId: args.actor.taskId }),
+		from: { address: outbound.address, name: inbox.displayName },
+		to: [recipient],
+		cc: [],
+		bcc: [],
+		replyTo: [],
+		subject: createReplySubject(replyTarget.subject),
+		textBody: body,
+		sentAt: queuedAt,
+		...createReplyThreading(replyTarget),
+	});
+	const sendId = await ctx.db.insert("emailSends", {
+		messageId,
+		...(args.actor.kind === "member"
+			? {
+					requestedByMemberId: args.actor.memberId,
+					clientRequestId: args.actor.clientRequestId,
+				}
+			: {}),
+		status: "queued",
+		generation: 0,
+		attemptCount: 0,
+	});
+	await ctx.db.patch(thread._id, {
+		latestMessageId: messageId,
+		lastActivityAt: queuedAt,
+	});
+	await setThreadUnread(ctx, thread, false);
+	await enqueueSendWork(ctx, sendId, messageId, 0);
+	return { messageId, sendId };
+}
+
 export const saveDraft = mutation({
 	args: {
 		threadId: v.id("emailThreads"),
@@ -202,50 +325,6 @@ export const queueReply = mutation({
 			workspace.organization._id,
 			thread._id,
 		);
-		const inbox = await ctx.db.get(thread.inboxId);
-		if (
-			!inbox ||
-			inbox.organizationId !== workspace.organization._id ||
-			inbox.status !== "active"
-		) {
-			throwDomainError(
-				"EMAIL_ROUTE_INACTIVE",
-				"The email inbox is not active.",
-			);
-		}
-		const outbound = inbox.outbound;
-		if (!outbound) {
-			throwDomainError(
-				"EMAIL_OUTBOUND_NOT_CONFIGURED",
-				"Choose an outbound email integration and address for this inbox.",
-			);
-		}
-		const integration = await getEmailIntegrationAccessContext(
-			ctx,
-			outbound.integrationId,
-		);
-		if (
-			!integration ||
-			integration.organizationId !== workspace.organization._id
-		) {
-			throwDomainError(
-				"EMAIL_OUTBOUND_ROUTE_INVALID",
-				"The outbound email integration does not belong to this inbox organization.",
-			);
-		}
-		if (
-			deriveEmailReadiness(
-				integration.connectionStatus,
-				integration.grantedScopes,
-				integration.resendWebhook !== undefined,
-			).outbound !== "ready"
-		) {
-			throwDomainError(
-				"EMAIL_INTEGRATION_NOT_CONNECTED",
-				"Reconnect the outbound email integration before sending.",
-			);
-		}
-
 		const draft = await ctx.db
 			.query("emailDrafts")
 			.withIndex("by_thread_id_and_author_member_id", (index) =>
@@ -266,64 +345,17 @@ export const queueReply = mutation({
 				"The draft changed elsewhere. Reload it before sending.",
 			);
 		}
-		if (!draft.body.trim()) {
-			throwDomainError("EMAIL_DRAFT_EMPTY", "Write a reply before sending.");
-		}
-
-		const replyTarget = await findLatestInboundMessage(ctx, thread._id);
-		if (!replyTarget) {
-			throwDomainError(
-				"EMAIL_REPLY_TARGET_NOT_FOUND",
-				"The thread has no inbound email to reply to.",
-			);
-		}
-		const recipient = selectReplyRecipient(replyTarget, inbox.address);
-		if (!recipient) {
-			throwDomainError(
-				"EMAIL_REPLY_RECIPIENT_INVALID",
-				"The reply would be addressed to the inbox itself.",
-			);
-		}
-		if (isReservedNonDeliverableAddress(recipient.address)) {
-			throwDomainError(
-				"EMAIL_RECIPIENT_NON_DELIVERABLE",
-				"Replies to reserved demo addresses cannot be sent.",
-			);
-		}
-		const threading = createReplyThreading(replyTarget);
-		const queuedAt = Date.now();
-		const messageId = await ctx.db.insert("emailMessages", {
-			inboxId: inbox._id,
-			integrationId: integration.integrationId,
-			threadId: thread._id,
-			direction: "outbound",
-			authoredByMemberId: workspace.member._id,
-			from: { address: outbound.address, name: inbox.displayName },
-			to: [recipient],
-			cc: [],
-			bcc: [],
-			replyTo: [],
-			subject: createReplySubject(replyTarget.subject),
-			textBody: draft.body,
-			sentAt: queuedAt,
-			...threading,
-		});
-		const sendId = await ctx.db.insert("emailSends", {
-			messageId,
-			requestedByMemberId: workspace.member._id,
-			clientRequestId: args.clientRequestId,
-			status: "queued",
-			generation: 0,
-			attemptCount: 0,
+		const queued = await queueEmailReply(ctx, {
+			thread,
+			body: draft.body,
+			actor: {
+				kind: "member",
+				memberId: workspace.member._id,
+				clientRequestId: args.clientRequestId,
+			},
 		});
 		await ctx.db.delete(draft._id);
-		await ctx.db.patch(thread._id, {
-			latestMessageId: messageId,
-			lastActivityAt: queuedAt,
-		});
-		await setThreadUnread(ctx, thread, false);
-		await enqueueSendWork(ctx, sendId, messageId, 0);
-		return { messageId, sendId, deduplicated: false };
+		return { ...queued, deduplicated: false };
 	},
 });
 
@@ -638,7 +670,7 @@ async function establishProviderAcceptanceInTransaction(
 			ctx,
 			caseRecord,
 			message._id,
-			message.authoredByMemberId,
+			"authoredByMemberId" in message ? message.authoredByMemberId : null,
 			message.sentAt,
 		);
 	}

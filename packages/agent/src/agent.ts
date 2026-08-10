@@ -4,6 +4,7 @@ import {
 	type ModelMessage,
 	ToolLoopAgent,
 } from "ai";
+import type { BuiltInToolKey } from "./builtins/catalog";
 import { createAgentTools } from "./custom-tools";
 import prompt from "./prompts/agent-v1.md" with { type: "text" };
 import type { AgentContext, CustomToolDefinition } from "./types";
@@ -27,10 +28,15 @@ export function createMerimoarAgent(input: {
 	model: LanguageModel;
 	context: AgentContext;
 	customTools?: readonly CustomToolDefinition[];
+	activeBuiltInTools?: readonly BuiltInToolKey[];
 	toolObserver?: AgentToolObserver;
 	prepareMessages?: (messages: ModelMessage[]) => Promise<ModelMessage[]>;
 }) {
-	const tools = createAgentTools(input.context, input.customTools ?? []);
+	const tools = createAgentTools(
+		input.context,
+		input.customTools ?? [],
+		input.activeBuiltInTools,
+	);
 	const { prepareMessages, toolObserver } = input;
 	return new ToolLoopAgent({
 		id: "merimoar-agent-v1",

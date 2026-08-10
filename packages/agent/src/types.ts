@@ -1,3 +1,5 @@
+import type { BuiltInToolKey } from "./builtins/catalog";
+
 export const AGENT_RUN_SHUTDOWN = Symbol("agent-run-shutdown");
 
 export type GlobalSearchFilter =
@@ -90,6 +92,10 @@ export type AgentCapabilities = {
 	): Promise<unknown>;
 	searchEmails(input: { searchQuery: string }): Promise<unknown>;
 	readEmailThread(input: { threadId: string }): Promise<unknown>;
+	sendEmail(
+		input: { threadId: string; body: string },
+		toolCallId: string,
+	): Promise<unknown>;
 	updateActivity(activity: AgentActivity): Promise<void>;
 	updateTaskStatus(
 		update: TaskStatusUpdate,
@@ -172,8 +178,11 @@ export type PersistedItem =
 			toolItemId?: string;
 			signature?: string;
 			request: string;
-			status: "pending" | "approved" | "denied";
-			answerReason?: string;
+			status: "pending" | "approved" | "denied" | "invalidated";
+			invalidatedAt?: number;
+			invalidationCause?:
+				| { kind: "inbound_email_received"; messageId: string }
+				| { kind: "email_tool_disabled" };
 			continuationRunId?: string;
 			consumedAt?: number;
 			sequence: number;
@@ -196,6 +205,7 @@ export type AgentRunUsage = {
 };
 
 export type AgentRuntimeAdapter = AgentCapabilities & {
+	loadActiveBuiltInTools(): Promise<BuiltInToolKey[]>;
 	loadCustomTools(): Promise<CustomToolDefinition[]>;
 	getTranscript(): Promise<PersistedTranscript>;
 	getSteeringMessages(

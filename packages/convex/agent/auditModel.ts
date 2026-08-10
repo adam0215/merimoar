@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import {
+	agentApprovalInvalidationCauseValidator,
 	agentItemBaseValidator,
 	agentRunBaseValidator,
 	agentRunUsageValidator,
@@ -112,7 +113,13 @@ export const auditItemValidator = v.union(
 		status: v.union(v.literal("approved"), v.literal("denied")),
 		answeredByMemberId: v.id("organizationMembers"),
 		answeredAt: v.number(),
-		answerReason: v.optional(v.string()),
+		continuationRunId: v.optional(v.id("agentRuns")),
+		consumedAt: v.optional(v.number()),
+	}),
+	auditApprovalBaseValidator.extend({
+		status: v.literal("invalidated"),
+		invalidatedAt: v.number(),
+		invalidationCause: agentApprovalInvalidationCauseValidator,
 		continuationRunId: v.optional(v.id("agentRuns")),
 		consumedAt: v.optional(v.number()),
 	}),
@@ -291,12 +298,25 @@ export function projectAuditItem(item: Doc<"agentItems">) {
 			if (item.status === "pending") {
 				return { ...approval, status: item.status };
 			}
+			if (item.status === "invalidated") {
+				return {
+					...approval,
+					status: item.status,
+					invalidatedAt: item.invalidatedAt,
+					invalidationCause: item.invalidationCause,
+					...(item.continuationRunId
+						? { continuationRunId: item.continuationRunId }
+						: {}),
+					...(item.consumedAt === undefined
+						? {}
+						: { consumedAt: item.consumedAt }),
+				};
+			}
 			return {
 				...approval,
 				status: item.status,
 				answeredByMemberId: item.answeredByMemberId,
 				answeredAt: item.answeredAt,
-				...(item.answerReason ? { answerReason: item.answerReason } : {}),
 				...(item.continuationRunId
 					? { continuationRunId: item.continuationRunId }
 					: {}),

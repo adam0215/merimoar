@@ -111,14 +111,37 @@ responses are replayed together in the final AI SDK tool message only for their
 assigned continuation run. Completion or failure of that continuation consumes
 its assigned decisions while preserving any new pending approval it created, so
 later continuations cannot replay an approved effect or an old denial. Human
-takeover denies every pending approval with an audit reason and rejects late
-answers.
+takeover denies every pending approval, records the takeover reason once on the
+task's cancellation record, and rejects late answers.
+
+Email approvals also have a system-owned `invalidated` resolution. A new
+inbound message on the proposed thread invalidates pending requests from the
+`case.emailReceived` domain-event handler. The handler scans waiting tasks for
+the thread's organization, so a relation moved to another case still finds the
+original approval. When no active case relation exists, `email.messageReceived`
+invokes the same agent-domain function as a fallback. Disabling email sending
+uses that same bounded invalidation engine. An approval created by an
+already-running agent after the disable batch finishes is born invalidated by
+the transactional active-state check at approval creation. The stored cause is
+typed data, while the model-facing and UI explanations are derived in code.
+Invalidation is replayed through the existing AI SDK approval response as
+`approved: false`, so it creates no parallel approval protocol.
 
 Mutating builtins use `(runId, toolCallId)` as their durable idempotency
 identity. Their business effect and completed tool item are committed in the
 same Convex mutation, so a lease retry after a process crash returns the
 committed result without repeating a case creation, case update, or relation
 addition.
+
+Built-ins have an organization-level effective active flag. Defaults live in
+the portable built-in catalog, sparse organization overrides live in Convex,
+and the runtime loads only active definitions for a run. Email sending defaults
+off and is the first exposed toggle. A disabled definition is retained only
+when the current continuation must replay an already-approved call, allowing
+the execute mutation to return the disabled error as a normal tool result. That
+mutation rechecks the flag, the task's ownership, and the thread's active
+anchor-case relation atomically before reusing the ordinary outbound email
+queue. Existing queued sends are not cancelled when the tool is disabled.
 
 `update_task_status` uses that same tool item as its durable ledger. The complete
 normalized status payload and the run's pointer to its winning item are
@@ -147,10 +170,25 @@ the run's time-bounded lease. A cached query could otherwise remain authorized
 after expiry until a database row changes. The subscription query is separate:
 it only signals queued work and does not accept a run claim.
 
-Tool and error records are bounded. They store product-facing summaries and
-sanitized JSON, not authorization headers or provider secrets. Provider and
-runtime failures are redacted before they reach subscriber error callbacks,
-Nitro observability, or persisted debug fields.
+Transcript turns and their items are paginated through separate mutations so
+no single Convex transaction reads the complete history. The runtime host
+follows every page and reconstructs all turns and items in index order without
+context budgeting, summarization, or compaction.
+
+Tool inputs and outputs are stored as exact JSON and replayed unchanged. The
+runtime does not maintain a second diagnostic copy and applies no transcript
+turn, item, or byte cap and never truncates an accepted tool output. Activities
+and error audit items are not model context. Tool and run failures retain their
+exact message in the canonical database record. Provider and runtime failures
+are redacted only at subscriber and Nitro observability boundaries.
+
+`send_email` accepts at most 50,000 body characters and rejects blank input.
+The original tool input remains canonical; the outbound queue trims only
+leading and trailing body whitespace immediately before persistence and send.
+The custom request helper currently returns only parsed JSON response values,
+not response headers, so no header filtering layer is needed in the model path.
+It stops reading and rejects a custom-tool HTTP response once its body exceeds
+64 KiB; an oversized response therefore never becomes a persisted tool output.
 
 ## Agent task schema rollout
 

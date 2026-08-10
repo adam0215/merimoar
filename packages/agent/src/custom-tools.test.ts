@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import {
+	builtInToolKeys,
+	defaultActiveBuiltInToolKeys,
+} from "./builtins/catalog";
 import { createAgentTools } from "./custom-tools";
 import { createLocalAgentContext } from "./local-context";
 import type { CustomToolDefinition } from "./types";
@@ -55,6 +59,41 @@ describe("dynamic custom tools", () => {
 			definition({ requiresApproval: false }),
 		]);
 		expect(tools.read_temperature).toMatchObject({ needsApproval: false });
+	});
+
+	it("omits inactive built-ins and exposes email only when explicitly enabled", async () => {
+		const context = createLocalAgentContext();
+		const sendEmail = vi.fn<
+			(
+				input: { threadId: string; body: string },
+				toolCallId: string,
+			) => Promise<{ status: string }>
+		>(async () => ({ status: "queued_successfully" }));
+		context.capabilities.sendEmail = sendEmail;
+
+		const defaults = createAgentTools(context, []);
+		expect(defaults).not.toHaveProperty("send_email");
+
+		const tools = createAgentTools(context, [], builtInToolKeys);
+		const email = tools.send_email as {
+			needsApproval?: boolean;
+			execute?: (
+				input: { threadId: string; body: string },
+				options: { toolCallId: string },
+			) => Promise<unknown>;
+		};
+		expect(defaultActiveBuiltInToolKeys).not.toContain("send_email");
+		expect(email.needsApproval).toBe(true);
+		await expect(
+			email.execute?.(
+				{ threadId: "thread-1", body: "A complete reply." },
+				{ toolCallId: "email-call-1" },
+			),
+		).resolves.toEqual({ status: "queued_successfully" });
+		expect(sendEmail).toHaveBeenCalledWith(
+			{ threadId: "thread-1", body: "A complete reply." },
+			"email-call-1",
+		);
 	});
 
 	it("preserves arbitrary parameter names in the JSON schema", async () => {

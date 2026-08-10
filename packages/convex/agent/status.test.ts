@@ -3,6 +3,7 @@ import { api, internal } from "../_generated/api";
 import {
 	createFixture,
 	delegateAndClaim,
+	loadCompleteRuntimeTranscript,
 	RUNTIME_SECRET,
 	startTool,
 } from "./testSupport.test-helper";
@@ -64,14 +65,10 @@ describe("agent status and write barriers", () => {
 			expect(reclaimed?.runId).toBe(claim.runId);
 		}
 
-		const transcript = await fixture.base.mutation(
-			api.agent.runtime.getTranscript,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				runId: claim.runId,
-				claimToken,
-			},
-		);
+		const transcript = await loadCompleteRuntimeTranscript(fixture, {
+			runId: claim.runId,
+			claimToken,
+		});
 		expect(transcript.selectedStatusItemId).toBeTypeOf("string");
 		await fixture.base.mutation(api.agent.runtime.finishRun, {
 			runtimeSecret: RUNTIME_SECRET,

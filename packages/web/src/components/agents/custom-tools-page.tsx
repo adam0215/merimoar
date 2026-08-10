@@ -1,21 +1,25 @@
 import { api } from "@merimoar/convex/api";
 import {
+	IconMail,
 	IconPencil,
 	IconPlugConnected,
 	IconPlus,
 	IconRoute,
 } from "@tabler/icons-react";
-import { useQuery } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
 import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
+import { Switch } from "#/components/ui/switch.tsx";
 import {
 	Tabs,
 	TabsContent,
 	TabsList,
 	TabsTrigger,
 } from "#/components/ui/tabs.tsx";
+import { toast } from "#/components/ui/toast.tsx";
+import { getConvexErrorMessage } from "#/lib/convex-error.ts";
 import { cn } from "#/lib/utils.ts";
 import { CustomIntegrationDialog } from "./custom-integration-dialog.tsx";
 import {
@@ -37,7 +41,30 @@ export function AgentToolsPage() {
 		{},
 	) as CustomIntegrationConfiguration[] | undefined;
 	const integrations = configuration ?? [];
+	const builtInConfiguration = useQuery(
+		api.agent.builtInTools.getWorkspaceConfiguration,
+		{},
+	);
+	const setEmailSendingActive = useMutation(
+		api.agent.builtInTools.setEmailSendingActive,
+	);
 	const [dialog, setDialog] = useState<ConfigurationDialog>();
+	const [isSavingEmailSetting, setIsSavingEmailSetting] = useState(false);
+
+	async function updateEmailSending(active: boolean) {
+		setIsSavingEmailSetting(true);
+		try {
+			await setEmailSendingActive({ active });
+		} catch (error) {
+			toast.add({
+				title: "Could not update email sending",
+				description: getConvexErrorMessage(error),
+				type: "error",
+			});
+		} finally {
+			setIsSavingEmailSetting(false);
+		}
+	}
 
 	return (
 		<div className="h-full overflow-y-auto">
@@ -49,7 +76,45 @@ export function AgentToolsPage() {
 						<TabsTrigger value="integrations">Integrations</TabsTrigger>
 					</TabsList>
 					<TabsContent value="tools">
-						<div>
+						<div className="space-y-8">
+							<section aria-labelledby="built-in-tools-heading">
+								<h2 id="built-in-tools-heading" className="font-semibold">
+									Built-in tools
+								</h2>
+								<article
+									className={cn(
+										"mt-3 flex items-center gap-4 rounded-xl p-4",
+										borderedSurfaceClassName,
+									)}
+								>
+									<div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted">
+										<IconMail className="size-5" />
+									</div>
+									<div className="min-w-0 flex-1">
+										<label
+											htmlFor="agent-email-sending"
+											className="text-sm font-medium"
+										>
+											Send email
+										</label>
+										<p className="mt-1 text-sm text-muted-foreground">
+											Allow the agent to propose replies in case-related email
+											threads. Every email requires approval.
+										</p>
+									</div>
+									<Switch
+										id="agent-email-sending"
+										aria-label="Allow the agent to send email"
+										checked={builtInConfiguration?.emailSendingActive ?? false}
+										disabled={
+											builtInConfiguration === undefined || isSavingEmailSetting
+										}
+										onCheckedChange={(checked) =>
+											void updateEmailSending(checked)
+										}
+									/>
+								</article>
+							</section>
 							<section aria-labelledby="custom-tools-heading">
 								<div className="flex items-center justify-between gap-3">
 									<h2 id="custom-tools-heading" className="font-semibold">

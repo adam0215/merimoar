@@ -521,15 +521,23 @@ async function insertSeedRelationsAndEvents(
 					createdAt: Math.max(caseSeed.createdAt, event.occurredAt),
 					createdByMemberId: args.owner._id,
 				});
-			} else {
+			} else if (event.kind === "outbound_email") {
 				await ctx.db.insert("caseEvents", {
 					caseId,
-					type: event.kind,
+					type: "outbound_email",
 					emailMessageId: event.messageId,
 					occurredAt: event.occurredAt,
 					createdAt: Math.max(caseSeed.createdAt, event.occurredAt),
-					createdByMemberId:
-						event.kind === "outbound_email" ? args.owner._id : null,
+					createdByMemberId: args.owner._id,
+				});
+			} else {
+				await ctx.db.insert("caseEvents", {
+					caseId,
+					type: "inbound_email",
+					emailMessageId: event.messageId,
+					occurredAt: event.occurredAt,
+					createdAt: Math.max(caseSeed.createdAt, event.occurredAt),
+					createdByMemberId: null,
 				});
 			}
 		}

@@ -1,5 +1,6 @@
 import type { LanguageModel, TextStreamPart, ToolSet } from "ai";
 import { createMerimoarAgent } from "../agent";
+import { type BuiltInToolKey, builtInToolCatalog } from "../builtins/catalog";
 import {
 	AGENT_RUN_SHUTDOWN,
 	type AgentContext,
@@ -8,10 +9,7 @@ import {
 	type CustomToolDefinition,
 } from "../types";
 import { CoalescedTextWriter } from "./coalesced-text-writer";
-import {
-	getDiagnosticErrorMessage,
-	serializeDiagnosticValue,
-} from "./diagnostics";
+import { getDiagnosticErrorMessage, getErrorMessage } from "./diagnostics";
 import { buildModelMessages } from "./transcript";
 
 const LEASE_RENEWAL_INTERVAL_MS = 20_000;
@@ -93,7 +91,15 @@ export async function invokeAgentRun(input: {
 			input.claim.runId,
 		);
 		await capabilities.updateActivity({ title: "Started working" });
-		const customTools = await input.runtime.loadCustomTools();
+		const [configuredBuiltInTools, customTools] = await Promise.all([
+			input.runtime.loadActiveBuiltInTools(),
+			input.runtime.loadCustomTools(),
+		]);
+		const activeBuiltInTools = includeApprovedReplayTools(
+			configuredBuiltInTools,
+			transcript,
+			input.claim.runId,
+		);
 		const customToolsByName = new Map(
 			customTools.map((tool) => [tool.normalizedName, tool]),
 		);
@@ -110,7 +116,7 @@ export async function invokeAgentRun(input: {
 				toolCallId: toolCall.toolCallId,
 				toolName: toolCall.toolName,
 				...(customTool ? { customToolId: customTool.toolId } : {}),
-				inputJson: serializeDiagnosticValue(toolCall.input),
+				inputJson: stringifyToolValue(toolCall.input),
 				summary: customTool?.name ?? describeToolCall(toolCall.toolName),
 			});
 		};
@@ -118,6 +124,7 @@ export async function invokeAgentRun(input: {
 			model: input.model,
 			context,
 			customTools,
+			activeBuiltInTools,
 			prepareMessages: async (messages) => {
 				const steeringMessages = await input.runtime.getSteeringMessages(
 					latestSteeringSequence,
@@ -144,12 +151,12 @@ export async function invokeAgentRun(input: {
 							output.type === "tool-result"
 								? {
 										status: "completed",
-										outputJson: serializeDiagnosticValue(output.output),
+										outputJson: stringifyToolValue(output.output),
 										durationMs,
 									}
 								: {
 										status: "failed",
-										error: getDiagnosticErrorMessage(output.error),
+										error: getErrorMessage(output.error),
 										durationMs,
 									},
 					});
@@ -205,6 +212,49 @@ export async function invokeAgentRun(input: {
 		clearTimeout(deadlineTimer);
 		input.abortSignal?.removeEventListener("abort", abortFromCaller);
 	}
+}
+
+function stringifyToolValue(value: unknown) {
+	const serialized = JSON.stringify(value);
+	if (serialized === undefined) {
+		throw new TypeError("Tool values must be JSON-serializable.");
+	}
+	return serialized;
+}
+
+function includeApprovedReplayTools(
+	configuredTools: readonly BuiltInToolKey[],
+	transcript: Awaited<ReturnType<AgentRuntimeAdapter["getTranscript"]>>,
+	runId: string,
+) {
+	const tools = new Set(configuredTools);
+	const toolNamesByItemId = new Map<string, string>();
+	for (const turn of transcript.turns) {
+		for (const item of turn.items) {
+			if (item.kind === "tool") {
+				toolNamesByItemId.set(item._id, item.toolName);
+			}
+		}
+	}
+	for (const turn of transcript.turns) {
+		for (const item of turn.items) {
+			if (
+				item.kind !== "approval" ||
+				item.approvalKind !== "tool" ||
+				item.status !== "approved" ||
+				item.continuationRunId !== runId ||
+				item.consumedAt !== undefined ||
+				!item.toolItemId
+			) {
+				continue;
+			}
+			const toolName = toolNamesByItemId.get(item.toolItemId);
+			if (toolName && toolName in builtInToolCatalog) {
+				tools.add(toolName as BuiltInToolKey);
+			}
+		}
+	}
+	return [...tools];
 }
 
 function resolveExecutionTimeout(executionTimeoutMs?: number) {
@@ -306,10 +356,7 @@ async function handleRunFailure(input: {
 	}
 	const error = input.abortReason ?? input.error;
 	const [failure] = await Promise.allSettled([
-		input.runtime.failRun(
-			"Agent execution failed.",
-			getDiagnosticErrorMessage(error),
-		),
+		input.runtime.failRun("Agent execution failed.", getErrorMessage(error)),
 	]);
 	if (
 		failure.status === "fulfilled" &&
@@ -351,6 +398,7 @@ function describeToolCall(toolName: string) {
 		add_case_relation: "Adding a case relation",
 		search_emails: "Searching organization email",
 		read_email_thread: "Reading an email thread",
+		send_email: "Sending an email reply",
 		update_activity: "Updating progress",
 		update_task_status: "Updating the task status",
 	};

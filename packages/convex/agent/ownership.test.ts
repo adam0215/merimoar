@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { insertResendIntegration } from "#/test.setup";
 import { api } from "../_generated/api";
 import {
 	createFixture,
@@ -9,13 +10,14 @@ import {
 } from "./testSupport.test-helper";
 
 describe("agent ownership and projections", () => {
-	it("creates a normalized manual delegation and one durable case lock", async () => {
+	it("creates an exact manual delegation transcript and one durable case lock", async () => {
 		const fixture = await createFixture();
+		const input = `  Resolve this case.\n${"x".repeat(20_000)}  `;
 		const delegation = await fixture.actor.mutation(
 			api.agent.tasks.delegateCase,
 			{
 				caseId: fixture.caseId,
-				input: "  Resolve this case.  ",
+				input,
 			},
 		);
 
@@ -54,7 +56,7 @@ describe("agent ownership and projections", () => {
 			{
 				kind: "member_message",
 				sequence: 1,
-				body: "Resolve this case.",
+				body: input,
 			},
 		]);
 
@@ -277,6 +279,54 @@ describe("agent ownership and projections", () => {
 				claimToken: claim.claimToken,
 				caseId: fixture.caseId,
 			}),
+		).rejects.toThrow("another organization");
+	});
+
+	it("derives outbound email agent authorship from the canonical message", async () => {
+		const fixture = await createFixture();
+		const foreign = await fixture.otherActor.mutation(
+			api.agent.tasks.delegateCase,
+			{
+				caseId: fixture.otherCaseId,
+				input: "A foreign task must not author local email.",
+			},
+		);
+		await fixture.base.run(async (ctx) => {
+			const thread = await ctx.db.get(fixture.linkedThreadId);
+			if (!thread) throw new Error("Expected email thread");
+			const { integrationId } = await insertResendIntegration(
+				ctx,
+				fixture.organizationId,
+				{ suffix: "foreign_agent_author" },
+			);
+			const messageId = await ctx.db.insert("emailMessages", {
+				inboxId: thread.inboxId,
+				integrationId,
+				threadId: fixture.linkedThreadId,
+				direction: "outbound",
+				authoredByAgentTaskId: foreign.taskId,
+				references: [],
+				from: { address: "support@example.com" },
+				to: [{ address: "customer@example.com" }],
+				cc: [],
+				bcc: [],
+				replyTo: [],
+				subject: "Cross-organization authorship",
+				textBody: "Invalid author",
+				sentAt: 500,
+			});
+			await ctx.db.insert("caseEvents", {
+				caseId: fixture.caseId,
+				type: "outbound_email",
+				emailMessageId: messageId,
+				occurredAt: 500,
+				createdAt: 500,
+				createdByMemberId: null,
+			});
+		});
+
+		await expect(
+			fixture.actor.query(api.case.reader.get, { caseId: fixture.caseId }),
 		).rejects.toThrow("another organization");
 	});
 

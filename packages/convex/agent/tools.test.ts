@@ -6,6 +6,7 @@ import {
 	delegateAndClaim,
 	finishWithTaskStatus,
 	insertCase,
+	loadCompleteRuntimeTranscript,
 	RUNTIME_SECRET,
 	startTool,
 } from "./testSupport.test-helper";
@@ -406,7 +407,7 @@ describe("agent tools and projections", () => {
 		});
 	});
 
-	it("keeps the immutable first objective alongside a bounded recent history", async () => {
+	it("returns the complete transcript without turn, item, or byte caps", async () => {
 		const fixture = await createFixture();
 		const claim = await delegateAndClaim(fixture);
 		await fixture.base.run(async (ctx) => {
@@ -448,28 +449,21 @@ describe("agent tools and projections", () => {
 			}
 		});
 
-		const transcript = await fixture.base.mutation(
-			api.agent.runtime.getTranscript,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				runId: claim.runId,
-				claimToken: claim.claimToken,
-			},
-		);
-		expect(transcript.turns).toHaveLength(11);
+		const transcript = await loadCompleteRuntimeTranscript(fixture, claim);
+		expect(transcript.turns).toHaveLength(65);
 		expect(transcript.turns[0]).toMatchObject({ sequence: 1 });
 		expect(transcript.turns[0]?.items[0]).toMatchObject({
 			kind: "member_message",
 			body: "Resolve the case and document the outcome.",
 		});
-		expect(transcript.turns[1]).toMatchObject({ sequence: 56 });
+		expect(transcript.turns[1]).toMatchObject({ sequence: 2 });
 		expect(transcript.turns.at(-1)).toMatchObject({ sequence: 65 });
-		expect(transcript.turns.at(-1)?.items.length).toBeLessThan(12);
-		expect(JSON.stringify(transcript).length).toBeLessThan(130_000);
+		expect(transcript.turns.at(-1)?.items).toHaveLength(13);
+		expect(JSON.stringify(transcript).length).toBeGreaterThan(480_000);
 
 		await finishWithTaskStatus(fixture, claim, {
 			status: "completed",
-			result: "Completed after a long bounded history.",
+			result: "Completed after reading the full history.",
 		});
 		expect(
 			await fixture.base.run(async (ctx) => ctx.db.get(claim.taskId)),

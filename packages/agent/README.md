@@ -11,6 +11,9 @@ primitive, so a future worker or MCP adapter can use the same invocation
 boundary.
 
 Built-in schemas and execution live together in their AI SDK definitions.
+The catalog also owns each built-in's default active state. Hosts provide the
+effective active list for a run, so disabled tools are omitted from the model's
+tool map rather than exposed as unusable capabilities.
 `update_task_status` is an internal harness tool, not an integration.
 `update_activity` records intentional, high-level progress changes; tool calls
 retain their own ordered audit items instead of being duplicated as activities.

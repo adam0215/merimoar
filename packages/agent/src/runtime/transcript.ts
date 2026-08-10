@@ -66,12 +66,7 @@ export function buildModelMessages(
 				) {
 					messages.push({
 						role: "user",
-						content: [
-							`Task approval ${item.status}: ${item.request}`,
-							item.answerReason ? `Reason: ${item.answerReason}` : undefined,
-						]
-							.filter(Boolean)
-							.join("\n"),
+						content: `Task approval ${item.status}: ${item.request}`,
 					});
 				}
 				break;
@@ -126,7 +121,9 @@ function appendToolMessages(
 				type: "tool-approval-response",
 				approvalId: approval.approvalId,
 				approved: approval.status === "approved",
-				...(approval.answerReason ? { reason: approval.answerReason } : {}),
+				...(approval.status === "invalidated"
+					? { reason: describeApprovalInvalidation(approval) }
+					: {}),
 			});
 		}
 		return;
@@ -152,6 +149,17 @@ function appendToolMessages(
 			},
 		],
 	});
+}
+
+function describeApprovalInvalidation(approval: ToolApproval) {
+	const cause = approval.invalidationCause;
+	if (!cause) return "The approval request is no longer valid.";
+	switch (cause.kind) {
+		case "inbound_email_received":
+			return "A new email arrived in the thread. Read the thread again before proposing another reply.";
+		case "email_tool_disabled":
+			return "Email sending was disabled for this organization.";
+	}
 }
 
 function parseJson(value: string): JSONValue {

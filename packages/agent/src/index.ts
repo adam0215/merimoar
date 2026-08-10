@@ -1,4 +1,10 @@
 export { createMerimoarAgent } from "./agent";
+export type { BuiltInToolKey } from "./builtins/catalog";
+export {
+	builtInToolCatalog,
+	builtInToolKeys,
+	defaultActiveBuiltInToolKeys,
+} from "./builtins/catalog";
 export { createAgentTools } from "./custom-tools";
 export { createLocalAgentContext } from "./local-context";
 export { agentManifest, defaultAgentDefinition } from "./manifest";

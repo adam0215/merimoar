@@ -276,8 +276,17 @@ export async function validateEmailMessageLinks(
 		}
 		return;
 	}
-	const author = await ctx.db.get(args.message.authoredByMemberId);
-	if (!author || author.organizationId !== args.organizationId) {
-		invalidPersistedAgentData("email author belongs to another organization");
+	if ("authoredByMemberId" in args.message) {
+		const author = await ctx.db.get(args.message.authoredByMemberId);
+		if (!author || author.organizationId !== args.organizationId) {
+			invalidPersistedAgentData("email author belongs to another organization");
+		}
+		return;
+	}
+	const task = await ctx.db.get(args.message.authoredByAgentTaskId);
+	if (!task || task.organizationId !== args.organizationId) {
+		invalidPersistedAgentData(
+			"email agent author belongs to another organization",
+		);
 	}
 }

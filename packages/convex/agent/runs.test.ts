@@ -6,6 +6,7 @@ import {
 	delegateAndClaim,
 	finishWithTaskStatus,
 	insertCase,
+	loadCompleteRuntimeTranscript,
 	RUNTIME_SECRET,
 } from "./testSupport.test-helper";
 
@@ -179,6 +180,7 @@ describe("agent runs, leases, and transcript", () => {
 				runtimeSecret: RUNTIME_SECRET,
 				runId: delegation.runId,
 				claimToken: winningToken,
+				paginationOpts: { numItems: 10, cursor: null },
 			}),
 		).rejects.toThrow("no longer claimed");
 		await expect(
@@ -382,7 +384,8 @@ describe("agent runs, leases, and transcript", () => {
 				body: "Draft",
 			},
 		);
-		for (const body of ["Draft", "Draft with the final explanation"]) {
+		const finalBody = `Credential-like text Authorization: Bearer model-authored-value\n${"x".repeat(20_000)}`;
+		for (const body of ["Draft", finalBody]) {
 			await fixture.base.mutation(api.agent.runtime.updateAgentMessage, {
 				runtimeSecret: RUNTIME_SECRET,
 				runId: claim.runId,
@@ -391,13 +394,21 @@ describe("agent runs, leases, and transcript", () => {
 				body,
 			});
 		}
+		const inputJson = JSON.stringify({
+			caseId: fixture.caseId,
+			body: `api_key=model-defined-value ${"i".repeat(40_000)}`,
+		});
+		const outputJson = JSON.stringify({
+			title: "Agent case",
+			body: `Authorization: Bearer external-value ${"o".repeat(40_000)}`,
+		});
 		await fixture.base.mutation(api.agent.runtime.recordToolStarted, {
 			runtimeSecret: RUNTIME_SECRET,
 			runId: claim.runId,
 			claimToken: claim.claimToken,
 			toolCallId: "tool-1",
 			toolName: "read_case",
-			inputJson: JSON.stringify({ caseId: fixture.caseId }),
+			inputJson,
 			summary: "Reading a case",
 		});
 		await fixture.base.mutation(api.agent.runtime.recordToolFinished, {
@@ -407,24 +418,17 @@ describe("agent runs, leases, and transcript", () => {
 			toolCallId: "tool-1",
 			result: {
 				status: "completed",
-				outputJson: JSON.stringify({ title: "Agent case" }),
+				outputJson,
 			},
 		});
 
-		const transcript = await fixture.base.mutation(
-			api.agent.runtime.getTranscript,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				runId: claim.runId,
-				claimToken: claim.claimToken,
-			},
-		);
+		const transcript = await loadCompleteRuntimeTranscript(fixture, claim, 10);
 		expect(transcript.turns[0]?.items.map((item) => item.sequence)).toEqual([
 			1, 2, 3, 4,
 		]);
 		expect(transcript.turns[0]?.items[2]).toMatchObject({
 			kind: "agent_message",
-			body: "Draft with the final explanation",
+			body: finalBody,
 		});
 		expect(transcript.turns[0]?.items[1]).toMatchObject({
 			kind: "activity",
@@ -434,6 +438,8 @@ describe("agent runs, leases, and transcript", () => {
 		expect(transcript.turns[0]?.items[3]).toMatchObject({
 			kind: "tool",
 			status: "completed",
+			inputJson,
+			outputJson,
 		});
 	});
 

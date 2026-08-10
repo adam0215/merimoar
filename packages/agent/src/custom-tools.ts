@@ -1,5 +1,9 @@
 import { jsonSchema, type Tool, tool } from "ai";
 import { createBuiltInTools } from "./builtins";
+import {
+	type BuiltInToolKey,
+	defaultActiveBuiltInToolKeys,
+} from "./builtins/catalog";
 import type { AgentContext, CustomToolDefinition } from "./types";
 
 function createCustomTool(
@@ -31,9 +35,12 @@ function createCustomTool(
 export function createAgentTools(
 	context: AgentContext,
 	customTools: readonly CustomToolDefinition[],
+	activeBuiltInTools: readonly BuiltInToolKey[] = defaultActiveBuiltInToolKeys,
 ) {
-	const builtInTools = createBuiltInTools(context);
-	const tools: Record<string, Tool> = { ...builtInTools };
+	const tools: Record<string, Tool> = createBuiltInTools(
+		context,
+		activeBuiltInTools,
+	);
 	for (const definition of customTools) {
 		if (definition.normalizedName in tools) {
 			throw new Error(

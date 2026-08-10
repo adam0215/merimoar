@@ -112,7 +112,7 @@ async function appendEmailCaseEvent(
 		| { type: "inbound_email"; createdByMemberId: null }
 		| {
 				type: "outbound_email";
-				createdByMemberId: Id<"organizationMembers">;
+				createdByMemberId: Id<"organizationMembers"> | null;
 		  },
 ) {
 	const existingEvent = await ctx.db
@@ -159,7 +159,7 @@ export async function appendOutboundEmailCaseEvent(
 	ctx: MutationCtx,
 	caseRecord: Doc<"cases">,
 	emailMessageId: Id<"emailMessages">,
-	actorMemberId: Id<"organizationMembers">,
+	createdByMemberId: Id<"organizationMembers"> | null,
 	occurredAt: number,
 ) {
 	return await appendEmailCaseEvent(
@@ -169,7 +169,7 @@ export async function appendOutboundEmailCaseEvent(
 		occurredAt,
 		{
 			type: "outbound_email",
-			createdByMemberId: actorMemberId,
+			createdByMemberId,
 		},
 	);
 }

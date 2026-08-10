@@ -1,14 +1,12 @@
+import { paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
-import { agentTaskStatusUpdateValidator } from "#/agent/model";
+import {
+	agentApprovalInvalidationCauseValidator,
+	agentTaskStatusUpdateValidator,
+} from "#/agent/model";
 import type { Doc } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
 
-const MAX_CONTEXT_RECENT_TURNS = 10;
-const MAX_CONTEXT_ITEMS_PER_TURN = 50;
-const MAX_CONTEXT_SERIALIZED_BYTES = 500_000;
-const TRANSACTION_BYTES_READ_RESERVE = 1_000_000;
-
-const transcriptItemValidator = v.union(
+export const transcriptItemValidator = v.union(
 	v.object({
 		kind: v.literal("member_message"),
 		body: v.string(),
@@ -75,8 +73,10 @@ const transcriptItemValidator = v.union(
 			v.literal("pending"),
 			v.literal("approved"),
 			v.literal("denied"),
+			v.literal("invalidated"),
 		),
-		answerReason: v.optional(v.string()),
+		invalidatedAt: v.optional(v.number()),
+		invalidationCause: v.optional(agentApprovalInvalidationCauseValidator),
 		continuationRunId: v.optional(v.id("agentRuns")),
 		consumedAt: v.optional(v.number()),
 		sequence: v.number(),
@@ -93,131 +93,22 @@ const transcriptItemValidator = v.union(
 	}),
 );
 
-export const runtimeTranscriptValidator = v.object({
-	taskId: v.id("agentTasks"),
-	selectedStatusItemId: v.optional(v.id("agentItems")),
-	turns: v.array(
-		v.object({
-			turnId: v.id("agentTurns"),
-			sequence: v.number(),
-			items: v.array(transcriptItemValidator),
-		}),
-	),
+export const transcriptTurnValidator = v.object({
+	turnId: v.id("agentTurns"),
+	sequence: v.number(),
 });
 
-export async function loadRuntimeTranscript(
-	ctx: MutationCtx,
-	args: {
-		run: Extract<Doc<"agentRuns">, { status: "running" }>;
-		task: Doc<"agentTasks">;
-	},
-) {
-	const [initialTurn, recentTurns] = await Promise.all([
-		ctx.db
-			.query("agentTurns")
-			.withIndex("by_task_id_and_sequence", (index) =>
-				index.eq("taskId", args.task._id),
-			)
-			.order("asc")
-			.first(),
-		ctx.db
-			.query("agentTurns")
-			.withIndex("by_task_id_and_sequence", (index) =>
-				index.eq("taskId", args.task._id),
-			)
-			.order("desc")
-			.take(MAX_CONTEXT_RECENT_TURNS),
-	]);
-	const turns = [...(initialTurn ? [initialTurn] : []), ...recentTurns]
-		.filter(
-			(turn, index, all) =>
-				all.findIndex((candidate) => candidate._id === turn._id) === index,
-		)
-		.sort((left, right) => left.sequence - right.sequence);
-	let remainingSerializedBytes = MAX_CONTEXT_SERIALIZED_BYTES;
-	const itemsByTurnId = new Map<
-		Doc<"agentTurns">["_id"],
-		ReturnType<typeof projectTranscriptItem>[]
-	>();
-	let initialItem: ReturnType<typeof projectTranscriptItem> | undefined;
-	if (initialTurn) {
-		const firstItem = await ctx.db
-			.query("agentItems")
-			.withIndex("by_turn_id_and_sequence", (index) =>
-				index.eq("turnId", initialTurn._id),
-			)
-			.order("asc")
-			.first();
-		if (firstItem) {
-			initialItem = projectTranscriptItem(firstItem);
-			remainingSerializedBytes -= conservativeSerializedBytes(initialItem);
-		}
-	}
-	for (const turn of [...recentTurns, ...(initialTurn ? [initialTurn] : [])]) {
-		if (itemsByTurnId.has(turn._id)) continue;
-		const result = await loadRecentTurnItems(ctx, {
-			turn,
-			remainingSerializedBytes,
-			initialItem: turn._id === initialTurn?._id ? initialItem : undefined,
-		});
-		itemsByTurnId.set(turn._id, result.items);
-		remainingSerializedBytes -= result.serializedBytes;
-		if (remainingSerializedBytes <= 0) break;
-	}
-	return {
-		taskId: args.task._id,
-		...(args.run.selectedStatusItemId
-			? { selectedStatusItemId: args.run.selectedStatusItemId }
-			: {}),
-		turns: turns.map((turn) => ({
-			turnId: turn._id,
-			sequence: turn.sequence,
-			items: itemsByTurnId.get(turn._id) ?? [],
-		})),
-	};
-}
+export const runtimeTranscriptPageValidator = v.object({
+	taskId: v.id("agentTasks"),
+	selectedStatusItemId: v.optional(v.id("agentItems")),
+	turns: paginationResultValidator(transcriptTurnValidator),
+});
 
-async function loadRecentTurnItems(
-	ctx: MutationCtx,
-	args: {
-		turn: Doc<"agentTurns">;
-		remainingSerializedBytes: number;
-		initialItem?: ReturnType<typeof projectTranscriptItem>;
-	},
-) {
-	const items = args.initialItem ? [args.initialItem] : [];
-	let serializedBytes = 0;
-	for await (const item of ctx.db
-		.query("agentItems")
-		.withIndex("by_turn_id_and_sequence", (index) =>
-			index.eq("turnId", args.turn._id),
-		)
-		.order("desc")) {
-		if (items.length >= MAX_CONTEXT_ITEMS_PER_TURN) break;
-		if (args.initialItem && item.sequence === args.initialItem.sequence)
-			continue;
-		const metrics = await ctx.meta.getTransactionMetrics();
-		if (metrics.bytesRead.remaining < TRANSACTION_BYTES_READ_RESERVE) break;
-		const projected = projectTranscriptItem(item);
-		const itemBytes = conservativeSerializedBytes(projected);
-		if (
-			serializedBytes + itemBytes >
-			Math.max(0, args.remainingSerializedBytes)
-		) {
-			break;
-		}
-		items.push(projected);
-		serializedBytes += itemBytes;
-	}
-	items.sort((left, right) => left.sequence - right.sequence);
-	return { items, serializedBytes };
-}
+export const transcriptItemPageValidator = paginationResultValidator(
+	transcriptItemValidator,
+);
 
-function conservativeSerializedBytes(value: unknown) {
-	return JSON.stringify(value).length * 4;
-}
-
-function projectTranscriptItem(item: Doc<"agentItems">) {
+export function projectTranscriptItem(item: Doc<"agentItems">) {
 	switch (item.kind) {
 		case "member_message":
 			return { kind: item.kind, body: item.body, sequence: item.sequence };
@@ -272,8 +163,11 @@ function projectTranscriptItem(item: Doc<"agentItems">) {
 					: {}),
 				request: item.request,
 				status: item.status,
-				...("answerReason" in item && item.answerReason
-					? { answerReason: item.answerReason }
+				...("invalidatedAt" in item
+					? {
+							invalidatedAt: item.invalidatedAt,
+							invalidationCause: item.invalidationCause,
+						}
 					: {}),
 				...("continuationRunId" in item && item.continuationRunId
 					? { continuationRunId: item.continuationRunId }

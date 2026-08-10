@@ -255,7 +255,168 @@ describe("invokeAgentRun", () => {
 		);
 	});
 
-	it("never returns or persists a raw provider failure", async () => {
+	it("persists custom tool input and output as exact JSON", async () => {
+		const toolInput = {
+			body: `Authorization: Bearer model-value\n${"i".repeat(5_000)}`,
+		};
+		const toolOutput = {
+			body: `api_key=external-value\n${"o".repeat(5_000)}`,
+		};
+		const model = new MockLanguageModelV4({
+			doStream: [
+				{
+					stream: simulateReadableStream({
+						chunks: [
+							{ type: "stream-start", warnings: [] },
+							{
+								type: "tool-call",
+								toolCallId: "exact-json-call",
+								toolName: "echo_external_value",
+								input: JSON.stringify(toolInput),
+							},
+							{
+								type: "finish",
+								usage,
+								finishReason: { unified: "tool-calls", raw: "tool-calls" },
+							},
+						],
+					}),
+				},
+				{
+					stream: simulateReadableStream({
+						chunks: [
+							{ type: "stream-start", warnings: [] },
+							{
+								type: "finish",
+								usage,
+								finishReason: { unified: "stop", raw: "stop" },
+							},
+						],
+					}),
+				},
+			],
+		});
+		const recordToolStarted = vi.fn<AgentRuntimeAdapter["recordToolStarted"]>(
+			async () => {},
+		);
+		const recordToolFinished = vi.fn<AgentRuntimeAdapter["recordToolFinished"]>(
+			async () => {},
+		);
+		const runtime = createMinimalRuntime({
+			loadCustomTools: async () => [
+				{
+					toolId: "tool-exact-json",
+					name: "Echo external value",
+					normalizedName: "echo_external_value",
+					description: "Echo a value from an external service.",
+					parameters: [
+						{
+							name: "body",
+							type: "string",
+							description: "The exact value.",
+							required: true,
+						},
+					],
+					requiresApproval: false,
+					baseUrl: "https://api.example.com",
+					path: "echo",
+				},
+			],
+			invokeCustomTool: async () => toolOutput,
+			recordToolStarted,
+			recordToolFinished,
+		});
+
+		await invokeAgentRun({ claim: createClaim(), runtime, model });
+
+		expect(recordToolStarted).toHaveBeenCalledWith({
+			toolCallId: "exact-json-call",
+			toolName: "echo_external_value",
+			customToolId: "tool-exact-json",
+			inputJson: JSON.stringify(toolInput),
+			summary: "Echo external value",
+		});
+		expect(recordToolFinished).toHaveBeenCalledWith({
+			toolCallId: "exact-json-call",
+			result: expect.objectContaining({
+				status: "completed",
+				outputJson: JSON.stringify(toolOutput),
+			}),
+		});
+	});
+
+	it("persists tool errors exactly without redaction or truncation", async () => {
+		const toolError = `Authorization: Bearer tool-visible-value\n${"e".repeat(25_000)}`;
+		const model = new MockLanguageModelV4({
+			doStream: [
+				{
+					stream: simulateReadableStream({
+						chunks: [
+							{ type: "stream-start", warnings: [] },
+							{
+								type: "tool-call",
+								toolCallId: "exact-error-call",
+								toolName: "failing_external_tool",
+								input: "{}",
+							},
+							{
+								type: "finish",
+								usage,
+								finishReason: { unified: "tool-calls", raw: "tool-calls" },
+							},
+						],
+					}),
+				},
+				{
+					stream: simulateReadableStream({
+						chunks: [
+							{ type: "stream-start", warnings: [] },
+							{
+								type: "finish",
+								usage,
+								finishReason: { unified: "stop", raw: "stop" },
+							},
+						],
+					}),
+				},
+			],
+		});
+		const recordToolFinished = vi.fn<AgentRuntimeAdapter["recordToolFinished"]>(
+			async () => {},
+		);
+		const runtime = createMinimalRuntime({
+			loadCustomTools: async () => [
+				{
+					toolId: "tool-exact-error",
+					name: "Failing external tool",
+					normalizedName: "failing_external_tool",
+					description: "Return an exact error.",
+					parameters: [],
+					requiresApproval: false,
+					baseUrl: "https://api.example.com",
+					path: "fail",
+				},
+			],
+			invokeCustomTool: async () => {
+				throw new Error(toolError);
+			},
+			recordToolFinished,
+		});
+
+		await invokeAgentRun({ claim: createClaim(), runtime, model });
+
+		expect(recordToolFinished).toHaveBeenCalledWith({
+			toolCallId: "exact-error-call",
+			result: expect.objectContaining({
+				status: "failed",
+				error: toolError,
+			}),
+		});
+	});
+
+	it("persists an exact run failure but redacts the observability boundary", async () => {
+		const providerError =
+			"Provider https://user:password@provider.test failed with api_key=private-key";
 		const model = new MockLanguageModelV4({
 			doStream: {
 				stream: simulateReadableStream({
@@ -263,9 +424,7 @@ describe("invokeAgentRun", () => {
 						{ type: "stream-start", warnings: [] },
 						{
 							type: "error",
-							error: new Error(
-								"Provider https://user:password@provider.test failed with api_key=private-key",
-							),
+							error: new Error(providerError),
 						},
 					],
 				}),
@@ -285,8 +444,80 @@ describe("invokeAgentRun", () => {
 		);
 		expect(failRun).toHaveBeenCalledWith(
 			"Agent execution failed.",
-			"Provider https://[REDACTED]@provider.test failed with api_key=[REDACTED]",
+			providerError,
 		);
+	});
+
+	it("includes a disabled built-in long enough to replay its approved call", async () => {
+		const sendEmail = vi.fn<AgentRuntimeAdapter["sendEmail"]>(async () => {
+			throw new Error("This agent tool is disabled for this organization.");
+		});
+		const recordToolFinished = vi.fn<AgentRuntimeAdapter["recordToolFinished"]>(
+			async () => {},
+		);
+		const runtime = createMinimalRuntime({
+			getTranscript: async () => ({
+				taskId: "task-1",
+				turns: [
+					{
+						turnId: "source-turn",
+						sequence: 1,
+						items: [
+							{
+								kind: "tool",
+								_id: "email-tool-item",
+								runId: "source-run",
+								toolCallId: "approved-email-call",
+								toolName: "send_email",
+								inputJson: '{"threadId":"thread-1","body":"Reply"}',
+								status: "approval_required",
+								sequence: 1,
+							},
+							{
+								kind: "approval",
+								approvalId: "email-approval",
+								approvalKind: "tool",
+								toolItemId: "email-tool-item",
+								request: "Approve this email reply?",
+								status: "approved",
+								continuationRunId: "run-1",
+								sequence: 2,
+							},
+						],
+					},
+				],
+			}),
+			sendEmail,
+			recordToolFinished,
+		});
+		const model = new MockLanguageModelV4({
+			doStream: {
+				stream: simulateReadableStream({
+					chunks: [
+						{ type: "stream-start", warnings: [] },
+						{
+							type: "finish",
+							usage,
+							finishReason: { unified: "stop", raw: "stop" },
+						},
+					],
+				}),
+			},
+		});
+
+		await invokeAgentRun({ claim: createClaim(), runtime, model });
+
+		expect(sendEmail).toHaveBeenCalledWith(
+			{ threadId: "thread-1", body: "Reply" },
+			"approved-email-call",
+		);
+		expect(recordToolFinished).toHaveBeenCalledWith({
+			toolCallId: "approved-email-call",
+			result: expect.objectContaining({
+				status: "failed",
+				error: "This agent tool is disabled for this organization.",
+			}),
+		});
 	});
 
 	it("finalizes a durable selected status when its commit response is lost", async () => {
@@ -525,6 +756,19 @@ function createMinimalRuntime(
 	overrides: Partial<AgentRuntimeAdapter> = {},
 ): AgentRuntimeAdapter {
 	return {
+		loadActiveBuiltInTools: async () => [
+			"global_search",
+			"inspect_entity",
+			"inspect_contact",
+			"read_case",
+			"create_case",
+			"update_case",
+			"add_case_relation",
+			"search_emails",
+			"read_email_thread",
+			"update_activity",
+			"update_task_status",
+		],
 		loadCustomTools: async () => [],
 		getTranscript: async () => ({
 			taskId: "task-1",
@@ -562,6 +806,7 @@ function createMinimalRuntime(
 		addCaseRelation: async () => null,
 		searchEmails: async () => [],
 		readEmailThread: async () => null,
+		sendEmail: async () => null,
 		invokeCustomTool: async () => null,
 		...overrides,
 	};

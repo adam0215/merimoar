@@ -4,7 +4,8 @@
 	"type": "module",
 	"exports": {
 		".": "./src/index.ts",
-		"./manifest": "./src/manifest.ts"
+		"./manifest": "./src/manifest.ts",
+		"./builtins/catalog": "./src/builtins/catalog.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",

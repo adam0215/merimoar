@@ -307,30 +307,59 @@ describe("custom tool HTTP executor", () => {
 		).rejects.toMatchObject({ code: "TIMEOUT" });
 	});
 
-	it("stops accepting streamed response bytes at 64 KiB", async () => {
+	it("reads a streamed response up to the hard byte limit", async () => {
+		const firstChunk = new Uint8Array(CUSTOM_TOOL_MAX_RESPONSE_BYTES - 1).fill(
+			1,
+		);
 		async function* chunks() {
-			yield new Uint8Array(CUSTOM_TOOL_MAX_RESPONSE_BYTES);
-			yield new Uint8Array([1]);
+			yield firstChunk;
+			yield new Uint8Array([2]);
 		}
-		await expect(
-			readLimitedResponseBody(chunks(), CUSTOM_TOOL_MAX_RESPONSE_BYTES),
-		).rejects.toMatchObject({ code: "RESPONSE_TOO_LARGE" });
+		const body = await readLimitedResponseBody(
+			chunks(),
+			CUSTOM_TOOL_MAX_RESPONSE_BYTES,
+		);
+		expect(body.byteLength).toBe(CUSTOM_TOOL_MAX_RESPONSE_BYTES);
+		expect(body[0]).toBe(1);
+		expect(body.at(-1)).toBe(2);
 	});
 
-	it("defensively rejects oversized bodies returned by an injected transport", async () => {
+	it("stops reading a streamed response as soon as the byte limit is exceeded", async () => {
+		let streamClosed = false;
+		async function* chunks() {
+			try {
+				yield new Uint8Array(CUSTOM_TOOL_MAX_RESPONSE_BYTES);
+				yield new Uint8Array([1]);
+				yield new Uint8Array([2]);
+			} finally {
+				streamClosed = true;
+			}
+		}
+
+		await expect(
+			readLimitedResponseBody(chunks(), CUSTOM_TOOL_MAX_RESPONSE_BYTES),
+		).rejects.toMatchObject({
+			code: "RESPONSE_TOO_LARGE",
+			message: "Custom tool response exceeded 64 KiB.",
+		});
+		expect(streamClosed).toBe(true);
+	});
+
+	it("rejects an oversized response from an injected transport", async () => {
+		const value = { body: "x".repeat(70_000) };
 		await expect(
 			invokeCustomToolRequest(
 				configuration,
 				{ sensor_id: "sensor-1" },
 				{
 					resolveHostname: publicResolver,
-					sendRequest: async () => ({
-						status: 200,
-						body: new Uint8Array(CUSTOM_TOOL_MAX_RESPONSE_BYTES + 1),
-					}),
+					sendRequest: async () => response(value),
 				},
 			),
-		).rejects.toMatchObject({ code: "RESPONSE_TOO_LARGE" });
+		).rejects.toMatchObject({
+			code: "RESPONSE_TOO_LARGE",
+			message: "Custom tool response exceeded 64 KiB.",
+		});
 	});
 
 	it("rejects invalid JSON without exposing the body", async () => {

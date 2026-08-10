@@ -2,6 +2,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import {
 	defaultAgentDefinition,
 	invokeAgentRun,
+	type BuiltInToolKey,
 	type AgentRunSubscriberHost,
 	type AgentRuntimeAdapter,
 	type ClaimedRun,
@@ -13,6 +14,35 @@ import { ConvexClient, type ConnectionState } from "convex/browser";
 import { invokeCustomToolRequest } from "../custom-tools/executor";
 
 const RUN_LEASE_DURATION_MS = 60_000;
+const TRANSCRIPT_PAGE_SIZE = 50;
+
+type RuntimeTranscript = Awaited<
+	ReturnType<AgentRuntimeAdapter["getTranscript"]>
+>;
+type RuntimeTranscriptTurn = RuntimeTranscript["turns"][number];
+type RuntimeTranscriptItem = RuntimeTranscriptTurn["items"][number];
+type TranscriptPaginationOptions = {
+	numItems: number;
+	cursor: string | null;
+};
+type TranscriptPage<T> = {
+	page: T[];
+	isDone: boolean;
+	continueCursor: string;
+};
+type TranscriptPageLoaders = {
+	loadTurns(
+		paginationOpts: TranscriptPaginationOptions,
+	): Promise<{
+		taskId: string;
+		selectedStatusItemId?: string;
+		turns: TranscriptPage<Omit<RuntimeTranscriptTurn, "items">>;
+	}>;
+	loadItems(
+		turnId: string,
+		paginationOpts: TranscriptPaginationOptions,
+	): Promise<TranscriptPage<RuntimeTranscriptItem>>;
+};
 
 type RuntimeConfiguration = {
 	convexUrl: string;
@@ -30,6 +60,51 @@ type ConvexCaseRelation =
 	| { kind: "entity"; entityId: Id<"entities"> }
 	| { kind: "case"; relatedCaseId: Id<"cases"> }
 	| { kind: "email_thread"; threadId: Id<"emailThreads"> };
+
+export async function loadCompleteTranscript(
+	loaders: TranscriptPageLoaders,
+): Promise<RuntimeTranscript> {
+	let turnCursor: string | null = null;
+	let taskId: string | undefined;
+	let selectedStatusItemId: string | undefined;
+	const turns: RuntimeTranscriptTurn[] = [];
+
+	do {
+		const turnPage = await loaders.loadTurns({
+			numItems: TRANSCRIPT_PAGE_SIZE,
+			cursor: turnCursor,
+		});
+		taskId ??= turnPage.taskId;
+		selectedStatusItemId ??= turnPage.selectedStatusItemId;
+
+		for (const turn of turnPage.turns.page) {
+			let itemCursor: string | null = null;
+			const items: RuntimeTranscriptItem[] = [];
+			do {
+				const itemPage = await loaders.loadItems(turn.turnId, {
+					numItems: TRANSCRIPT_PAGE_SIZE,
+					cursor: itemCursor,
+				});
+				items.push(...itemPage.page);
+				itemCursor = itemPage.isDone ? null : itemPage.continueCursor;
+			} while (itemCursor !== null);
+			turns.push({ ...turn, items });
+		}
+
+		turnCursor = turnPage.turns.isDone
+			? null
+			: turnPage.turns.continueCursor;
+	} while (turnCursor !== null);
+
+	if (!taskId) {
+		throw new Error("Transcript pagination returned no task identifier.");
+	}
+	return {
+		taskId,
+		...(selectedStatusItemId ? { selectedStatusItemId } : {}),
+		turns,
+	};
+}
 
 export function createConvexAgentSubscriberHost(
 	configuration: RuntimeConfiguration,
@@ -133,6 +208,13 @@ function createConvexRuntimeAdapter(
 	let customToolSnapshot: ReadonlyMap<string, CustomToolDefinition> | null = null;
 
 	return {
+		async loadActiveBuiltInTools() {
+			const keys = await client.mutation(
+				api.agent.builtInTools.loadActiveForRun,
+				base,
+			);
+			return keys as BuiltInToolKey[];
+		},
 		async loadCustomTools() {
 			if (customToolSnapshot) return [...customToolSnapshot.values()];
 			const definitions = await client.mutation(
@@ -153,8 +235,18 @@ function createConvexRuntimeAdapter(
 			return result.value;
 		},
 		getTranscript() {
-			return client.mutation(api.agent.runtime.getTranscript, {
-				...base,
+			return loadCompleteTranscript({
+				loadTurns: (paginationOpts) =>
+					client.mutation(api.agent.runtime.getTranscript, {
+						...base,
+						paginationOpts,
+					}),
+				loadItems: (turnId, paginationOpts) =>
+					client.mutation(api.agent.runtime.getTranscriptItems, {
+						...base,
+						turnId: asConvexId<"agentTurns">(turnId),
+						paginationOpts,
+					}),
 			});
 		},
 		getSteeringMessages(afterSequence) {
@@ -287,6 +379,14 @@ function createConvexRuntimeAdapter(
 			return client.mutation(api.agent.tools.readEmailThread, {
 				...base,
 				threadId: asConvexId<"emailThreads">(threadId),
+			});
+		},
+		sendEmail(input, toolCallId) {
+			return client.mutation(api.agent.tools.sendEmail, {
+				...base,
+				threadId: asConvexId<"emailThreads">(input.threadId),
+				body: input.body,
+				toolCallId,
 			});
 		},
 	};

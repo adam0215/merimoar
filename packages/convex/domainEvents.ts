@@ -1,3 +1,4 @@
+import { invalidatePendingAgentEmailApprovals } from "#/agent/approvalInvalidation";
 import { getActiveCaseRelationForEmailThread } from "#/case/emailRelations";
 import { removeCaseEmbedding } from "#/case/embeddingData";
 import { buildCaseEmbeddingInput } from "#/case/embeddingModel";
@@ -36,6 +37,11 @@ export type DomainEventMap = {
 			description: string;
 		};
 	};
+	"organization.agentBuiltInToolDisabled": {
+		organizationId: Id<"organizations">;
+		toolKey: "send_email";
+		disabledAt: number;
+	};
 };
 
 export type DomainEvent = {
@@ -62,9 +68,23 @@ export async function dispatchDomainEvent(
 		case "case.detailsChanged":
 			await handleCaseDetailsChanged(ctx, event.payload);
 			return;
+		case "organization.agentBuiltInToolDisabled":
+			await handleAgentBuiltInToolDisabled(ctx, event.payload);
+			return;
 		default:
 			assertNever(event);
 	}
+}
+
+async function handleAgentBuiltInToolDisabled(
+	ctx: MutationCtx,
+	event: DomainEventMap["organization.agentBuiltInToolDisabled"],
+) {
+	await invalidatePendingAgentEmailApprovals(ctx, {
+		organizationId: event.organizationId,
+		invalidatedAt: event.disabledAt,
+		cause: { kind: "email_tool_disabled" },
+	});
 }
 
 async function handleEmailMessageReceived(
@@ -88,7 +108,18 @@ async function handleEmailMessageReceived(
 		ctx,
 		thread._id,
 	);
-	if (!activeCaseRelation) return;
+	if (!activeCaseRelation) {
+		await invalidatePendingAgentEmailApprovals(ctx, {
+			organizationId: thread.organizationId,
+			threadId: thread._id,
+			invalidatedAt: message._creationTime,
+			cause: {
+				kind: "inbound_email_received",
+				messageId: message._id,
+			},
+		});
+		return;
+	}
 
 	await dispatchDomainEvent(ctx, {
 		name: "case.emailReceived",
@@ -105,15 +136,29 @@ async function handleCaseEmailReceived(
 	ctx: MutationCtx,
 	event: DomainEventMap["case.emailReceived"],
 ) {
-	const [caseRecord, thread] = await Promise.all([
+	const [caseRecord, thread, message] = await Promise.all([
 		ctx.db.get(event.caseId),
 		ctx.db.get(event.threadId),
+		ctx.db.get(event.messageId),
 	]);
 	if (!caseRecord) throw new Error("Case linked to received email not found");
 	if (!thread) throw new Error("Email thread linked to case not found");
+	if (!message || message.direction !== "inbound")
+		throw new Error("Case email event has no inbound message");
+	if (message.threadId !== thread._id)
+		throw new Error("Case email event message belongs to another thread");
 	if (caseRecord.organizationId !== thread.organizationId)
 		throw new Error("Email thread has an invalid active case relation");
 
+	await invalidatePendingAgentEmailApprovals(ctx, {
+		organizationId: caseRecord.organizationId,
+		threadId: thread._id,
+		invalidatedAt: message._creationTime,
+		cause: {
+			kind: "inbound_email_received",
+			messageId: message._id,
+		},
+	});
 	await appendInboundEmailCaseEvent(
 		ctx,
 		caseRecord,

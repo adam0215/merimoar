@@ -1,64 +1,11 @@
 import { describe, expect, it } from "vitest";
-import {
-	getDiagnosticErrorMessage,
-	serializeDiagnosticValue,
-} from "./diagnostics";
+import { getDiagnosticErrorMessage, getErrorMessage } from "./diagnostics";
 
 describe("agent runtime diagnostics", () => {
-	it("redacts credentials while retaining useful tool context", () => {
-		const input = {
-			caseId: "case-1",
-			authorization: "Bearer top-secret-token",
-			configuration: {
-				googleApiKey: "private-api-key",
-				claimToken: "private-claim-token",
-				note: "Call failed with access_token=private-access-token",
-			},
-		};
+	it("preserves the exact error message for canonical persistence", () => {
+		const message = `Authorization: Bearer model-visible-value\n${"x".repeat(25_000)}`;
 
-		expect(JSON.parse(serializeDiagnosticValue(input))).toEqual({
-			caseId: "case-1",
-			authorization: "[REDACTED]",
-			configuration: {
-				googleApiKey: "[REDACTED]",
-				claimToken: "[REDACTED]",
-				note: "Call failed with access_token=[REDACTED]",
-			},
-		});
-	});
-
-	it("serializes circular and oversized values as bounded valid JSON", () => {
-		const circular: Record<string, unknown> = { id: 1n };
-		circular.self = circular;
-
-		expect(JSON.parse(serializeDiagnosticValue(circular))).toEqual({
-			id: "1",
-			self: "[Repeated reference omitted]",
-		});
-
-		const serialized = serializeDiagnosticValue({
-			values: Array.from({ length: 200 }, (_, index) => ({
-				index,
-				text: "x".repeat(4_000),
-			})),
-		});
-		expect(serialized.length).toBeLessThan(1_000);
-		expect(JSON.parse(serialized)).toMatchObject({
-			summary: expect.stringContaining("storage limit"),
-		});
-	});
-
-	it("preserves arbitrary external JSON keys without prototype semantics", () => {
-		const externalJson = JSON.parse(
-			'{"_id":"external-id","__proto__":{"safe":true}}',
-		) as Record<string, unknown>;
-		const serialized = JSON.parse(
-			serializeDiagnosticValue(externalJson),
-		) as Record<string, unknown>;
-
-		expect(serialized._id).toBe("external-id");
-		expect(Object.hasOwn(serialized, "__proto__")).toBe(true);
-		expect(serialized.__proto__).toEqual({ safe: true });
+		expect(getErrorMessage(new Error(message))).toBe(message);
 	});
 
 	it("redacts credentials embedded in provider errors", () => {
@@ -71,38 +18,6 @@ describe("agent runtime diagnostics", () => {
 		).toBe(
 			"Request failed: Authorization: [REDACTED]; proxy=Basic [REDACTED]; api_key=[REDACTED]; runtimeSecret=[REDACTED]; googleApiKey=[REDACTED]; https://[REDACTED]@provider.test/models?key=[REDACTED]&session_token=[REDACTED]",
 		);
-	});
-
-	it("redacts nested provider payload credentials", () => {
-		const serialized = serializeDiagnosticValue({
-			provider: "google",
-			request: {
-				headers: {
-					Authorization: "Basic c2VydmljZTpwYXNzd29yZA==",
-					xApiKey: "provider-key",
-				},
-				url: "https://service:password@provider.test/run?api_key=url-key",
-				payload: {
-					clientSecret: "client-secret",
-					refresh_token: "refresh-token",
-				},
-			},
-		});
-
-		expect(serialized).not.toContain("provider-key");
-		expect(serialized).not.toContain("password");
-		expect(serialized).not.toContain("client-secret");
-		expect(serialized).not.toContain("refresh-token");
-		expect(JSON.parse(serialized)).toMatchObject({
-			provider: "google",
-			request: {
-				headers: {
-					Authorization: "[REDACTED]",
-					xApiKey: "[REDACTED]",
-				},
-				url: "https://[REDACTED]@provider.test/run?api_key=[REDACTED]",
-			},
-		});
 	});
 
 	it("redacts JSON and escaped JSON credentials in error messages", () => {

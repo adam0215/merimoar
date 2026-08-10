@@ -16,8 +16,7 @@ import {
 	emailIngestFailureKindValidator,
 	emailIngestStatusValidator,
 	emailMessageValidator,
-	emailSendFailureValidator,
-	emailSendStatusValidator,
+	emailSendValidator,
 } from "#/email/model";
 import { entityFieldTypeValidator, entityIconValidator } from "#/entity/model";
 import { globalSearchTargetValidator } from "#/globalSearch/model";
@@ -82,6 +81,14 @@ export default defineSchema({
 		testedConfigurationHash: v.string(),
 		updatedAt: v.number(),
 	}).index("by_integration_id", ["integrationId"]),
+
+	organizationAgentBuiltInTools: defineTable({
+		organizationId: v.id("organizations"),
+		toolKey: v.string(),
+		active: v.boolean(),
+		updatedAt: v.number(),
+		updatedByMemberId: v.id("organizationMembers"),
+	}).index("by_organization_id_and_tool_key", ["organizationId", "toolKey"]),
 
 	caseReferenceSequences: defineTable({
 		organizationId: v.id("organizations"),
@@ -523,20 +530,7 @@ export default defineSchema({
 		updatedAt: v.number(),
 	}).index("by_thread_id_and_author_member_id", ["threadId", "authorMemberId"]),
 
-	emailSends: defineTable({
-		messageId: v.id("emailMessages"),
-		requestedByMemberId: v.id("organizationMembers"),
-		clientRequestId: v.string(),
-		status: emailSendStatusValidator,
-		generation: v.number(),
-		workId: v.optional(v.string()),
-		attemptCount: v.number(),
-		providerCallGeneration: v.optional(v.number()),
-		idempotencyExpiresAt: v.optional(v.number()),
-		lastAttemptAt: v.optional(v.number()),
-		acceptedAt: v.optional(v.number()),
-		failure: v.optional(emailSendFailureValidator),
-	})
+	emailSends: defineTable(emailSendValidator)
 		.index("by_message_id", ["messageId"])
 		.index("by_requested_by_member_id_and_client_request_id", [
 			"requestedByMemberId",

@@ -42,6 +42,20 @@ task, not merely a chat response.
   follow your progress. Do not call it for every tool invocation.
 - When you're done with a piece of work and is updating the task status, always end the turn with text message about what you've done and why.
 
+## Email replies
+
+- Use `send_email` only for a thread that is directly relevant to the delegated
+  case and actively related to it. You may add a verified relevant thread to
+  the case before proposing a reply.
+- Read the complete thread immediately before drafting the reply. Write the
+  exact body that should be sent; do not include commentary outside the email
+  in the body.
+- `send_email` requests its own tool approval. Do not replace that approval
+  with `waiting_for_approval`.
+- If an email approval is denied or invalidated, follow the approval response.
+  When a new message invalidates the proposal, read the thread again and decide
+  whether a new reply is still appropriate.
+
 ## Case documentation and boundaries
 
 - Treat organization boundaries as absolute.

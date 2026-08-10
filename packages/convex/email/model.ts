@@ -29,15 +29,23 @@ const inboundEmailMessageValidator = emailMessageBaseValidator.extend({
 	externalMessageId: v.string(),
 	receivedAt: v.number(),
 });
-const outboundEmailMessageValidator = emailMessageBaseValidator.extend({
+const outboundEmailMessageBaseValidator = emailMessageBaseValidator.extend({
 	direction: v.literal("outbound"),
-	authoredByMemberId: v.id("organizationMembers"),
 	externalMessageId: v.optional(v.string()),
 });
+const memberAuthoredOutboundEmailMessageValidator =
+	outboundEmailMessageBaseValidator.extend({
+		authoredByMemberId: v.id("organizationMembers"),
+	});
+const agentAuthoredOutboundEmailMessageValidator =
+	outboundEmailMessageBaseValidator.extend({
+		authoredByAgentTaskId: v.id("agentTasks"),
+	});
 
 export const emailMessageValidator = v.union(
 	inboundEmailMessageValidator,
-	outboundEmailMessageValidator,
+	memberAuthoredOutboundEmailMessageValidator,
+	agentAuthoredOutboundEmailMessageValidator,
 );
 
 const emailMessageSystemFields = {
@@ -47,7 +55,8 @@ const emailMessageSystemFields = {
 
 export const emailMessageDocumentValidator = v.union(
 	inboundEmailMessageValidator.extend(emailMessageSystemFields),
-	outboundEmailMessageValidator.extend(emailMessageSystemFields),
+	memberAuthoredOutboundEmailMessageValidator.extend(emailMessageSystemFields),
+	agentAuthoredOutboundEmailMessageValidator.extend(emailMessageSystemFields),
 );
 
 export const emailSendFailureValidator = v.union(
@@ -86,6 +95,27 @@ export const emailSendStatusValidator = v.union(
 	v.literal("sending"),
 	v.literal("sent"),
 	v.literal("failed"),
+);
+
+const emailSendBaseValidator = v.object({
+	messageId: v.id("emailMessages"),
+	status: emailSendStatusValidator,
+	generation: v.number(),
+	workId: v.optional(v.string()),
+	attemptCount: v.number(),
+	providerCallGeneration: v.optional(v.number()),
+	idempotencyExpiresAt: v.optional(v.number()),
+	lastAttemptAt: v.optional(v.number()),
+	acceptedAt: v.optional(v.number()),
+	failure: v.optional(emailSendFailureValidator),
+});
+
+export const emailSendValidator = v.union(
+	emailSendBaseValidator.extend({
+		requestedByMemberId: v.id("organizationMembers"),
+		clientRequestId: v.string(),
+	}),
+	emailSendBaseValidator,
 );
 
 export const normalizedInboundEmailValidator = v.object({

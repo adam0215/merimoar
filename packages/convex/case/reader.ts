@@ -125,10 +125,23 @@ async function resolveEmailMessage(
 ) {
 	const message = await ctx.db.get(messageId);
 	const thread = message ? await ctx.db.get(message.threadId) : null;
-	return thread?.organizationId === organizationId &&
-		message?.inboxId === thread.inboxId
-		? message
-		: null;
+	if (
+		!message ||
+		!thread ||
+		thread.organizationId !== organizationId ||
+		message.inboxId !== thread.inboxId
+	) {
+		return null;
+	}
+	if ("authoredByAgentTaskId" in message) {
+		const task = await ctx.db.get(message.authoredByAgentTaskId);
+		if (!task || task.organizationId !== organizationId) {
+			throw new Error(
+				"Outbound email references an agent task from another organization",
+			);
+		}
+	}
+	return message;
 }
 
 async function paginateCasesForView(

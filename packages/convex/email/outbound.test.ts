@@ -354,6 +354,28 @@ describe("outbound email replies", () => {
 		expect(state.inbox?.unreadThreadCount).toBe(0);
 	});
 
+	it("rejects a whitespace-only reply before queueing", async () => {
+		const fixture = await createFixture();
+		const draft = await fixture.actor.mutation(api.email.outbound.saveDraft, {
+			threadId: fixture.threadId,
+			body: " \n\t ",
+		});
+
+		await expectErrorCode(
+			fixture.actor.mutation(api.email.outbound.queueReply, {
+				threadId: fixture.threadId,
+				draftRevision: draft.revision,
+				clientRequestId: "blank-reply",
+			}),
+			"EMAIL_DRAFT_EMPTY",
+		);
+		expect(
+			await fixture.base.run(async (ctx) =>
+				ctx.db.query("emailSends").collect(),
+			),
+		).toHaveLength(0);
+	});
+
 	it("blocks reserved demo recipients before queueing or calling the provider", async () => {
 		const fixture = await createFixture();
 		await fixture.base.run(async (ctx) => {

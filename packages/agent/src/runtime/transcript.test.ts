@@ -2,6 +2,63 @@ import { describe, expect, it } from "vitest";
 import { buildModelMessages } from "./transcript";
 
 describe("buildModelMessages", () => {
+	it("replays long and credential-like tool values without changing them", () => {
+		const body = `Authorization: Bearer model-value\n${"x".repeat(5_000)}`;
+		const output = {
+			body: `api_key=tool-value\n${"y".repeat(5_000)}`,
+		};
+		const messages = buildModelMessages(
+			{
+				taskId: "task-1",
+				turns: [
+					{
+						turnId: "turn-1",
+						sequence: 1,
+						items: [
+							{
+								kind: "tool",
+								_id: "tool-item-1",
+								runId: "run-1",
+								toolCallId: "tool-call-1",
+								toolName: "external_action",
+								inputJson: JSON.stringify({ body }),
+								status: "completed",
+								outputJson: JSON.stringify(output),
+								sequence: 1,
+							},
+						],
+					},
+				],
+			},
+			"run-2",
+		);
+
+		expect(messages).toEqual([
+			{
+				role: "assistant",
+				content: [
+					{
+						type: "tool-call",
+						toolCallId: "tool-call-1",
+						toolName: "external_action",
+						input: { body },
+					},
+				],
+			},
+			{
+				role: "tool",
+				content: [
+					{
+						type: "tool-result",
+						toolCallId: "tool-call-1",
+						toolName: "external_action",
+						output: { type: "json", value: output },
+					},
+				],
+			},
+		]);
+	});
+
 	it("reconstructs tool calls and approval answers from normalized items", () => {
 		const messages = buildModelMessages(
 			{
@@ -34,7 +91,6 @@ describe("buildModelMessages", () => {
 								signature: "signed-approval-request",
 								request: "Approve the external action?",
 								status: "approved",
-								answerReason: "Verified by the case owner.",
 								continuationRunId: "run-2",
 								sequence: 3,
 							},
@@ -71,7 +127,6 @@ describe("buildModelMessages", () => {
 						type: "tool-approval-response",
 						approvalId: "approval-1",
 						approved: true,
-						reason: "Verified by the case owner.",
 					},
 				],
 			},
@@ -124,7 +179,6 @@ describe("buildModelMessages", () => {
 								toolItemId: "tool-2",
 								request: "Approve B?",
 								status: "denied",
-								answerReason: "B is unsafe.",
 								continuationRunId: "run-2",
 								sequence: 4,
 							},
@@ -134,7 +188,6 @@ describe("buildModelMessages", () => {
 								approvalKind: "task",
 								request: "May the task close the case?",
 								status: "denied",
-								answerReason: "Keep it open.",
 								continuationRunId: "run-2",
 								sequence: 5,
 							},
@@ -157,14 +210,66 @@ describe("buildModelMessages", () => {
 					type: "tool-approval-response",
 					approvalId: "approval-2",
 					approved: false,
-					reason: "B is unsafe.",
 				},
 			],
 		});
 		expect(messages.at(-2)).toEqual({
 			role: "user",
-			content:
-				"Task approval denied: May the task close the case?\nReason: Keep it open.",
+			content: "Task approval denied: May the task close the case?",
+		});
+	});
+
+	it("replays system invalidation as a declined tool approval with a derived reason", () => {
+		const messages = buildModelMessages(
+			{
+				taskId: "task-1",
+				turns: [
+					{
+						turnId: "turn-1",
+						sequence: 1,
+						items: [
+							{
+								kind: "tool",
+								_id: "tool-email",
+								runId: "run-1",
+								toolCallId: "call-email",
+								toolName: "send_email",
+								inputJson: '{"threadId":"thread-1","body":"Reply"}',
+								status: "approval_required",
+								sequence: 1,
+							},
+							{
+								kind: "approval",
+								approvalId: "approval-email",
+								approvalKind: "tool",
+								toolItemId: "tool-email",
+								request: "Approve this email reply?",
+								status: "invalidated",
+								invalidationCause: {
+									kind: "inbound_email_received",
+									messageId: "message-2",
+								},
+								continuationRunId: "run-2",
+								sequence: 2,
+							},
+						],
+					},
+				],
+			},
+			"run-2",
+		);
+
+		expect(messages.at(-1)).toEqual({
+			role: "tool",
+			content: [
+				{
+					type: "tool-approval-response",
+					approvalId: "approval-email",
+					approved: false,
+					reason:
+						"A new email arrived in the thread. Read the thread again before proposing another reply.",
+				},
+			],
 		});
 	});
 });
