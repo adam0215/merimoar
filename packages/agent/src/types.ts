@@ -147,6 +147,8 @@ export type PersistedItem =
 			kind: "system_message";
 			body: string;
 			source: string;
+			runId?: string;
+			inboundEmailMessageCount?: number;
 			sequence: number;
 	  }
 	| {

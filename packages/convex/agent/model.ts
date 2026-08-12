@@ -108,6 +108,7 @@ export const agentRunBaseValidator = v.object({
 	attemptCount: v.number(),
 	leaseFailureCount: v.optional(v.number()),
 	leaseGeneration: v.number(),
+	lastSteeringSequence: v.optional(v.number()),
 	selectedStatusItemId: v.optional(v.id("agentItems")),
 	customToolSnapshotCreatedAt: v.optional(v.number()),
 });
@@ -194,6 +195,9 @@ export const agentItemValidator = v.union(
 		kind: v.literal("system_message"),
 		body: v.string(),
 		source: v.string(),
+		runId: v.optional(v.id("agentRuns")),
+		inboundEmailMessageCount: v.optional(v.number()),
+		emailThreadId: v.optional(v.id("emailThreads")),
 	}),
 	agentItemBaseValidator.extend({
 		kind: v.literal("agent_message"),
@@ -319,6 +323,9 @@ export function agentRunBaseFields(run: AgentRun) {
 		attemptCount: run.attemptCount,
 		leaseFailureCount: run.leaseFailureCount ?? 0,
 		leaseGeneration: run.leaseGeneration,
+		...(run.lastSteeringSequence === undefined
+			? {}
+			: { lastSteeringSequence: run.lastSteeringSequence }),
 		...(run.selectedStatusItemId
 			? { selectedStatusItemId: run.selectedStatusItemId }
 			: {}),

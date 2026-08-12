@@ -11,6 +11,7 @@ import {
 import {
 	addActiveApproval,
 	cancelActiveTaskRuns,
+	continueTaskFromUndeliveredInboundEmail,
 	queueApprovalContinuationIfReady,
 	retireAssignedApprovalDecisions,
 	terminalizeAgentTask,
@@ -107,6 +108,15 @@ export async function finalizeClaimedRun(
 			update,
 			now,
 		});
+	}
+	if (update && update.status !== "waiting_for_approval") {
+		const taskAfterStatusUpdate = await ctx.db.get(args.task._id);
+		if (taskAfterStatusUpdate) {
+			await continueTaskFromUndeliveredInboundEmail(ctx, {
+				task: taskAfterStatusUpdate,
+				sourceRun: args.run,
+			});
+		}
 	}
 	if (update?.status === "waiting_for_approval") {
 		console.info("agent_task_waiting_for_approval", {

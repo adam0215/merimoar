@@ -10,7 +10,10 @@ import {
 } from "../types";
 import { CoalescedTextWriter } from "./coalesced-text-writer";
 import { getDiagnosticErrorMessage, getErrorMessage } from "./diagnostics";
-import { buildModelMessages } from "./transcript";
+import {
+	buildModelMessages,
+	isInboundEmailSteeringMessage,
+} from "./transcript";
 
 const LEASE_RENEWAL_INTERVAL_MS = 20_000;
 const DEFAULT_EXECUTION_TIMEOUT_MS = 10 * 60_000;
@@ -374,7 +377,11 @@ function getLatestSteeringSequence(
 	let latestSequence = 0;
 	for (const turn of transcript.turns) {
 		for (const item of turn.items) {
-			if (item.kind !== "member_message_steer" || item.runId !== runId) {
+			const isCurrentRunSteering =
+				(item.kind === "member_message_steer" ||
+					isInboundEmailSteeringMessage(item)) &&
+				item.runId === runId;
+			if (!isCurrentRunSteering) {
 				continue;
 			}
 			latestSequence = Math.max(latestSequence, item.sequence);

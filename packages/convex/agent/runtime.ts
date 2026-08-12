@@ -23,6 +23,8 @@ import {
 import {
 	addActiveApproval,
 	cancelActiveTaskRuns,
+	isInboundEmailAgentMessageBatch,
+	positionUndeliveredInboundEmailBatchAtTurnEnd,
 	queueApprovalContinuationIfReady,
 	retireAssignedApprovalDecisions,
 	terminalizeAgentTask,
@@ -42,7 +44,24 @@ const MAX_LEASE_DURATION_MS = 5 * 60_000;
 const MAX_CLAIM_CANDIDATES = 20;
 const MAX_ACTIVITY_TITLE_LENGTH = 200;
 const MAX_ACTIVITY_DETAIL_LENGTH = 2_000;
-const MAX_STEERING_MESSAGES_PER_STEP = 20;
+
+function getLatestSteeringSequence(
+	items: readonly Doc<"agentItems">[],
+	runId: Doc<"agentRuns">["_id"],
+	initialSequence: number,
+) {
+	return items.reduce((latest, item) => {
+		if (
+			!("runId" in item) ||
+			item.runId !== runId ||
+			(item.kind !== "member_message_steer" &&
+				!isInboundEmailAgentMessageBatch(item))
+		) {
+			return latest;
+		}
+		return Math.max(latest, item.sequence);
+	}, initialSequence);
+}
 
 async function findClaimableRun(ctx: MutationCtx, now: number) {
 	const queuedRuns = await ctx.db
@@ -142,6 +161,7 @@ export const claimNextRun = mutation({
 		const leaseExpiresAt = now + args.leaseDurationMs;
 		const leaseGeneration = candidate.run.leaseGeneration + 1;
 		const attempt = candidate.run.attemptCount + 1;
+		await positionUndeliveredInboundEmailBatchAtTurnEnd(ctx, candidate.run);
 		await ctx.db.replace("agentRuns", candidate.run._id, {
 			...agentRunBaseFields(candidate.run),
 			attemptCount: attempt,
@@ -330,7 +350,11 @@ export const getTranscriptItems = mutation({
 	returns: transcriptItemPageValidator,
 	handler: async (ctx, args) => {
 		requireAgentRuntimeSecret(args.runtimeSecret);
-		const { task } = await requireClaimedAgentRun(ctx, args, "current_run");
+		const { run, task } = await requireClaimedAgentRun(
+			ctx,
+			args,
+			"current_run",
+		);
 		const turn = await ctx.db.get(args.turnId);
 		if (!turn || turn.taskId !== task._id) {
 			throw new ConvexError(
@@ -344,6 +368,16 @@ export const getTranscriptItems = mutation({
 			)
 			.order("asc")
 			.paginate(args.paginationOpts);
+		const latestSteeringSequence = getLatestSteeringSequence(
+			items.page,
+			run._id,
+			run.lastSteeringSequence ?? 0,
+		);
+		if ((run.lastSteeringSequence ?? 0) < latestSteeringSequence) {
+			await ctx.db.patch(run._id, {
+				lastSteeringSequence: latestSteeringSequence,
+			});
+		}
 		return {
 			...items,
 			page: items.page.map(projectTranscriptItem),
@@ -369,22 +403,67 @@ export const getSteeringMessages = mutation({
 		if (!Number.isInteger(args.afterSequence) || args.afterSequence < 0) {
 			throw new Error("Invalid steering sequence");
 		}
-		const { turn } = await requireClaimedAgentRun(ctx, args, "writable_run");
-		const items = await ctx.db
-			.query("agentItems")
-			.withIndex("by_run_id_and_kind_and_sequence", (index) =>
-				index
-					.eq("runId", args.runId)
-					.eq("kind", "member_message_steer")
-					.gt("sequence", args.afterSequence),
-			)
-			.take(MAX_STEERING_MESSAGES_PER_STEP);
-		return items.map((item) => {
-			if (item.kind !== "member_message_steer" || item.turnId !== turn._id) {
+		const { run, turn } = await requireClaimedAgentRun(
+			ctx,
+			args,
+			"writable_run",
+		);
+		const [memberMessages, systemMessages] = await Promise.all([
+			ctx.db
+				.query("agentItems")
+				.withIndex("by_run_id_and_kind_and_sequence", (index) =>
+					index
+						.eq("runId", args.runId)
+						.eq("kind", "member_message_steer")
+						.gt("sequence", args.afterSequence),
+				)
+				.collect(),
+			ctx.db
+				.query("agentItems")
+				.withIndex("by_run_id_and_kind_and_sequence", (index) =>
+					index
+						.eq("runId", args.runId)
+						.eq("kind", "system_message")
+						.gt("sequence", args.afterSequence),
+				)
+				.collect(),
+		]);
+		if (memberMessages.some((item) => item.kind !== "member_message_steer")) {
+			throw new Error("Agent run has invalid member steering");
+		}
+		if (
+			systemMessages.length > 1 ||
+			systemMessages.some((item) => !isInboundEmailAgentMessageBatch(item))
+		) {
+			throw new Error("Agent run has invalid pending system steering");
+		}
+		const inboundEmailBatch = systemMessages[0]
+			? await positionUndeliveredInboundEmailBatchAtTurnEnd(ctx, run)
+			: null;
+		const items = [
+			...memberMessages.flatMap((item) =>
+				item.kind === "member_message_steer" ? [item] : [],
+			),
+			...(inboundEmailBatch ? [inboundEmailBatch] : []),
+		].sort((left, right) => left.sequence - right.sequence);
+		for (const item of items) {
+			if (item.turnId !== turn._id) {
 				throw new Error("Agent steering index returned an invalid item");
 			}
-			return { body: item.body, sequence: item.sequence };
-		});
+		}
+		const latestSequence = getLatestSteeringSequence(
+			items,
+			run._id,
+			args.afterSequence,
+		);
+		if ((run.lastSteeringSequence ?? 0) < latestSequence) {
+			await ctx.db.patch(run._id, { lastSteeringSequence: latestSequence });
+		}
+
+		return items.map((item) => ({
+			body: item.body,
+			sequence: item.sequence,
+		}));
 	},
 });
 

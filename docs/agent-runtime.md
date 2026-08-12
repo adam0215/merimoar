@@ -96,10 +96,19 @@ turn. Waiting, completed, unable-to-continue, and failed tasks resume through a
 new member turn and queued run. A released task must reacquire case ownership
 before that continuation is created.
 
+Inbound email follows the same run boundary for the task that owns its linked
+case. The first message resumes a waiting task. Messages received before the
+run starts join that turn, while messages received during execution are batched
+into one short steering message before the next model step. Steering never
+interrupts an active tool call. The run records the latest delivered steering
+sequence; if email arrives after the agent has selected its durable status,
+finalization creates one catch-up run for the undelivered batch.
+
 Retrying a failed task is distinct from sending a message. Retry preserves the
-failed turn and every item exactly as written, then queues a new run for that
-same turn without adding member input. It still reacquires case ownership
-atomically before the new run is created.
+failed turn and its delivered history, moves any undelivered inbound-email
+batch to the replacement run, then queues that run for the same turn without
+adding member input. It still reacquires case ownership atomically before the
+new run is created.
 
 Approval answers use one typed batch mutation. Partial batches leave the task in
 `waiting_for_approval`. The mutation creates exactly one continuation only when

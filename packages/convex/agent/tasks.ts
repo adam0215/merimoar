@@ -1,3 +1,7 @@
+import {
+	formatInboundEmailSteeringMessage,
+	INBOUND_EMAIL_STEERING_SOURCE,
+} from "@merimoar/agent";
 import { ConvexError, v } from "convex/values";
 import {
 	agentRunBaseFields,
@@ -196,6 +200,277 @@ async function reactivateAgentTask(ctx: MutationCtx, task: Doc<"agentTasks">) {
 	});
 }
 
+export type InboundEmailAgentMessageBatch = Extract<
+	Doc<"agentItems">,
+	{ kind: "system_message" }
+> & {
+	runId: Id<"agentRuns">;
+	inboundEmailMessageCount: number;
+};
+
+export function isInboundEmailAgentMessageBatch(
+	item: Doc<"agentItems">,
+): item is InboundEmailAgentMessageBatch {
+	return (
+		item.kind === "system_message" &&
+		item.source === INBOUND_EMAIL_STEERING_SOURCE &&
+		item.runId !== undefined &&
+		item.inboundEmailMessageCount !== undefined
+	);
+}
+
+async function getLatestRunForTurn(ctx: MutationCtx, turnId: Id<"agentTurns">) {
+	return await ctx.db
+		.query("agentRuns")
+		.withIndex("by_turn_id_and_requested_at", (index) =>
+			index.eq("turnId", turnId),
+		)
+		.order("desc")
+		.first();
+}
+
+async function getApprovalSourceRuns(
+	ctx: MutationCtx,
+	approvals: ReadonlyArray<{ turnId: Id<"agentTurns"> }>,
+) {
+	const sourceRuns: Doc<"agentRuns">[] = [];
+	const sourceTurnIds = new Set<Id<"agentTurns">>();
+	for (const approval of approvals) {
+		if (sourceTurnIds.has(approval.turnId)) continue;
+		sourceTurnIds.add(approval.turnId);
+		const sourceRun = await getLatestRunForTurn(ctx, approval.turnId);
+		if (!sourceRun) {
+			throw new Error("Agent approval has no source run");
+		}
+		sourceRuns.push(sourceRun);
+	}
+	return sourceRuns;
+}
+
+async function getUndeliveredInboundEmailMessageBatch(
+	ctx: MutationCtx,
+	sourceRun: Doc<"agentRuns">,
+) {
+	const items = await ctx.db
+		.query("agentItems")
+		.withIndex("by_run_id_and_kind_and_sequence", (index) =>
+			index
+				.eq("runId", sourceRun._id)
+				.eq("kind", "system_message")
+				.gt("sequence", sourceRun.lastSteeringSequence ?? 0),
+		)
+		.take(2);
+	const batch = items[0];
+	if (batch && !isInboundEmailAgentMessageBatch(batch)) {
+		throw new Error("Agent run has an invalid inbound email batch");
+	}
+	if (items.length > 1) {
+		throw new Error("Agent run has multiple pending inbound email batches");
+	}
+	return batch;
+}
+
+async function getUndeliveredInboundEmailMessageBatches(
+	ctx: MutationCtx,
+	sourceRuns: readonly Doc<"agentRuns">[],
+) {
+	const batches: InboundEmailAgentMessageBatch[] = [];
+	for (const sourceRun of sourceRuns) {
+		const batch = await getUndeliveredInboundEmailMessageBatch(ctx, sourceRun);
+		if (batch) batches.push(batch);
+	}
+	return batches.sort(
+		(left, right) =>
+			left.createdAt - right.createdAt ||
+			left._creationTime - right._creationTime,
+	);
+}
+
+async function moveInboundEmailMessageBatches(
+	ctx: MutationCtx,
+	args: {
+		batches: readonly InboundEmailAgentMessageBatch[];
+		targetTurnId: Id<"agentTurns">;
+		targetRunId: Id<"agentRuns">;
+	},
+) {
+	if (args.batches.length === 0) return;
+	let sequence = await nextItemSequence(ctx, args.targetTurnId);
+	for (const batch of args.batches) {
+		await ctx.db.patch(batch._id, {
+			turnId: args.targetTurnId,
+			runId: args.targetRunId,
+			sequence,
+		});
+		sequence += 1;
+	}
+}
+
+export async function positionUndeliveredInboundEmailBatchAtTurnEnd(
+	ctx: MutationCtx,
+	run: Doc<"agentRuns">,
+) {
+	const batch = await getUndeliveredInboundEmailMessageBatch(ctx, run);
+	if (!batch) return null;
+	const sequence = await nextItemSequence(ctx, run.turnId);
+	if (sequence === batch.sequence + 1) return batch;
+	await ctx.db.patch(batch._id, { sequence });
+	return { ...batch, sequence };
+}
+
+async function recordInboundEmailForAgentRun(
+	ctx: MutationCtx,
+	args: {
+		turnId: Id<"agentTurns">;
+		run: Doc<"agentRuns">;
+		threadId: Id<"emailThreads">;
+		threadSubject: string;
+		receivedAt: number;
+	},
+) {
+	const pendingBatch = await getUndeliveredInboundEmailMessageBatch(
+		ctx,
+		args.run,
+	);
+	if (pendingBatch) {
+		const staysInSingleThread = pendingBatch.emailThreadId === args.threadId;
+		const messageCount = pendingBatch.inboundEmailMessageCount + 1;
+		const threadSubject = staysInSingleThread ? args.threadSubject : undefined;
+		await ctx.db.patch(pendingBatch._id, {
+			createdAt: args.receivedAt,
+			body: formatInboundEmailSteeringMessage({
+				messageCount,
+				...(threadSubject ? { threadSubject } : {}),
+			}),
+			inboundEmailMessageCount: messageCount,
+			emailThreadId: staysInSingleThread ? args.threadId : undefined,
+		});
+		return pendingBatch._id;
+	}
+
+	return await ctx.db.insert("agentItems", {
+		turnId: args.turnId,
+		sequence: await nextItemSequence(ctx, args.turnId),
+		createdAt: args.receivedAt,
+		kind: "system_message",
+		runId: args.run._id,
+		body: formatInboundEmailSteeringMessage({
+			messageCount: 1,
+			threadSubject: args.threadSubject,
+		}),
+		source: INBOUND_EMAIL_STEERING_SOURCE,
+		inboundEmailMessageCount: 1,
+		emailThreadId: args.threadId,
+	});
+}
+
+export async function notifyActiveAgentTaskOfInboundEmail(
+	ctx: MutationCtx,
+	args: {
+		caseId: Id<"cases">;
+		threadId: Id<"emailThreads">;
+		threadSubject: string;
+		receivedAt: number;
+	},
+) {
+	const task = await getActiveAgentTaskForCase(ctx, args.caseId);
+	if (!task) return null;
+
+	if (task.status === "waiting") {
+		await reactivateAgentTask(ctx, task);
+		const continuation = await insertTurnAndQueuedRun(ctx, {
+			taskId: task._id,
+			requestedAt: args.receivedAt,
+			requestedBy: INBOUND_EMAIL_STEERING_SOURCE,
+		});
+		const run = await ctx.db.get(continuation.runId);
+		if (!run) throw new Error("Inbound email continuation run is missing");
+		await recordInboundEmailForAgentRun(ctx, {
+			turnId: continuation.turnId,
+			run,
+			threadId: args.threadId,
+			threadSubject: args.threadSubject,
+			receivedAt: args.receivedAt,
+		});
+		return { kind: "resumed" as const, ...continuation };
+	}
+
+	if (task.status === "waiting_for_approval") {
+		const { approvals, runs } = await resolveActiveAgentTaskLinks(ctx, task);
+		const run =
+			runs.at(-1) ?? (await getApprovalSourceRuns(ctx, approvals)).at(-1);
+		if (!run) throw new Error("Agent task approval has no source run");
+		const turn = await ctx.db.get(run.turnId);
+		if (!turn || turn.taskId !== task._id) {
+			throw new Error("Agent approval source run belongs to another task");
+		}
+		await recordInboundEmailForAgentRun(ctx, {
+			turnId: turn._id,
+			run,
+			threadId: args.threadId,
+			threadSubject: args.threadSubject,
+			receivedAt: args.receivedAt,
+		});
+		return {
+			kind: "pending_approval" as const,
+			turnId: turn._id,
+			runId: run._id,
+		};
+	}
+
+	if (task.status !== "active") return null;
+	const { runs } = await resolveActiveAgentTaskLinks(ctx, task);
+	const run = runs.at(-1);
+	if (!run || (run.status !== "queued" && run.status !== "running")) {
+		throw new Error("Active agent task has no current run");
+	}
+	const turn = await ctx.db.get(run.turnId);
+	if (!turn || turn.taskId !== task._id) {
+		throw new Error("Active agent run belongs to another task");
+	}
+	await recordInboundEmailForAgentRun(ctx, {
+		turnId: turn._id,
+		run,
+		threadId: args.threadId,
+		threadSubject: args.threadSubject,
+		receivedAt: args.receivedAt,
+	});
+	return { kind: run.status, turnId: turn._id, runId: run._id };
+}
+
+export async function continueTaskFromUndeliveredInboundEmail(
+	ctx: MutationCtx,
+	args: {
+		task: Doc<"agentTasks">;
+		sourceRun: Doc<"agentRuns">;
+	},
+) {
+	const batches = await getUndeliveredInboundEmailMessageBatches(ctx, [
+		args.sourceRun,
+	]);
+	if (batches.length === 0) return null;
+	if (
+		args.task.status === "active" ||
+		args.task.status === "waiting_for_approval" ||
+		args.task.status === "cancelled"
+	) {
+		return null;
+	}
+	await requireAvailableCaseOwnership(ctx, args.task);
+	await reactivateAgentTask(ctx, args.task);
+	const continuation = await insertTurnAndQueuedRun(ctx, {
+		taskId: args.task._id,
+		requestedAt: Math.max(...batches.map((batch) => batch.createdAt)),
+		requestedBy: INBOUND_EMAIL_STEERING_SOURCE,
+	});
+	await moveInboundEmailMessageBatches(ctx, {
+		batches,
+		targetTurnId: continuation.turnId,
+		targetRunId: continuation.runId,
+	});
+	return continuation;
+}
+
 async function continueTaskWithMemberMessage(
 	ctx: MutationCtx,
 	args: {
@@ -353,6 +628,11 @@ export async function queueApprovalContinuationIfReady(
 	) {
 		return null;
 	}
+	const approvalSourceRuns = await getApprovalSourceRuns(ctx, approvals);
+	const inboundEmailBatches = await getUndeliveredInboundEmailMessageBatches(
+		ctx,
+		approvalSourceRuns,
+	);
 	await ctx.db.replace("agentTasks", task._id, {
 		...ownedAgentTaskFields(task),
 		status: "active",
@@ -362,6 +642,11 @@ export async function queueApprovalContinuationIfReady(
 		taskId: task._id,
 		requestedAt: args.requestedAt,
 		requestedBy: "system:approvalResolution",
+	});
+	await moveInboundEmailMessageBatches(ctx, {
+		batches: inboundEmailBatches,
+		targetTurnId: continuation.turnId,
+		targetRunId: continuation.runId,
 	});
 	for (const approval of decisions) {
 		await ctx.db.patch(approval._id, {
@@ -492,11 +777,22 @@ export const retry = mutation({
 			.order("desc")
 			.first();
 		if (!turn) throw new Error("Failed agent task has no turn to retry");
+		const sourceRun = await getLatestRunForTurn(ctx, turn._id);
+		if (!sourceRun) throw new Error("Failed agent task has no run to retry");
+		const inboundEmailBatches = await getUndeliveredInboundEmailMessageBatches(
+			ctx,
+			[sourceRun],
+		);
 		await reactivateAgentTask(ctx, task);
 		const runId = await insertQueuedRun(ctx, {
 			taskId: task._id,
 			turnId: turn._id,
 			requestedAt: Date.now(),
+		});
+		await moveInboundEmailMessageBatches(ctx, {
+			batches: inboundEmailBatches,
+			targetTurnId: turn._id,
+			targetRunId: runId,
 		});
 		return { turnId: turn._id, runId };
 	},

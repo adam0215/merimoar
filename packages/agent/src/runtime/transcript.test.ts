@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildModelMessages } from "./transcript";
+import {
+	buildModelMessages,
+	INBOUND_EMAIL_STEERING_SOURCE,
+} from "./transcript";
 
 describe("buildModelMessages", () => {
 	it("replays long and credential-like tool values without changing them", () => {
@@ -271,5 +274,55 @@ describe("buildModelMessages", () => {
 				},
 			],
 		});
+	});
+
+	it("keeps inbound email batches in their original transcript positions", () => {
+		const messages = buildModelMessages(
+			{
+				taskId: "task-1",
+				turns: [
+					{
+						turnId: "turn-1",
+						sequence: 1,
+						items: [
+							{
+								kind: "member_message",
+								body: "Handle this case.",
+								sequence: 1,
+							},
+							{
+								kind: "system_message",
+								body: "First email batch",
+								source: INBOUND_EMAIL_STEERING_SOURCE,
+								runId: "run-1",
+								inboundEmailMessageCount: 1,
+								sequence: 2,
+							},
+							{
+								kind: "agent_message",
+								body: "I handled the first email.",
+								sequence: 3,
+							},
+							{
+								kind: "system_message",
+								body: "Second email batch",
+								source: INBOUND_EMAIL_STEERING_SOURCE,
+								runId: "run-1",
+								inboundEmailMessageCount: 1,
+								sequence: 4,
+							},
+						],
+					},
+				],
+			},
+			"run-1",
+		);
+
+		expect(messages).toEqual([
+			{ role: "user", content: "Handle this case." },
+			{ role: "user", content: "First email batch" },
+			{ role: "assistant", content: "I handled the first email." },
+			{ role: "user", content: "Second email batch" },
+		]);
 	});
 });

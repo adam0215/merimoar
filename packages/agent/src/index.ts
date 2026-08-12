@@ -14,7 +14,11 @@ export {
 	type AgentRunSubscriberHost,
 	startAgentRunSubscriber,
 } from "./runtime/subscriber";
-export { buildModelMessages } from "./runtime/transcript";
+export {
+	buildModelMessages,
+	formatInboundEmailSteeringMessage,
+	INBOUND_EMAIL_STEERING_SOURCE,
+} from "./runtime/transcript";
 export type {
 	AgentActivity,
 	AgentCapabilities,

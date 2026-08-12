@@ -22,6 +22,8 @@ export const transcriptItemValidator = v.union(
 		kind: v.literal("system_message"),
 		body: v.string(),
 		source: v.string(),
+		runId: v.optional(v.id("agentRuns")),
+		inboundEmailMessageCount: v.optional(v.number()),
 		sequence: v.number(),
 	}),
 	v.object({
@@ -124,6 +126,10 @@ export function projectTranscriptItem(item: Doc<"agentItems">) {
 				kind: item.kind,
 				body: item.body,
 				source: item.source,
+				...(item.runId ? { runId: item.runId } : {}),
+				...(item.inboundEmailMessageCount === undefined
+					? {}
+					: { inboundEmailMessageCount: item.inboundEmailMessageCount }),
 				sequence: item.sequence,
 			};
 		case "agent_message":

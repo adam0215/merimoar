@@ -47,6 +47,7 @@ Agent work must be:
 - Built-in Merimoar tools.
 - Task-level and tool-level approval primitives.
 - Member messages that resume idle tasks or steer an in-flight run.
+- Inbound email that resumes or steers the task already owning its linked case.
 - A local terminal UI using the same agent definition and tools.
 - A minimal case/email read model describing active agent ownership.
 
@@ -319,9 +320,15 @@ primitive.
   `completed`, `unable_to_continue`, or `failed` creates the next member turn
   and queued run. A terminal task reacquires case ownership atomically; the
   continuation is rejected if another task already owns the case.
+- Inbound email on a linked case resumes its waiting owner. Email arriving for
+  a queued run joins that turn; email arriving during execution is batched into
+  one short steering message before the next model step. If the run already
+  selected its durable status, undelivered email creates one catch-up run after
+  finalization instead of being lost.
 - Retrying `failed` creates a new queued run on the failed turn without
-  creating a turn or item. The retry reuses the durable transcript exactly as
-  written and must reacquire case ownership atomically.
+  creating a turn or member item. The retry preserves delivered transcript
+  history, reassigns any undelivered inbound-email batch to the new run, and
+  must reacquire case ownership atomically.
 
 ## 10. Approvals
 

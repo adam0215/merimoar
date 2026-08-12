@@ -1,3 +1,7 @@
+import {
+	buildModelMessages,
+	INBOUND_EMAIL_STEERING_SOURCE,
+} from "@merimoar/agent";
 import { describe, expect, it, vi } from "vitest";
 import { dispatchDomainEvent } from "#/domainEvents";
 import { insertResendIntegration } from "#/test.setup";
@@ -6,7 +10,10 @@ import type { Id } from "../_generated/dataModel";
 import {
 	createFixture,
 	delegateAndClaim,
+	finishWithTaskStatus,
+	loadCompleteRuntimeTranscript,
 	RUNTIME_SECRET,
+	startTool,
 } from "./testSupport.test-helper";
 
 type Fixture = Awaited<ReturnType<typeof createFixture>>;
@@ -63,6 +70,7 @@ async function deliverInboundEmail(
 		integrationId: Id<"emailIntegrations">;
 	},
 	suffix: string,
+	subject = "Re: Need help",
 ) {
 	return await fixture.base.run(async (ctx) => {
 		const messageId = await ctx.db.insert("emailMessages", {
@@ -79,7 +87,7 @@ async function deliverInboundEmail(
 			cc: [],
 			bcc: [],
 			replyTo: [],
-			subject: "Re: Need help",
+			subject,
 			textBody: "One more important detail.",
 			sentAt: 2_000,
 			receivedAt: 2_100,
@@ -94,6 +102,33 @@ async function deliverInboundEmail(
 		});
 		return messageId;
 	});
+}
+
+async function claimQueuedRun(
+	fixture: Fixture,
+	expectedRunId: Id<"agentRuns">,
+) {
+	const claimToken = crypto.randomUUID();
+	const claim = await fixture.base.mutation(api.agent.runtime.claimNextRun, {
+		runtimeSecret: RUNTIME_SECRET,
+		claimToken,
+		leaseDurationMs: 60_000,
+	});
+	if (!claim || claim.runId !== expectedRunId) {
+		throw new Error("Expected the queued email continuation run");
+	}
+	return { ...claim, claimToken };
+}
+
+async function retryAndLoadTranscript(fixture: Fixture, claim: Claim) {
+	const retry = await fixture.actor.mutation(api.agent.tasks.retry, {
+		taskId: claim.taskId,
+	});
+	const retryClaim = await claimQueuedRun(fixture, retry.runId);
+	return {
+		retryClaim,
+		transcript: await loadCompleteRuntimeTranscript(fixture, retryClaim),
+	};
 }
 
 async function finishScheduledInvalidation(fixture: Fixture) {
@@ -182,6 +217,380 @@ async function startApprovedEmailReplay(
 }
 
 describe("agent email tool", () => {
+	it("resumes a waiting task and batches email received before the run starts", async () => {
+		const fixture = await createFixture();
+		const config = await configureOutboundEmail(fixture);
+		const claim = await delegateAndClaim(fixture);
+		await finishWithTaskStatus(fixture, claim, {
+			status: "waiting",
+			reason: "Waiting for the customer.",
+		});
+
+		await deliverInboundEmail(fixture, config, "waiting-1");
+		await deliverInboundEmail(fixture, config, "waiting-2");
+
+		const state = await fixture.base.run(async (ctx) => {
+			const task = await ctx.db.get(claim.taskId);
+			const runId = task?.activeRunIds.at(-1);
+			const run = runId ? await ctx.db.get(runId) : null;
+			const turn = run ? await ctx.db.get(run.turnId) : null;
+			return { run, runId, task, turn };
+		});
+		expect(state.task).toMatchObject({ status: "active" });
+		expect(state.run).toMatchObject({ status: "queued" });
+		expect(state.turn).toMatchObject({
+			requestedBy: INBOUND_EMAIL_STEERING_SOURCE,
+		});
+		if (!state.runId) throw new Error("Expected a resumed run");
+
+		const resumedClaim = await claimQueuedRun(fixture, state.runId);
+		const transcript = await loadCompleteRuntimeTranscript(
+			fixture,
+			resumedClaim,
+		);
+		expect(buildModelMessages(transcript, resumedClaim.runId)).toContainEqual({
+			role: "user",
+			content:
+				"You received 2 new email messages in “Re: Need help” while you were working. Read the email thread again before continuing.",
+		});
+	});
+
+	it("batches email received during a run into one steering message", async () => {
+		const fixture = await createFixture();
+		const config = await configureOutboundEmail(fixture);
+		const claim = await delegateAndClaim(fixture);
+
+		await deliverInboundEmail(fixture, config, "running-1");
+		await deliverInboundEmail(fixture, config, "running-2");
+
+		const steering = await fixture.base.mutation(
+			api.agent.runtime.getSteeringMessages,
+			{
+				runtimeSecret: RUNTIME_SECRET,
+				runId: claim.runId,
+				claimToken: claim.claimToken,
+				afterSequence: 0,
+			},
+		);
+		expect(steering).toEqual([
+			{
+				body: "You received 2 new email messages in “Re: Need help” while you were working. Read the email thread again before continuing.",
+				sequence: 2,
+			},
+		]);
+		expect(
+			await fixture.base.run(async (ctx) => ctx.db.get(claim.runId)),
+		).toMatchObject({ lastSteeringSequence: 2 });
+
+		await finishWithTaskStatus(fixture, claim, {
+			status: "waiting",
+			reason: "Waiting for another reply.",
+		});
+		expect(
+			await fixture.base.run(async (ctx) => ctx.db.get(claim.taskId)),
+		).toMatchObject({ status: "waiting" });
+	});
+
+	it("returns every member steer alongside one unbounded email batch", async () => {
+		const fixture = await createFixture();
+		const config = await configureOutboundEmail(fixture);
+		const claim = await delegateAndClaim(fixture);
+		for (let index = 0; index < 25; index += 1) {
+			await deliverInboundEmail(fixture, config, `unbounded-${index}`);
+		}
+		await fixture.actor.mutation(api.agent.tasks.sendMessage, {
+			taskId: claim.taskId,
+			input: "Also preserve this human instruction.",
+		});
+
+		expect(
+			await fixture.base.mutation(api.agent.runtime.getSteeringMessages, {
+				runtimeSecret: RUNTIME_SECRET,
+				runId: claim.runId,
+				claimToken: claim.claimToken,
+				afterSequence: 0,
+			}),
+		).toEqual([
+			{
+				body: "Also preserve this human instruction.",
+				sequence: 3,
+			},
+			{
+				body: "You received 25 new email messages in “Re: Need help” while you were working. Read the email thread again before continuing.",
+				sequence: 4,
+			},
+		]);
+	});
+
+	it("moves unread email to a new run after an explicit failure retry", async () => {
+		const fixture = await createFixture();
+		const config = await configureOutboundEmail(fixture);
+		const claim = await delegateAndClaim(fixture);
+		await deliverInboundEmail(fixture, config, "before-explicit-failure");
+		await fixture.base.mutation(api.agent.runtime.failRun, {
+			runtimeSecret: RUNTIME_SECRET,
+			runId: claim.runId,
+			claimToken: claim.claimToken,
+			message: "The provider request failed.",
+		});
+
+		const { retryClaim, transcript } = await retryAndLoadTranscript(
+			fixture,
+			claim,
+		);
+		expect(buildModelMessages(transcript, retryClaim.runId)).toContainEqual({
+			role: "user",
+			content:
+				"You received 1 new email message in “Re: Need help” while you were working. Read the email thread again before continuing.",
+		});
+	});
+
+	it("moves unread email to a new run after lease exhaustion retry", async () => {
+		const fixture = await createFixture();
+		const config = await configureOutboundEmail(fixture);
+		const claim = await delegateAndClaim(fixture);
+		await deliverInboundEmail(fixture, config, "before-lease-exhaustion");
+
+		for (let loss = 1; loss <= 3; loss += 1) {
+			const run = await fixture.base.run(async (ctx) =>
+				ctx.db.get(claim.runId),
+			);
+			if (!run || run.status !== "running") {
+				throw new Error("Expected a running lease-loss fixture");
+			}
+			await fixture.base.run(async (ctx) => {
+				await ctx.db.patch(run._id, { leaseExpiresAt: 0 });
+			});
+			await fixture.base.mutation(internal.agent.leases.requeueExpiredRun, {
+				runId: run._id,
+				leaseGeneration: run.leaseGeneration,
+			});
+			if (loss < 3) {
+				await claimQueuedRun(fixture, run._id);
+			}
+		}
+
+		const { retryClaim, transcript } = await retryAndLoadTranscript(
+			fixture,
+			claim,
+		);
+		expect(buildModelMessages(transcript, retryClaim.runId)).toContainEqual({
+			role: "user",
+			content:
+				"You received 1 new email message in “Re: Need help” while you were working. Read the email thread again before continuing.",
+		});
+	});
+
+	it("moves every pending email into one catch-up run after status selection", async () => {
+		const fixture = await createFixture();
+		const config = await configureOutboundEmail(fixture);
+		const claim = await delegateAndClaim(fixture);
+		const toolCallId = "status-before-email";
+		await startTool(fixture, claim, toolCallId, "update_task_status");
+		await fixture.base.mutation(api.agent.runtime.stageTaskStatus, {
+			runtimeSecret: RUNTIME_SECRET,
+			runId: claim.runId,
+			claimToken: claim.claimToken,
+			toolCallId,
+			update: {
+				status: "waiting",
+				reason: "Waiting for the customer.",
+			},
+		});
+
+		for (let index = 0; index < 25; index += 1) {
+			await deliverInboundEmail(fixture, config, `finishing-${index}`);
+		}
+		await fixture.base.mutation(api.agent.runtime.finishRun, {
+			runtimeSecret: RUNTIME_SECRET,
+			runId: claim.runId,
+			claimToken: claim.claimToken,
+		});
+
+		const state = await fixture.base.run(async (ctx) => {
+			const task = await ctx.db.get(claim.taskId);
+			const runId = task?.activeRunIds.at(-1);
+			const run = runId ? await ctx.db.get(runId) : null;
+			const turn = run ? await ctx.db.get(run.turnId) : null;
+			const items = turn
+				? await ctx.db
+						.query("agentItems")
+						.withIndex("by_turn_id_and_sequence", (index) =>
+							index.eq("turnId", turn._id),
+						)
+						.collect()
+				: [];
+			return { items, run, runId, task, turn };
+		});
+		expect(state.task).toMatchObject({ status: "active" });
+		expect(state.run).toMatchObject({ status: "queued" });
+		expect(state.turn).toMatchObject({
+			requestedBy: INBOUND_EMAIL_STEERING_SOURCE,
+		});
+		const inboundEmailItems = state.items.flatMap((item) =>
+			item.kind === "system_message" &&
+			item.source === INBOUND_EMAIL_STEERING_SOURCE
+				? [item]
+				: [],
+		);
+		expect(inboundEmailItems).toHaveLength(1);
+		expect(inboundEmailItems[0]).toMatchObject({
+			inboundEmailMessageCount: 25,
+		});
+		expect(inboundEmailItems.every((item) => item.runId === state.runId)).toBe(
+			true,
+		);
+
+		if (!state.runId) throw new Error("Expected an email catch-up run");
+		const catchUpClaim = await claimQueuedRun(fixture, state.runId);
+		const transcript = await loadCompleteRuntimeTranscript(
+			fixture,
+			catchUpClaim,
+		);
+		expect(buildModelMessages(transcript, catchUpClaim.runId)).toContainEqual({
+			role: "user",
+			content:
+				"You received 25 new email messages in “Re: Need help” while you were working. Read the email thread again before continuing.",
+		});
+	});
+
+	it("carries email received during task approval into its continuation", async () => {
+		const fixture = await createFixture();
+		const config = await configureOutboundEmail(fixture);
+		const claim = await delegateAndClaim(fixture);
+		await finishWithTaskStatus(fixture, claim, {
+			status: "waiting_for_approval",
+			approvalId: "task-email-approval",
+			approvalRequest: "Approve the proposed resolution?",
+		});
+
+		for (let index = 0; index < 25; index += 1) {
+			await deliverInboundEmail(
+				fixture,
+				config,
+				`during-task-approval-${index}`,
+			);
+		}
+		const continuation = await approveAndClaim(
+			fixture,
+			claim,
+			"task-email-approval",
+		);
+		const transcript = await loadCompleteRuntimeTranscript(
+			fixture,
+			continuation,
+		);
+		const inboundEmailItem = transcript.turns
+			.flatMap((turn) => turn.items)
+			.find(
+				(item) =>
+					item.kind === "system_message" &&
+					item.inboundEmailMessageCount !== undefined,
+			);
+		expect(inboundEmailItem).toMatchObject({
+			kind: "system_message",
+			inboundEmailMessageCount: 25,
+			runId: continuation.runId,
+		});
+		expect(buildModelMessages(transcript, continuation.runId)).toContainEqual({
+			role: "user",
+			content:
+				"You received 25 new email messages in “Re: Need help” while you were working. Read the email thread again before continuing.",
+		});
+	});
+
+	it("carries email received during a running tool approval into its continuation", async () => {
+		vi.useFakeTimers();
+		try {
+			const fixture = await createFixture();
+			const config = await configureOutboundEmail(fixture);
+			const claim = await delegateAndClaim(fixture);
+			const toolCallId = "running-email-approval-tool";
+			const approvalId = "running-email-approval";
+			await fixture.base.mutation(api.agent.runtime.recordToolStarted, {
+				runtimeSecret: RUNTIME_SECRET,
+				runId: claim.runId,
+				claimToken: claim.claimToken,
+				toolCallId,
+				toolName: "send_email",
+				inputJson: JSON.stringify({
+					threadId: fixture.linkedThreadId,
+					body: EMAIL_BODY,
+				}),
+				summary: "Sending an email reply",
+			});
+			const approvalItemId = await fixture.base.mutation(
+				api.agent.runtime.recordToolApprovalRequest,
+				{
+					runtimeSecret: RUNTIME_SECRET,
+					runId: claim.runId,
+					claimToken: claim.claimToken,
+					toolCallId,
+					approvalId,
+					request: "Approve this email reply?",
+				},
+			);
+
+			await deliverInboundEmail(
+				fixture,
+				config,
+				"during-running-tool-approval",
+			);
+			await finishScheduledInvalidation(fixture);
+			expect(
+				await fixture.base.run(async (ctx) => ({
+					approval: await ctx.db.get(approvalItemId),
+					task: await ctx.db.get(claim.taskId),
+				})),
+			).toMatchObject({
+				approval: { status: "invalidated" },
+				task: {
+					status: "waiting_for_approval",
+					activeRunIds: [claim.runId],
+				},
+			});
+
+			await fixture.base.mutation(api.agent.runtime.finishRun, {
+				runtimeSecret: RUNTIME_SECRET,
+				runId: claim.runId,
+				claimToken: claim.claimToken,
+			});
+			const task = await fixture.base.run(async (ctx) =>
+				ctx.db.get(claim.taskId),
+			);
+			const continuationRunId = task?.activeRunIds.at(-1);
+			if (!continuationRunId) {
+				throw new Error("Expected a tool approval continuation run");
+			}
+			const continuation = await claimQueuedRun(fixture, continuationRunId);
+			const transcript = await loadCompleteRuntimeTranscript(
+				fixture,
+				continuation,
+			);
+			const inboundEmailItem = transcript.turns
+				.flatMap((turn) => turn.items)
+				.find(
+					(item) =>
+						item.kind === "system_message" &&
+						item.inboundEmailMessageCount !== undefined,
+				);
+			expect(inboundEmailItem).toMatchObject({
+				kind: "system_message",
+				inboundEmailMessageCount: 1,
+				runId: continuation.runId,
+			});
+			expect(buildModelMessages(transcript, continuation.runId)).toContainEqual(
+				{
+					role: "user",
+					content:
+						"You received 1 new email message in “Re: Need help” while you were working. Read the email thread again before continuing.",
+				},
+			);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
 	it("queues an approved reply through the existing outbound pipeline and attributes it to the task", async () => {
 		const fixture = await createFixture();
 		await configureOutboundEmail(fixture);

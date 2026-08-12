@@ -9,6 +9,34 @@ type ToolApprovalResponse = {
 	reason?: string;
 };
 
+export const INBOUND_EMAIL_STEERING_SOURCE = "domainEvent:case.emailReceived";
+
+export function formatInboundEmailSteeringMessage(args: {
+	messageCount: number;
+	threadSubject?: string;
+}) {
+	if (args.messageCount < 1) {
+		throw new Error("An email steering message requires at least one email.");
+	}
+	const messageLabel = args.messageCount === 1 ? "message" : "messages";
+	const threadLabel = args.threadSubject ? "thread" : "threads";
+	return `You received ${args.messageCount} new email ${messageLabel}${args.threadSubject ? ` in “${args.threadSubject}”` : ""} while you were working. Read the email ${threadLabel} again before continuing.`;
+}
+
+export function isInboundEmailSteeringMessage(
+	item: PersistedItem,
+): item is Extract<PersistedItem, { kind: "system_message" }> & {
+	runId: string;
+	inboundEmailMessageCount: number;
+} {
+	return (
+		item.kind === "system_message" &&
+		item.source === INBOUND_EMAIL_STEERING_SOURCE &&
+		item.runId !== undefined &&
+		item.inboundEmailMessageCount !== undefined
+	);
+}
+
 export function buildModelMessages(
 	transcript: PersistedTranscript,
 	runId: string,
@@ -38,6 +66,12 @@ export function buildModelMessages(
 				messages.push({ role: "user", content: item.body });
 				break;
 			case "system_message":
+				if (isInboundEmailSteeringMessage(item)) {
+					if (item.runId === runId) {
+						messages.push({ role: "user", content: item.body });
+					}
+					break;
+				}
 				messages.push({
 					role: "user",
 					content: `[${item.source}] ${item.body}`,

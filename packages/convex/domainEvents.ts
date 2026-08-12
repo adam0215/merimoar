@@ -1,4 +1,5 @@
 import { invalidatePendingAgentEmailApprovals } from "#/agent/approvalInvalidation";
+import { notifyActiveAgentTaskOfInboundEmail } from "#/agent/tasks";
 import { getActiveCaseRelationForEmailThread } from "#/case/emailRelations";
 import { removeCaseEmbedding } from "#/case/embeddingData";
 import { buildCaseEmbeddingInput } from "#/case/embeddingModel";
@@ -165,17 +166,23 @@ async function handleCaseEmailReceived(
 		event.messageId,
 		event.receivedAt,
 	);
-	if (caseRecord.status === "needs_attention") return;
-
-	await ctx.db.patch(caseRecord._id, { status: "needs_attention" });
-	await dispatchDomainEvent(ctx, {
-		name: "case.statusChanged",
-		payload: {
-			caseId: caseRecord._id,
-			status: "needs_attention",
-			changedByMemberId: null,
-			occurredAt: event.receivedAt,
-		},
+	if (caseRecord.status !== "needs_attention") {
+		await ctx.db.patch(caseRecord._id, { status: "needs_attention" });
+		await dispatchDomainEvent(ctx, {
+			name: "case.statusChanged",
+			payload: {
+				caseId: caseRecord._id,
+				status: "needs_attention",
+				changedByMemberId: null,
+				occurredAt: event.receivedAt,
+			},
+		});
+	}
+	await notifyActiveAgentTaskOfInboundEmail(ctx, {
+		caseId: caseRecord._id,
+		threadId: thread._id,
+		threadSubject: message.subject || "(No subject)",
+		receivedAt: event.receivedAt,
 	});
 }
 

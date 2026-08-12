@@ -679,7 +679,7 @@ async function requireNoCrossOrganizationReferences(
 	}
 	for (const item of graph.agentItems) {
 		requireSubset(turnIds.has(item.turnId), "agent item points outside Acme");
-		if ("runId" in item) {
+		if ("runId" in item && item.runId) {
 			requireSubset(runIds.has(item.runId), "agent item has an external run");
 		}
 		if ("memberId" in item) {
