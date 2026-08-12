@@ -10,6 +10,7 @@ import {
 	agentRunUsageValidator,
 	agentTaskStatusUpdateValidator,
 } from "#/agent/model";
+import { scheduleAgentRunPush } from "#/agent/push";
 import { finalizeClaimedRun } from "#/agent/runFinalization";
 import {
 	nextItemSequence,
@@ -62,6 +63,23 @@ function getLatestSteeringSequence(
 		return Math.max(latest, item.sequence);
 	}, initialSequence);
 }
+
+const claimRunArgs = {
+	runtimeSecret: v.string(),
+	claimToken: v.string(),
+	leaseDurationMs: v.number(),
+};
+
+const claimedRunValidator = v.union(
+	v.object({
+		runId: v.id("agentRuns"),
+		turnId: v.id("agentTurns"),
+		taskId: v.id("agentTasks"),
+		anchorCaseId: v.id("cases"),
+		agentKey: v.string(),
+	}),
+	v.null(),
+);
 
 async function findClaimableRun(ctx: MutationCtx, now: number) {
 	const queuedRuns = await ctx.db
@@ -128,73 +146,102 @@ export const observeNextQueuedRun = query({
 });
 
 export const claimNextRun = mutation({
-	args: {
-		runtimeSecret: v.string(),
-		claimToken: v.string(),
-		leaseDurationMs: v.number(),
-	},
-	returns: v.union(
-		v.object({
-			runId: v.id("agentRuns"),
-			turnId: v.id("agentTurns"),
-			taskId: v.id("agentTasks"),
-			anchorCaseId: v.id("cases"),
-			agentKey: v.string(),
-		}),
-		v.null(),
-	),
+	args: claimRunArgs,
+	returns: claimedRunValidator,
 	handler: async (ctx, args) => {
 		requireAgentRuntimeSecret(args.runtimeSecret);
-		normalizeClaimToken(args.claimToken);
-		if (
-			!Number.isInteger(args.leaseDurationMs) ||
-			args.leaseDurationMs < MIN_LEASE_DURATION_MS ||
-			args.leaseDurationMs > MAX_LEASE_DURATION_MS
-		) {
-			throw new Error("Invalid agent run lease duration");
-		}
-
+		requireClaimArguments(args);
 		const now = Date.now();
 		const candidate = await findClaimableRun(ctx, now);
 		if (!candidate) return null;
-
-		const leaseExpiresAt = now + args.leaseDurationMs;
-		const leaseGeneration = candidate.run.leaseGeneration + 1;
-		const attempt = candidate.run.attemptCount + 1;
-		await positionUndeliveredInboundEmailBatchAtTurnEnd(ctx, candidate.run);
-		await ctx.db.replace("agentRuns", candidate.run._id, {
-			...agentRunBaseFields(candidate.run),
-			attemptCount: attempt,
-			leaseGeneration,
-			status: "running",
-			claimToken: args.claimToken,
-			claimedAt: now,
-			leaseExpiresAt,
-			startedAt: now,
-		});
-		await ctx.scheduler.runAt(
-			leaseExpiresAt,
-			internal.agent.leases.requeueExpiredRun,
-			{
-				runId: candidate.run._id,
-				leaseGeneration,
-			},
-		);
-		console.info("agent_run_claimed", {
-			runId: candidate.run._id,
-			taskId: candidate.task._id,
-			agentKey: candidate.task.agentKey,
-			attempt,
-		});
-		return {
-			runId: candidate.run._id,
-			turnId: candidate.turn._id,
-			taskId: candidate.task._id,
-			anchorCaseId: candidate.task.anchorCaseId,
-			agentKey: candidate.task.agentKey,
-		};
+		return await claimCandidate(ctx, args, candidate, now);
 	},
 });
+
+export const claimRun = mutation({
+	args: {
+		...claimRunArgs,
+		runId: v.id("agentRuns"),
+		leaseGeneration: v.number(),
+	},
+	returns: claimedRunValidator,
+	handler: async (ctx, args) => {
+		requireAgentRuntimeSecret(args.runtimeSecret);
+		requireClaimArguments(args);
+		const run = await ctx.db.get(args.runId);
+		if (
+			!run ||
+			run.status !== "queued" ||
+			run.leaseGeneration !== args.leaseGeneration
+		) {
+			return null;
+		}
+		const now = Date.now();
+		const owner = await getCurrentActiveTaskForRun(ctx, run);
+		if (!owner) {
+			await cancelUnclaimableRun(ctx, run, now);
+			return null;
+		}
+		return await claimCandidate(ctx, args, { run, ...owner }, now);
+	},
+});
+
+function requireClaimArguments(args: {
+	claimToken: string;
+	leaseDurationMs: number;
+}) {
+	normalizeClaimToken(args.claimToken);
+	if (
+		!Number.isInteger(args.leaseDurationMs) ||
+		args.leaseDurationMs < MIN_LEASE_DURATION_MS ||
+		args.leaseDurationMs > MAX_LEASE_DURATION_MS
+	) {
+		throw new Error("Invalid agent run lease duration");
+	}
+}
+
+async function claimCandidate(
+	ctx: MutationCtx,
+	args: { claimToken: string; leaseDurationMs: number },
+	candidate: NonNullable<Awaited<ReturnType<typeof findClaimableRun>>>,
+	now: number,
+) {
+	const leaseExpiresAt = now + args.leaseDurationMs;
+	const leaseGeneration = candidate.run.leaseGeneration + 1;
+	const attempt = candidate.run.attemptCount + 1;
+	await positionUndeliveredInboundEmailBatchAtTurnEnd(ctx, candidate.run);
+	await ctx.db.replace("agentRuns", candidate.run._id, {
+		...agentRunBaseFields(candidate.run),
+		attemptCount: attempt,
+		leaseGeneration,
+		status: "running",
+		claimToken: args.claimToken,
+		claimedAt: now,
+		leaseExpiresAt,
+		startedAt: now,
+	});
+	await ctx.scheduler.runAt(
+		leaseExpiresAt,
+		internal.agent.leases.requeueExpiredRun,
+		{
+			runId: candidate.run._id,
+			leaseGeneration,
+		},
+	);
+	console.info("agent_run_claimed", {
+		runId: candidate.run._id,
+		taskId: candidate.task._id,
+		agentKey: candidate.task.agentKey,
+		attempt,
+	});
+	return {
+		runId: candidate.run._id,
+		turnId: candidate.turn._id,
+		taskId: candidate.task._id,
+		anchorCaseId: candidate.task.anchorCaseId,
+		agentKey: candidate.task.agentKey,
+	};
+}
 
 export const renewRunLease = mutation({
 	args: {
@@ -264,6 +311,10 @@ export const relinquishRun = mutation({
 			await ctx.db.replace("agentRuns", run._id, {
 				...agentRunBaseFields(run),
 				status: "queued",
+			});
+			await scheduleAgentRunPush(ctx, {
+				runId: run._id,
+				leaseGeneration: run.leaseGeneration,
 			});
 			return null;
 		}

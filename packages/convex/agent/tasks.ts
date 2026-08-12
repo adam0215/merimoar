@@ -10,6 +10,7 @@ import {
 	type RequestedBy,
 	terminalAgentTaskFields,
 } from "#/agent/model";
+import { scheduleAgentRunPush } from "#/agent/push";
 import { nextItemSequence } from "#/agent/runtimeValues";
 import { requireActor } from "#/auth/access";
 import { requireCase } from "#/case/access";
@@ -131,6 +132,7 @@ async function insertQueuedRun(
 	await ctx.db.patch("agentTasks", args.taskId, {
 		activeRunIds: [...task.activeRunIds, runId],
 	});
+	await scheduleAgentRunPush(ctx, { runId, leaseGeneration: 0 });
 	return runId;
 }
 

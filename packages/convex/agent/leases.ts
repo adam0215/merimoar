@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { agentRunBaseFields } from "#/agent/model";
+import { scheduleAgentRunPush } from "#/agent/push";
 import { finalizeClaimedRun } from "#/agent/runFinalization";
 import {
 	queueApprovalContinuationIfReady,
@@ -90,6 +91,10 @@ export const requeueExpiredRun = internalMutation({
 				...agentRunBaseFields(run),
 				leaseFailureCount,
 				status: "queued",
+			});
+			await scheduleAgentRunPush(ctx, {
+				runId: run._id,
+				leaseGeneration: run.leaseGeneration,
 			});
 			return null;
 		}

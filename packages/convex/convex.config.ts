@@ -8,6 +8,11 @@ import { v } from "convex/values";
 const app = defineApp({
 	env: {
 		AGENT_RUNTIME_SECRET: v.optional(v.string()),
+		AGENT_RUN_PUSH_SIGNING_SECRET: v.optional(v.string()),
+		AGENT_RUN_PUSH_URL: v.optional(v.string()),
+		AGENT_RUN_TRANSPORT: v.optional(
+			v.union(v.literal("pull"), v.literal("push")),
+		),
 		GEMINI_API_KEY: v.string(),
 		WORKOS_API_HOSTNAME: v.optional(v.string()),
 		WORKOS_API_KEY: v.string(),

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import {
@@ -10,7 +10,208 @@ import {
 	RUNTIME_SECRET,
 } from "./testSupport.test-helper";
 
+afterEach(() => {
+	vi.unstubAllEnvs();
+});
+
 describe("agent runs, leases, and transcript", () => {
+	it("claims only the exact run delivered by a push", async () => {
+		const fixture = await createFixture();
+		const first = await fixture.actor.mutation(api.agent.tasks.delegateCase, {
+			caseId: fixture.caseId,
+			input: "First queued task.",
+		});
+		const second = await fixture.actor.mutation(api.agent.tasks.delegateCase, {
+			caseId: fixture.secondCaseId,
+			input: "Second queued task.",
+		});
+		const secondToken = crypto.randomUUID();
+
+		await expect(
+			fixture.base.mutation(api.agent.runtime.claimRun, {
+				runtimeSecret: "not-the-runtime-secret",
+				runId: second.runId,
+				leaseGeneration: 0,
+				claimToken: secondToken,
+				leaseDurationMs: 60_000,
+			}),
+		).rejects.toThrow("access denied");
+		await expect(
+			fixture.base.mutation(api.agent.runtime.claimRun, {
+				runtimeSecret: RUNTIME_SECRET,
+				runId: second.runId,
+				leaseGeneration: 99,
+				claimToken: secondToken,
+				leaseDurationMs: 60_000,
+			}),
+		).resolves.toBeNull();
+		const exactClaim = await fixture.base.mutation(api.agent.runtime.claimRun, {
+			runtimeSecret: RUNTIME_SECRET,
+			runId: second.runId,
+			leaseGeneration: 0,
+			claimToken: secondToken,
+			leaseDurationMs: 60_000,
+		});
+
+		expect(exactClaim?.runId).toBe(second.runId);
+		expect(
+			await fixture.base.run(async (ctx) => ctx.db.get(first.runId)),
+		).toMatchObject({ status: "queued" });
+		await expect(
+			fixture.base.mutation(api.agent.runtime.claimRun, {
+				runtimeSecret: RUNTIME_SECRET,
+				runId: second.runId,
+				leaseGeneration: 0,
+				claimToken: crypto.randomUUID(),
+				leaseDurationMs: 60_000,
+			}),
+		).resolves.toBeNull();
+		const nextClaim = await fixture.base.mutation(
+			api.agent.runtime.claimNextRun,
+			{
+				runtimeSecret: RUNTIME_SECRET,
+				claimToken: crypto.randomUUID(),
+				leaseDurationMs: 60_000,
+			},
+		);
+		expect(nextClaim?.runId).toBe(first.runId);
+	});
+
+	it("durably pushes each new queue generation only in push mode", async () => {
+		vi.stubEnv("AGENT_RUN_TRANSPORT", "push");
+		const fixture = await createFixture();
+		const delegation = await fixture.actor.mutation(
+			api.agent.tasks.delegateCase,
+			{
+				caseId: fixture.caseId,
+				input: "Push this run.",
+			},
+		);
+		const initialDeliveries = await fixture.base.run(async (ctx) =>
+			(await ctx.db.system.query("_scheduled_functions").collect()).filter(
+				({ name }) => name.startsWith("agent/push:"),
+			),
+		);
+		expect(initialDeliveries).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					name: "agent/push:deliver",
+					args: [
+						{
+							runId: delegation.runId,
+							leaseGeneration: 0,
+							attempt: 0,
+						},
+					],
+				}),
+				expect.objectContaining({
+					name: "agent/push:recoverDelivery",
+					args: [
+						{
+							runId: delegation.runId,
+							leaseGeneration: 0,
+							attempt: 0,
+						},
+					],
+				}),
+			]),
+		);
+
+		const claimToken = crypto.randomUUID();
+		await fixture.base.mutation(api.agent.runtime.claimRun, {
+			runtimeSecret: RUNTIME_SECRET,
+			runId: delegation.runId,
+			leaseGeneration: 0,
+			claimToken,
+			leaseDurationMs: 60_000,
+		});
+		await fixture.base.run(async (ctx) => {
+			await ctx.db.patch(delegation.runId, { leaseExpiresAt: 0 });
+		});
+		await fixture.base.mutation(internal.agent.leases.requeueExpiredRun, {
+			runId: delegation.runId,
+			leaseGeneration: 1,
+		});
+		const requeuedDeliveries = await fixture.base.run(async (ctx) =>
+			(await ctx.db.system.query("_scheduled_functions").collect()).filter(
+				({ name, args }) =>
+					name.startsWith("agent/push:") &&
+					(args[0] as { leaseGeneration?: number }).leaseGeneration === 1,
+			),
+		);
+		expect(requeuedDeliveries.map(({ name }) => name).sort()).toEqual([
+			"agent/push:deliver",
+			"agent/push:recoverDelivery",
+		]);
+	});
+
+	it("advances only one push retry chain while the generation is queued", async () => {
+		vi.stubEnv("AGENT_RUN_TRANSPORT", "push");
+		const fixture = await createFixture();
+		const delegation = await fixture.actor.mutation(
+			api.agent.tasks.delegateCase,
+			{
+				caseId: fixture.caseId,
+				input: "Retry this delivery safely.",
+			},
+		);
+		const initialDelivery = {
+			runId: delegation.runId,
+			leaseGeneration: 0,
+			attempt: 0,
+		};
+
+		await expect(
+			fixture.base.mutation(internal.agent.push.retryDelivery, initialDelivery),
+		).resolves.toBe(true);
+		await expect(
+			fixture.base.mutation(
+				internal.agent.push.recoverDelivery,
+				initialDelivery,
+			),
+		).resolves.toBe(false);
+		expect(
+			await fixture.base.run(async (ctx) => ctx.db.get(delegation.runId)),
+		).toMatchObject({
+			status: "queued",
+			pushDeliveryAttempt: 1,
+		});
+
+		const nextAttemptFunctions = await fixture.base.run(async (ctx) =>
+			(await ctx.db.system.query("_scheduled_functions").collect()).filter(
+				({ name, args }) =>
+					name.startsWith("agent/push:") &&
+					(args[0] as { attempt?: number }).attempt === 1,
+			),
+		);
+		expect(nextAttemptFunctions.map(({ name }) => name).sort()).toEqual([
+			"agent/push:deliver",
+			"agent/push:recoverDelivery",
+		]);
+		vi.stubEnv("AGENT_RUN_TRANSPORT", "pull");
+		await expect(
+			fixture.base.mutation(internal.agent.push.retryDelivery, {
+				...initialDelivery,
+				attempt: 1,
+			}),
+		).resolves.toBe(false);
+		vi.stubEnv("AGENT_RUN_TRANSPORT", "push");
+
+		await fixture.base.mutation(api.agent.runtime.claimRun, {
+			runtimeSecret: RUNTIME_SECRET,
+			runId: delegation.runId,
+			leaseGeneration: 0,
+			claimToken: crypto.randomUUID(),
+			leaseDurationMs: 60_000,
+		});
+		await expect(
+			fixture.base.mutation(internal.agent.push.retryDelivery, {
+				...initialDelivery,
+				attempt: 1,
+			}),
+		).resolves.toBe(false);
+	});
+
 	it("stores queued input as a member message and running input as same-turn steering", async () => {
 		const queuedFixture = await createFixture();
 		const delegation = await queuedFixture.actor.mutation(

@@ -4,11 +4,13 @@ Portable agent definitions, built-in tool logic, and the execution loop for
 Merimoar.
 
 The package has no dependency on TanStack Start or Convex. A host supplies an
-`AgentRuntimeAdapter` for persistence and organization-scoped capabilities, and
-an `AgentRunSubscriberHost` for observing and atomically claiming queued work.
-The subscriber drains work through the caller-independent `invokeAgentRun`
-primitive, so a future worker or MCP adapter can use the same invocation
-boundary.
+`AgentRuntimeAdapter` for persistence and organization-scoped capabilities.
+The pull subscriber and signed push handler both execute through the
+caller-independent `invokeAgentRun` primitive. Pull drains the queue with
+bounded process concurrency. Push claims only the exact delivered run and is
+safe under duplicate, delayed, and concurrently delivered requests. Its host
+injects a durable background-execution registrar so delivery can be
+acknowledged without tying dispatcher concurrency to the model execution.
 
 Built-in schemas and execution live together in their AI SDK definitions.
 The catalog also owns each built-in's default active state. Hosts provide the

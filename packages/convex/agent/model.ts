@@ -116,6 +116,7 @@ export const agentRunBaseValidator = v.object({
 export const agentRunValidator = v.union(
 	agentRunBaseValidator.extend({
 		status: v.literal("queued"),
+		pushDeliveryAttempt: v.optional(v.number()),
 	}),
 	agentRunBaseValidator.extend({
 		status: v.literal("running"),

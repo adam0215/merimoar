@@ -16,6 +16,7 @@ import type * as agent_customToolModel from "../agent/customToolModel.js";
 import type * as agent_customTools from "../agent/customTools.js";
 import type * as agent_leases from "../agent/leases.js";
 import type * as agent_model from "../agent/model.js";
+import type * as agent_push from "../agent/push.js";
 import type * as agent_reader from "../agent/reader.js";
 import type * as agent_runFinalization from "../agent/runFinalization.js";
 import type * as agent_runtime from "../agent/runtime.js";
@@ -106,6 +107,7 @@ declare const fullApi: ApiFromModules<{
   "agent/customTools": typeof agent_customTools;
   "agent/leases": typeof agent_leases;
   "agent/model": typeof agent_model;
+  "agent/push": typeof agent_push;
   "agent/reader": typeof agent_reader;
   "agent/runFinalization": typeof agent_runFinalization;
   "agent/runtime": typeof agent_runtime;

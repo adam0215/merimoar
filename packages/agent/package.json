@@ -5,7 +5,8 @@
 	"exports": {
 		".": "./src/index.ts",
 		"./manifest": "./src/manifest.ts",
-		"./builtins/catalog": "./src/builtins/catalog.ts"
+		"./builtins/catalog": "./src/builtins/catalog.ts",
+		"./runtime/push": "./src/runtime/push.ts"
 	},
 	"scripts": {
 		"typecheck": "tsc --noEmit",
