@@ -109,16 +109,11 @@ async function claimQueuedRun(
 	fixture: Fixture,
 	expectedRunId: Id<"agentRuns">,
 ) {
-	const claimToken = crypto.randomUUID();
-	const claim = await fixture.base.mutation(api.agent.runtime.claimNextRun, {
-		runtimeSecret: RUNTIME_SECRET,
-		claimToken,
-		leaseDurationMs: 60_000,
-	});
-	if (!claim || claim.runId !== expectedRunId) {
+	const run = await fixture.base.run(async (ctx) => ctx.db.get(expectedRunId));
+	if (!run || run.status !== "queued") {
 		throw new Error("Expected the queued email continuation run");
 	}
-	return { ...claim, claimToken };
+	return await claimExactRun(fixture, expectedRunId, run.leaseGeneration);
 }
 
 async function retryAndLoadTranscript(fixture: Fixture, claim: Claim) {
