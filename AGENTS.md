@@ -1,21 +1,40 @@
 # AGENTS.md
 
+Instructions below should be able to be overridden by the user.
+
 ## This is a new project
 
 This is a new project that has no users and no requirements for backwards compatibility. Therefore prioritize sweeping changes and code judo moves if these improve code quality, long term maintainability and extensibility.
 
 This also means you don't have to write regression tests. Instead focus on writing good correct tests that test both real world positive and negative/adversarial scenarios.
 
+## Project vocabulary
+
+### Core domain
+
+- **Case**: A long-lived business or customer matter. The central object of the system.
+- **Entity type**: An organization-defined category such as Property, Contract, or Invoice with typed data fields. The idea is that the organization creates a database of domain entities specific to their business, helping them model it correctly.
+- **Entity**: A concrete instance of an entity type with an identifier, display name, and actual data in the data fields.
+
+### Agent runtime
+
+- **Task**: A long-lived delegation to an agent, anchored to one case. It may contain multiple turns. Think of it as a "chat"/"thread".
+- **Turn**: One conversational exchange within a task. It begins with input from a member, system, or domain event and contains the agent's response work as ordered items.
+- **Steer**: Input (for example a message from the user correcting the agent) added while a run is executing. It joins the current turn and creates neither a new turn nor a new run.
+- **Run**: One invocation of the agent runtime for a turn. It loads the task's relevant transcript and runs the model/tool loop. A run may contain multiple model-provider requests, tool calls, and transcript items. Retries or continuations may create additional runs for the same turn.
+- **Item**: One ordered transcript record, such as a message, tool call, approval, activity, or error.
+
 ## Project principles
 
 - Robustness and maintainability before laziness. Sweeping changes are preferred if they improve long term implementation-ROI and leverage.
 - Reuse functionality and derive data before implementing something new. If something can be derived or reused cleanly without unreasonable costs that is preferred.
 - Solve for the current vertical and let complexity and needs reveal themselves with time. Be prepared, but not paranoid.
+- Fight scope creep.
 
 ## Code principles
 
+- Channel 'yagni' and measure twice, cut once. Code should be elegant and fight for the smallest model that makes the expected behavior unsurprising.
 - Function names should always signal the intent of the function.
-- When writing Tailwind, only use the bracket syntax "[]" for custom values in cases where built-in classes won't do the job. Otherwise it's considered a code smell.
 
 ## Use and trust Typescript and the compiler
 
