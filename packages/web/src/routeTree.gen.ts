@@ -18,6 +18,7 @@ import { Route as AuthenticatedworkAgentInboxRouteImport } from './routes/_authe
 import { Route as AuthenticatedworkCasesRouteImport } from './routes/_authenticated/(work)/cases'
 import { Route as AuthenticatedworkContactsRouteImport } from './routes/_authenticated/(work)/contacts'
 import { Route as AuthenticatedworkEmailRouteImport } from './routes/_authenticated/(work)/email'
+import { Route as ApiAgentRunsPushRouteImport } from './routes/api/agent-runs/push'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as ApiAuthSignInRouteImport } from './routes/api/auth/sign-in'
 import { Route as ApiAuthSignOutRouteImport } from './routes/api/auth/sign-out'
@@ -72,6 +73,11 @@ const AuthenticatedworkEmailRoute = AuthenticatedworkEmailRouteImport.update({
   path: '/email',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const ApiAgentRunsPushRoute = ApiAgentRunsPushRouteImport.update({
+  id: '/api/agent-runs/push',
+  path: '/api/agent-runs/push',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
   id: '/api/auth/callback',
   path: '/api/auth/callback',
@@ -115,6 +121,7 @@ export interface FileRoutesByFullPath {
   '/cases': typeof AuthenticatedworkCasesRoute
   '/contacts': typeof AuthenticatedworkContactsRoute
   '/email': typeof AuthenticatedworkEmailRoute
+  '/api/agent-runs/push': typeof ApiAgentRunsPushRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
   '/api/auth/sign-out': typeof ApiAuthSignOutRoute
@@ -131,6 +138,7 @@ export interface FileRoutesByTo {
   '/cases': typeof AuthenticatedworkCasesRoute
   '/contacts': typeof AuthenticatedworkContactsRoute
   '/email': typeof AuthenticatedworkEmailRoute
+  '/api/agent-runs/push': typeof ApiAgentRunsPushRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
   '/api/auth/sign-out': typeof ApiAuthSignOutRoute
@@ -149,6 +157,7 @@ export interface FileRoutesById {
   '/_authenticated/(work)/cases': typeof AuthenticatedworkCasesRoute
   '/_authenticated/(work)/contacts': typeof AuthenticatedworkContactsRoute
   '/_authenticated/(work)/email': typeof AuthenticatedworkEmailRoute
+  '/api/agent-runs/push': typeof ApiAgentRunsPushRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
   '/api/auth/sign-out': typeof ApiAuthSignOutRoute
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
     | '/cases'
     | '/contacts'
     | '/email'
+    | '/api/agent-runs/push'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
     | '/api/auth/sign-out'
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/cases'
     | '/contacts'
     | '/email'
+    | '/api/agent-runs/push'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
     | '/api/auth/sign-out'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/_authenticated/(work)/cases'
     | '/_authenticated/(work)/contacts'
     | '/_authenticated/(work)/email'
+    | '/api/agent-runs/push'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
     | '/api/auth/sign-out'
@@ -211,6 +223,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AuthErrorRoute: typeof AuthErrorRoute
+  ApiAgentRunsPushRoute: typeof ApiAgentRunsPushRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
   ApiAuthSignInRoute: typeof ApiAuthSignInRoute
   ApiAuthSignOutRoute: typeof ApiAuthSignOutRoute
@@ -280,6 +293,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/email'
       preLoaderRoute: typeof AuthenticatedworkEmailRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/api/agent-runs/push': {
+      id: '/api/agent-runs/push'
+      path: '/api/agent-runs/push'
+      fullPath: '/api/agent-runs/push'
+      preLoaderRoute: typeof ApiAgentRunsPushRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/auth/callback': {
       id: '/api/auth/callback'
@@ -362,6 +382,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AuthErrorRoute: AuthErrorRoute,
+  ApiAgentRunsPushRoute: ApiAgentRunsPushRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
   ApiAuthSignInRoute: ApiAuthSignInRoute,
   ApiAuthSignOutRoute: ApiAuthSignOutRoute,

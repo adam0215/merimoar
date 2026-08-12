@@ -4,8 +4,9 @@ type AgentRunSubscriber = ReturnType<typeof startAgentRunSubscriber>;
 
 export const agentRuntimeProcessState = globalThis as typeof globalThis & {
 	merimoarAgentRunSubscriber?: AgentRunSubscriber;
+	merimoarAgentRunTransport?: "pull" | "push";
 };
 
 export function isAgentRuntimeAvailable() {
-	return agentRuntimeProcessState.merimoarAgentRunSubscriber !== undefined;
+	return agentRuntimeProcessState.merimoarAgentRunTransport !== undefined;
 }

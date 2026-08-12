@@ -1,16 +1,17 @@
 # Agent runtime
 
 This is the first vertical slice of Merimoar's agent runtime. A member can
-delegate a case, a TanStack server subscriber observes queued work in Convex,
-and the portable `@merimoar/agent` package invokes `ToolLoopAgent`.
+delegate a case, a selected pull or push transport starts queued work from
+Convex, and the portable `@merimoar/agent` package invokes `ToolLoopAgent`.
 
 ## Runtime boundary
 
 `invokeAgentRun` is caller-independent. It receives a claimed run, a model, and
 an `AgentRuntimeAdapter`. The TanStack server currently supplies a Convex
 adapter and an OpenAI model, but neither choice leaks into tool execution logic.
-The server keeps one outbound Convex client and subscribes to the oldest queued
-run ID. A snapshot starts a single-flight claim drain through `invokeAgentRun`.
+The pull host keeps one outbound Convex client and subscribes to the oldest
+queued run ID. A snapshot starts a single-flight claim drain through
+`invokeAgentRun`.
 Claiming is serialized, while already claimed invocations run with bounded
 parallelism (four by default, configurable with `AGENT_RUN_CONCURRENCY` from 1
 to 32). Each invocation also has a total deadline (ten minutes by default,
@@ -30,6 +31,29 @@ If a claim mutation itself fails transiently, the subscriber retries that known
 drain request with bounded exponential backoff. A successful claim or empty
 drain returns it to subscription-only discovery; the recovery timer is never
 used to discover new jobs.
+
+The push host exposes a provider-neutral Node HTTP handler. Convex schedules a
+delivery atomically whenever a run enters `queued`, signs the exact JSON body
+with a push-only HMAC secret, and retries known deliveries with bounded backoff.
+Each delivery contains the run ID and lease generation. The handler verifies
+the signature and timestamp before atomically claiming only that generation;
+duplicates, stale deliveries, and competing function instances are no-ops.
+After claiming, it registers the invocation through the host request's
+provider-neutral `waitUntil` lifecycle and immediately acknowledges the
+delivery. Convex therefore holds a short dispatch action rather than a worker
+slot for the full model execution, and each serverless invocation can scale
+independently. The endpoint fails before claiming if the host cannot provide a
+durable background lifecycle. A per-generation attempt marker serializes
+delivery retry and recovery, so stale callbacks cannot create parallel retry
+chains. Lease expiry creates a new push delivery just like initial delegation,
+retry, and approval continuation.
+
+`AGENT_RUN_TRANSPORT` selects `pull` or `push` independently per environment and
+defaults to `pull`. Both transports share the same runtime adapter, model,
+ten-minute execution deadline, leases, tools, and finalization behavior. Push
+also requires `AGENT_RUN_PUSH_URL` in Convex and the same
+`AGENT_RUN_PUSH_SIGNING_SECRET` in Convex and the Node host. The runtime secret
+is never included in the pushed request.
 
 The optional local TUI binds a fixed mock business context when the agent is
 created. It exercises the same prompt and tools without using production
@@ -161,12 +185,14 @@ another model call or a second status item.
 
 ## Security and scoping
 
-The server subscriber and Convex deployment share `AGENT_RUNTIME_SECRET`, which
-must be at least 32 characters and must never use a `VITE_*` name. The
-subscription query and every runtime/tool call require that secret; calls for a
-claimed run additionally require its current claim token. Tool execution
-derives organization scope from the claimed run's anchor case and rejects
-foreign IDs; the model never supplies an organization ID.
+The selected Node runtime and Convex deployment share `AGENT_RUNTIME_SECRET`,
+which must be at least 32 characters and must never use a `VITE_*` name. The
+pull subscription query and every runtime/tool call require that secret; calls
+for a claimed run additionally require its current claim token. Push ingress
+uses a different HMAC secret, rejects unsigned, altered, oversized, malformed,
+or expired requests before claiming, and never receives the runtime secret.
+Tool execution derives organization scope from the claimed run's anchor case
+and rejects foreign IDs; the model never supplies an organization ID.
 
 `agentTasks.organizationId` deliberately duplicates the verified anchor case's
 organization as the root partition for bounded workspace and pending-approval
@@ -220,21 +246,39 @@ Set the following in the TanStack server environment and the Convex deployment:
 ```dotenv
 VITE_CONVEX_URL=https://your-deployment.convex.cloud
 AGENT_RUNTIME_SECRET=a-random-secret-of-at-least-32-characters
+AGENT_RUN_TRANSPORT=pull
 AGENT_RUN_CONCURRENCY=4
 AGENT_RUN_EXECUTION_TIMEOUT_MS=600000
 OPENAI_API_KEY=your-development-key
 ```
 
+For push, use the following transport-specific values in addition to the common
+runtime configuration:
+
+```dotenv
+AGENT_RUN_TRANSPORT=push
+AGENT_RUN_PUSH_URL=https://your-node-host.example/api/agent-runs/push
+AGENT_RUN_PUSH_SIGNING_SECRET=a-different-random-secret-of-at-least-32-characters
+```
+
+`AGENT_RUN_PUSH_URL` is only consumed by Convex. The signing secret is shared by
+Convex and the Node host. `AGENT_RUN_CONCURRENCY` applies only to pull; push has
+one invocation per delivered run and no process-local concurrency cap. The Node
+adapter must expose `Request.waitUntil`; Nitro supplies this lifecycle on its
+supported serverless presets, including Vercel and Cloudflare. The platform's
+maximum function duration must be at least `AGENT_RUN_EXECUTION_TIMEOUT_MS`.
+
 If the Convex URL, runtime secret, or OpenAI key is absent—or the runtime secret
-is shorter than 32 characters—the server subscriber stays disabled. The
-concurrency and timeout settings use the defaults shown above when omitted.
-Automated tests use fakes and never call a model or email provider.
+is shorter than 32 characters—the selected runtime stays disabled. Push also
+fails closed when its signing secret is absent or invalid. The concurrency and
+timeout settings use the defaults shown above when omitted. Automated tests use
+fakes and never call a model or email provider.
 
 ## Deliberately deferred
 
 This runtime slice does not add automatic email-triggered delegation, a durable
-domain-event queue, inbound webhook invocation, user-configurable hooks,
-agent-version CRUD, a custom HTTP integration, or production-scale scheduling.
+domain-event queue, user-configurable hooks, agent-version CRUD, a custom HTTP
+integration, or provider-specific deployment configuration.
 Email search is a bounded organization-scoped scan suitable for the first
 slice; a dedicated search index can replace it behind the same tool boundary
 when needed.

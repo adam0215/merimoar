@@ -3,14 +3,17 @@ import {
 	defaultAgentDefinition,
 	invokeAgentRun,
 	type BuiltInToolKey,
-	type AgentRunSubscriberHost,
 	type AgentRuntimeAdapter,
 	type ClaimedRun,
 	type CustomToolDefinition,
 } from "@merimoar/agent";
 import { api } from "@merimoar/convex/api";
 import type { Id, TableNames } from "@merimoar/convex/data-model";
-import { ConvexClient, type ConnectionState } from "convex/browser";
+import type {
+	FunctionArgs,
+	FunctionReference,
+	FunctionReturnType,
+} from "convex/server";
 import { invokeCustomToolRequest } from "../custom-tools/executor";
 
 const RUN_LEASE_DURATION_MS = 60_000;
@@ -44,11 +47,17 @@ type TranscriptPageLoaders = {
 	): Promise<TranscriptPage<RuntimeTranscriptItem>>;
 };
 
-type RuntimeConfiguration = {
-	convexUrl: string;
+export type AgentInvocationConfiguration = {
 	runtimeSecret: string;
 	openaiApiKey: string;
 	executionTimeoutMs: number;
+};
+
+export type ConvexAgentRuntimeClient = {
+	mutation<Mutation extends FunctionReference<"mutation">>(
+		mutation: Mutation,
+		args: FunctionArgs<Mutation>,
+	): Promise<FunctionReturnType<Mutation>>;
 };
 
 type AgentCaseRelation = Parameters<
@@ -106,96 +115,29 @@ export async function loadCompleteTranscript(
 	};
 }
 
-export function createConvexAgentSubscriberHost(
-	configuration: RuntimeConfiguration,
-	onError: (error: unknown) => void,
-): AgentRunSubscriberHost {
-	const client = new ConvexClient(configuration.convexUrl, {
-		logger: false,
-	});
+export function createConvexAgentRunInvoker(
+	client: ConvexAgentRuntimeClient,
+	configuration: AgentInvocationConfiguration,
+) {
 	const openai = createOpenAI({
 		apiKey: configuration.openaiApiKey,
 	});
-
-	return {
-		subscribeToRunnableRuns(onSnapshot, onSubscriptionError) {
-			let wasConnected: boolean | undefined;
-			let previousRetryCount = 0;
-			const reportConnectionState = (state: ConnectionState) => {
-				if (state.isWebSocketConnected && wasConnected !== true) {
-					console.info(
-						state.connectionCount > 1
-							? "agent_subscription_reconnected"
-							: "agent_subscription_connected",
-						{ connectionCount: state.connectionCount },
-					);
-				} else if (!state.isWebSocketConnected && wasConnected === true) {
-					console.warn("agent_subscription_disconnected", {
-						connectionCount: state.connectionCount,
-					});
-				}
-				if (
-					!state.isWebSocketConnected &&
-					state.connectionRetries > previousRetryCount
-				) {
-					console.warn("agent_subscription_reconnect_attempt", {
-						attempt: state.connectionRetries,
-					});
-				}
-				wasConnected = state.isWebSocketConnected;
-				previousRetryCount = state.connectionRetries;
-			};
-			const unsubscribeFromConnectionState =
-				client.subscribeToConnectionState(reportConnectionState);
-			reportConnectionState(client.connectionState());
-			const unsubscribeFromRuns = client.onUpdate(
-				api.agent.runtime.observeNextQueuedRun,
-				{ runtimeSecret: configuration.runtimeSecret },
-				onSnapshot,
-				onSubscriptionError,
-			);
-			return () => {
-				unsubscribeFromRuns();
-				unsubscribeFromConnectionState();
-			};
-		},
-		async claimNextRun(claimToken) {
-			const claim = await client.mutation(api.agent.runtime.claimNextRun, {
-				runtimeSecret: configuration.runtimeSecret,
-				claimToken,
-				leaseDurationMs: RUN_LEASE_DURATION_MS,
-			});
-			return claim ? { ...claim, claimToken } : null;
-		},
-		invokeRun(claim, abortSignal) {
-			return invokeAgentRun({
+	return (claim: ClaimedRun, abortSignal: AbortSignal) =>
+		invokeAgentRun({
+			claim,
+			runtime: createConvexRuntimeAdapter(
+				client,
+				configuration.runtimeSecret,
 				claim,
-				runtime: createConvexRuntimeAdapter(
-					client,
-					configuration.runtimeSecret,
-					claim,
-				),
-				model: openai.responses(defaultAgentDefinition.defaultModel),
-				executionTimeoutMs: configuration.executionTimeoutMs,
-				abortSignal,
-			});
-		},
-		async relinquishRun(claim) {
-			await client.mutation(api.agent.runtime.relinquishRun, {
-				runtimeSecret: configuration.runtimeSecret,
-				runId: asConvexId<"agentRuns">(claim.runId),
-				claimToken: claim.claimToken,
-			});
-		},
-		close() {
-			return client.close();
-		},
-		onError,
-	};
+			),
+			model: openai.responses(defaultAgentDefinition.defaultModel),
+			executionTimeoutMs: configuration.executionTimeoutMs,
+			abortSignal,
+		});
 }
 
-function createConvexRuntimeAdapter(
-	client: ConvexClient,
+export function createConvexRuntimeAdapter(
+	client: ConvexAgentRuntimeClient,
 	runtimeSecret: string,
 	claim: ClaimedRun,
 ): AgentRuntimeAdapter {

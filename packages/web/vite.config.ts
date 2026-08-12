@@ -21,7 +21,7 @@ const config = defineConfig({
 		},
 		devtools(),
 		nitro({
-			plugins: ["./server/plugins/agent-subscriber.ts"],
+			plugins: ["./server/plugins/agent-runtime.ts"],
 			rollupConfig: { external: [/^@sentry\//] },
 		}),
 		tailwindcss(),
