@@ -384,8 +384,10 @@ describe("agent tools and projections", () => {
 			await ctx.db.patch(delegation.taskId, { agentKey: "other-agent" });
 		});
 
-		const claim = await fixture.base.mutation(api.agent.runtime.claimNextRun, {
+		const claim = await fixture.base.mutation(api.agent.runtime.claimRun, {
 			runtimeSecret: RUNTIME_SECRET,
+			runId: delegation.runId,
+			leaseGeneration: 0,
 			claimToken: crypto.randomUUID(),
 			leaseDurationMs: 60_000,
 		});

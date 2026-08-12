@@ -10,20 +10,8 @@ const config = defineConfig({
 	envDir: "../..",
 	resolve: { tsconfigPaths: true },
 	plugins: [
-		{
-			name: "markdown-as-text",
-			enforce: "pre",
-			transform(source, id) {
-				return id.endsWith(".md")
-					? `export default ${JSON.stringify(source)};`
-					: null;
-			},
-		},
 		devtools(),
-		nitro({
-			plugins: ["./server/plugins/agent-runtime.ts"],
-			rollupConfig: { external: [/^@sentry\//] },
-		}),
+		nitro({ rollupConfig: { external: [/^@sentry\//] } }),
 		tailwindcss(),
 		tanstackStart(),
 		viteReact(),

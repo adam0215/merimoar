@@ -1,6 +1,9 @@
 {
 	"$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
-	"entry": ["packages/web/server/plugins/agent-runtime.ts"],
+	"entry": [
+		"packages/agent-worker/nitro.config.ts",
+		"packages/agent-worker/server/routes/agent-runs/push.post.ts"
+	],
 	"ignorePatterns": ["packages/convex/_generated/**"],
 	"ignoreExports": [
 		{

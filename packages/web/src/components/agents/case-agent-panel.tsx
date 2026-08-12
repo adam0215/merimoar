@@ -9,9 +9,7 @@ import { AgentOrb } from "#/components/agents/agent-orb.tsx";
 import { getTaskStatusLabel } from "#/components/agents/agent-status.tsx";
 import { formatAgentTaskLabel } from "#/components/agents/agent-task-label.ts";
 import type { AgentItemRecord } from "#/components/agents/agent-types.ts";
-import defaultCaseDelegationPrompt from "#/components/agents/prompts/default-case-delegation.md" with {
-	type: "text",
-};
+import defaultCaseDelegationPrompt from "#/components/agents/prompts/default-case-delegation.md?raw";
 import { TakeOverTaskDialog } from "#/components/agents/take-over-task-dialog.tsx";
 import { RecentTaskActivity } from "#/components/agents/task-activity.tsx";
 import type {

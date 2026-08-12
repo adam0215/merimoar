@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { api, internal } from "../_generated/api";
 import {
+	claimExactRun,
 	createFixture,
 	delegateAndClaim,
 	finishWithTaskStatus,
@@ -8,6 +9,21 @@ import {
 	RUNTIME_SECRET,
 	startTool,
 } from "./testSupport.test-helper";
+
+async function loadQueuedRunIds(
+	fixture: Awaited<ReturnType<typeof createFixture>>,
+) {
+	return await fixture.base.run(async (ctx) =>
+		(
+			await ctx.db
+				.query("agentRuns")
+				.withIndex("by_status_and_requested_at", (index) =>
+					index.eq("status", "queued"),
+				)
+				.collect()
+		).map((run) => run._id),
+	);
+}
 
 describe("agent approvals", () => {
 	it("keeps waiting ownership, requires actionable approval, and releases only on completion", async () => {
@@ -35,27 +51,15 @@ describe("agent approvals", () => {
 			taskId: firstClaim.taskId,
 			input: "The customer replied. Continue.",
 		});
-		const secondToken = crypto.randomUUID();
-		const secondClaim = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: secondToken,
-				leaseDurationMs: 60_000,
-			},
-		);
+		const secondClaim = await claimExactRun(fixture, resumed.runId, 0);
 		expect(secondClaim?.runId).toBe(resumed.runId);
 		if (!secondClaim) throw new Error("Expected resumed run");
 
-		await finishWithTaskStatus(
-			fixture,
-			{ ...secondClaim, claimToken: secondToken },
-			{
-				status: "waiting_for_approval",
-				approvalId: "approval-1",
-				approvalRequest: "Approve closing CASE-AGENT?",
-			},
-		);
+		await finishWithTaskStatus(fixture, secondClaim, {
+			status: "waiting_for_approval",
+			approvalId: "approval-1",
+			approvalRequest: "Approve closing CASE-AGENT?",
+		});
 		const pendingApproval = await fixture.base.run(async (ctx) =>
 			ctx.db
 				.query("agentItems")
@@ -88,26 +92,14 @@ describe("agent approvals", () => {
 			},
 		);
 		if (!approvalAnswer.resumed) throw new Error("Expected task to resume");
-		const thirdToken = crypto.randomUUID();
-		const thirdClaim = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: thirdToken,
-				leaseDurationMs: 60_000,
-			},
-		);
+		const thirdClaim = await claimExactRun(fixture, approvalAnswer.runId, 0);
 		expect(thirdClaim?.runId).toBe(approvalAnswer.runId);
 		if (!thirdClaim) throw new Error("Expected approval continuation run");
-		await finishWithTaskStatus(
-			fixture,
-			{ ...thirdClaim, claimToken: thirdToken },
-			{
-				status: "completed",
-				result:
-					"Reviewed the customer reply and closed the work because the requested correction was confirmed.",
-			},
-		);
+		await finishWithTaskStatus(fixture, thirdClaim, {
+			status: "completed",
+			result:
+				"Reviewed the customer reply and closed the work because the requested correction was confirmed.",
+		});
 		const completed = await fixture.base.run(async (ctx) => ({
 			task: await ctx.db.get(firstClaim.taskId),
 			events: await ctx.db
@@ -255,11 +247,7 @@ describe("agent approvals", () => {
 			status: "waiting_for_approval",
 			ownershipReleasedAt: null,
 		});
-		expect(
-			await fixture.base.query(api.agent.runtime.observeNextQueuedRun, {
-				runtimeSecret: RUNTIME_SECRET,
-			}),
-		).toBeNull();
+		expect(await loadQueuedRunIds(fixture)).toEqual([]);
 
 		const resumed = await fixture.actor.mutation(
 			api.agent.tasks.answerApprovals,
@@ -322,20 +310,12 @@ describe("agent approvals", () => {
 			),
 		).toHaveLength(2);
 
-		const continuationToken = crypto.randomUUID();
-		const continuationClaim = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: continuationToken,
-				leaseDurationMs: 60_000,
-			},
-		);
+		const continuationClaim = await claimExactRun(fixture, resumed.runId, 0);
 		expect(continuationClaim?.runId).toBe(resumed.runId);
 		if (!continuationClaim) throw new Error("Expected approval continuation");
 		const replayTranscript = await loadCompleteRuntimeTranscript(fixture, {
 			runId: continuationClaim.runId,
-			claimToken: continuationToken,
+			claimToken: continuationClaim.claimToken,
 		});
 		expect(
 			replayTranscript.turns
@@ -353,14 +333,10 @@ describe("agent approvals", () => {
 				}),
 			]),
 		);
-		await finishWithTaskStatus(
-			fixture,
-			{ ...continuationClaim, claimToken: continuationToken },
-			{
-				status: "waiting",
-				reason: "Wait for a later member turn.",
-			},
-		);
+		await finishWithTaskStatus(fixture, continuationClaim, {
+			status: "waiting",
+			reason: "Wait for a later member turn.",
+		});
 		const consumed = await fixture.base.run(async (ctx) => ({
 			task: await ctx.db.get(claim.taskId),
 			approvals: await Promise.all(
@@ -387,15 +363,7 @@ describe("agent approvals", () => {
 			taskId: claim.taskId,
 			input: "Continue without replaying old approval decisions.",
 		});
-		const laterToken = crypto.randomUUID();
-		const laterClaim = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: laterToken,
-				leaseDurationMs: 60_000,
-			},
-		);
+		const laterClaim = await claimExactRun(fixture, later.runId, 0);
 		expect(laterClaim?.runId).toBe(later.runId);
 	});
 
@@ -488,11 +456,7 @@ describe("agent approvals", () => {
 				answers: [{ approvalId: "early-approval-b", approved: false }],
 			}),
 		).toEqual({ resumed: false });
-		expect(
-			await fixture.base.query(api.agent.runtime.observeNextQueuedRun, {
-				runtimeSecret: RUNTIME_SECRET,
-			}),
-		).toBeNull();
+		expect(await loadQueuedRunIds(fixture)).toEqual([]);
 
 		await fixture.base.mutation(api.agent.runtime.finishRun, {
 			runtimeSecret: RUNTIME_SECRET,
@@ -557,14 +521,10 @@ describe("agent approvals", () => {
 		if (!firstContinuation.resumed) {
 			throw new Error("Expected the first approval continuation");
 		}
-		const firstContinuationToken = crypto.randomUUID();
-		const firstContinuationClaim = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: firstContinuationToken,
-				leaseDurationMs: 60_000,
-			},
+		const firstContinuationClaim = await claimExactRun(
+			fixture,
+			firstContinuation.runId,
+			0,
 		);
 		if (!firstContinuationClaim) {
 			throw new Error("Expected the first continuation claim");
@@ -574,7 +534,7 @@ describe("agent approvals", () => {
 			fixture,
 			{
 				runId: firstContinuationClaim.runId,
-				claimToken: firstContinuationToken,
+				claimToken: firstContinuationClaim.claimToken,
 			},
 			"old-approved-call",
 			"update_case",
@@ -582,7 +542,7 @@ describe("agent approvals", () => {
 		await fixture.base.mutation(api.agent.tools.updateCase, {
 			runtimeSecret: RUNTIME_SECRET,
 			runId: firstContinuationClaim.runId,
-			claimToken: firstContinuationToken,
+			claimToken: firstContinuationClaim.claimToken,
 			toolCallId: "old-approved-call",
 			caseId: fixture.caseId,
 			description: "The old approved effect happened exactly once.",
@@ -591,7 +551,7 @@ describe("agent approvals", () => {
 			fixture,
 			{
 				runId: firstContinuationClaim.runId,
-				claimToken: firstContinuationToken,
+				claimToken: firstContinuationClaim.claimToken,
 			},
 			"new-approved-call",
 			"update_case",
@@ -599,7 +559,7 @@ describe("agent approvals", () => {
 		await fixture.base.mutation(api.agent.runtime.recordToolApprovalRequest, {
 			runtimeSecret: RUNTIME_SECRET,
 			runId: firstContinuationClaim.runId,
-			claimToken: firstContinuationToken,
+			claimToken: firstContinuationClaim.claimToken,
 			toolCallId: "new-approved-call",
 			approvalId: "new-approved",
 			request: "Approve the newly requested change?",
@@ -607,7 +567,7 @@ describe("agent approvals", () => {
 		await fixture.base.mutation(api.agent.runtime.failRun, {
 			runtimeSecret: RUNTIME_SECRET,
 			runId: firstContinuationClaim.runId,
-			claimToken: firstContinuationToken,
+			claimToken: firstContinuationClaim.claimToken,
 			message: "The continuation failed after requesting new approval.",
 		});
 
@@ -661,14 +621,10 @@ describe("agent approvals", () => {
 		if (!secondContinuation.resumed) {
 			throw new Error("Expected the second approval continuation");
 		}
-		const secondContinuationToken = crypto.randomUUID();
-		const secondContinuationClaim = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: secondContinuationToken,
-				leaseDurationMs: 60_000,
-			},
+		const secondContinuationClaim = await claimExactRun(
+			fixture,
+			secondContinuation.runId,
+			0,
 		);
 		if (!secondContinuationClaim) {
 			throw new Error("Expected the second continuation claim");
@@ -678,7 +634,7 @@ describe("agent approvals", () => {
 			fixture,
 			{
 				runId: secondContinuationClaim.runId,
-				claimToken: secondContinuationToken,
+				claimToken: secondContinuationClaim.claimToken,
 			},
 			"new-approved-call",
 			"update_case",
@@ -686,7 +642,7 @@ describe("agent approvals", () => {
 		await fixture.base.mutation(api.agent.tools.updateCase, {
 			runtimeSecret: RUNTIME_SECRET,
 			runId: secondContinuationClaim.runId,
-			claimToken: secondContinuationToken,
+			claimToken: secondContinuationClaim.claimToken,
 			toolCallId: "new-approved-call",
 			caseId: fixture.caseId,
 			title: "The new approval was applied",
@@ -695,7 +651,7 @@ describe("agent approvals", () => {
 			fixture,
 			{
 				runId: secondContinuationClaim.runId,
-				claimToken: secondContinuationToken,
+				claimToken: secondContinuationClaim.claimToken,
 			},
 			{
 				status: "completed",
@@ -776,11 +732,7 @@ describe("agent approvals", () => {
 			activeApprovalIds: expect.any(Array),
 		});
 		expect(state.task?.activeRunIds).toHaveLength(1);
-		expect(
-			await fixture.base.query(api.agent.runtime.observeNextQueuedRun, {
-				runtimeSecret: RUNTIME_SECRET,
-			}),
-		).toBe(state.task?.activeRunIds[0]);
+		expect(await loadQueuedRunIds(fixture)).toEqual(state.task?.activeRunIds);
 	});
 
 	it("denies every pending approval on takeover and rejects late answers", async () => {

@@ -26,9 +26,8 @@ import type { DataModel } from "./dataModel.js";
  */
 type Env = {
   readonly AGENT_RUNTIME_SECRET: string | undefined;
-  readonly AGENT_RUN_PUSH_SIGNING_SECRET: string | undefined;
-  readonly AGENT_RUN_PUSH_URL: string | undefined;
-  readonly AGENT_RUN_TRANSPORT: "pull" | "push" | undefined;
+	readonly AGENT_RUN_PUSH_SIGNING_SECRET: string;
+	readonly AGENT_RUN_PUSH_URL: string;
   readonly GEMINI_API_KEY: string;
   readonly WORKOS_API_HOSTNAME: string | undefined;
   readonly WORKOS_API_KEY: string;

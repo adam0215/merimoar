@@ -1,11 +1,6 @@
 import { api } from "@merimoar/convex/api";
 import { IconArtboard, IconBriefcase2 } from "@tabler/icons-react";
-import {
-	getRouteApi,
-	Link,
-	useNavigate,
-	useRouterState,
-} from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "convex-helpers/react/cache";
 import { useEffect, useState } from "react";
 import {
@@ -33,8 +28,6 @@ import {
 import { WorkSidebar } from "#/components/work/work-sidebar.tsx";
 import type { AvailableOrganization } from "#/integrations/workos/organizations.ts";
 import { cn } from "#/lib/utils.ts";
-
-const authenticatedRoute = getRouteApi("/_authenticated");
 
 function getPageTitle(pathname: string, agentView: AgentView) {
 	if (isAgentsPath(pathname)) {
@@ -180,7 +173,6 @@ function AppHeader({
 }
 
 function AreaTabs({ activeArea }: { activeArea: "work" | "agents" }) {
-	const { agentRuntimeAvailable } = authenticatedRoute.useLoaderData();
 	const navigate = useNavigate();
 	const [selectedArea, setSelectedArea] = useState(activeArea);
 
@@ -217,12 +209,6 @@ function AreaTabs({ activeArea }: { activeArea: "work" | "agents" }) {
 				<TabsTrigger value="agents">
 					<IconArtboard data-icon="inline-start" />
 					Agent
-					{!agentRuntimeAvailable && (
-						<span
-							className="size-1.5 shrink-0 rounded-full bg-destructive"
-							aria-label="Agent unavailable"
-						/>
-					)}
 				</TabsTrigger>
 			</TabsList>
 		</Tabs>

@@ -2,17 +2,13 @@ import { lookup } from "node:dns/promises";
 import { request as requestHttp } from "node:http";
 import { request as requestHttps } from "node:https";
 import { BlockList, isIP } from "node:net";
-import {
-	composeCustomToolEndpoint,
-	type CustomToolParameter,
-} from "@merimoar/convex/agent/custom-tool-model";
+import type { CustomToolParameter } from "../types";
 
 const CUSTOM_TOOL_TIMEOUT_MS = 10_000;
 export const CUSTOM_TOOL_MAX_RESPONSE_BYTES = 65_536;
 
 export type CustomToolRequestConfiguration = {
-	baseUrl: string;
-	path: string;
+	endpoint: string;
 	parameters: readonly CustomToolParameter[];
 };
 
@@ -60,10 +56,7 @@ export class CustomToolExecutionError extends Error {
 	}
 }
 
-function executionError(
-	code: CustomToolExecutionCode,
-	message: string,
-): never {
+function executionError(code: CustomToolExecutionCode, message: string): never {
 	throw new CustomToolExecutionError(code, message);
 }
 
@@ -131,25 +124,23 @@ const loopbackAddresses = createBlockList([
 	["::1", 128, "ipv6"],
 ]);
 
-const blockedIpv4Addresses = createBlockList(
-	[
-		["0.0.0.0", 8, "ipv4"],
-		["10.0.0.0", 8, "ipv4"],
-		["100.64.0.0", 10, "ipv4"],
-		["127.0.0.0", 8, "ipv4"],
-		["169.254.0.0", 16, "ipv4"],
-		["172.16.0.0", 12, "ipv4"],
-		["192.0.0.0", 24, "ipv4"],
-		["192.0.2.0", 24, "ipv4"],
-		["192.88.99.0", 24, "ipv4"],
-		["192.168.0.0", 16, "ipv4"],
-		["198.18.0.0", 15, "ipv4"],
-		["198.51.100.0", 24, "ipv4"],
-		["203.0.113.0", 24, "ipv4"],
-		["224.0.0.0", 4, "ipv4"],
-		["240.0.0.0", 4, "ipv4"],
-	],
-);
+const blockedIpv4Addresses = createBlockList([
+	["0.0.0.0", 8, "ipv4"],
+	["10.0.0.0", 8, "ipv4"],
+	["100.64.0.0", 10, "ipv4"],
+	["127.0.0.0", 8, "ipv4"],
+	["169.254.0.0", 16, "ipv4"],
+	["172.16.0.0", 12, "ipv4"],
+	["192.0.0.0", 24, "ipv4"],
+	["192.0.2.0", 24, "ipv4"],
+	["192.88.99.0", 24, "ipv4"],
+	["192.168.0.0", 16, "ipv4"],
+	["198.18.0.0", 15, "ipv4"],
+	["198.51.100.0", 24, "ipv4"],
+	["203.0.113.0", 24, "ipv4"],
+	["224.0.0.0", 4, "ipv4"],
+	["240.0.0.0", 4, "ipv4"],
+]);
 
 const publicIpv6Addresses = createBlockList([["2000::", 3, "ipv6"]]);
 const blockedIpv6Addresses = createBlockList([
@@ -173,9 +164,10 @@ function isLoopbackAddress(address: ResolvedAddress) {
 }
 
 function isExplicitLoopbackHostname(hostname: string) {
-	const literal = hostname.startsWith("[") && hostname.endsWith("]")
-		? hostname.slice(1, -1)
-		: hostname;
+	const literal =
+		hostname.startsWith("[") && hostname.endsWith("]")
+			? hostname.slice(1, -1)
+			: hostname;
 	if (literal.toLowerCase().replace(/\.$/, "") === "localhost") return true;
 	const family = isIP(literal);
 	return family === 4 || family === 6
@@ -184,9 +176,7 @@ function isExplicitLoopbackHostname(hostname: string) {
 }
 
 function isPublicIpv4(address: string) {
-	return (
-		isIP(address) === 4 && !blockedIpv4Addresses.check(address, "ipv4")
-	);
+	return isIP(address) === 4 && !blockedIpv4Addresses.check(address, "ipv4");
 }
 
 function isPublicIpv6(address: string) {
@@ -217,9 +207,10 @@ export function assertAllowedDestinationAddress(
 }
 
 async function resolveHostname(hostname: string): Promise<ResolvedAddress[]> {
-	const literal = hostname.startsWith("[") && hostname.endsWith("]")
-		? hostname.slice(1, -1)
-		: hostname;
+	const literal =
+		hostname.startsWith("[") && hostname.endsWith("]")
+			? hostname.slice(1, -1)
+			: hostname;
 	const family = isIP(literal);
 	if (family === 4 || family === 6) {
 		return [{ address: literal, family }];
@@ -269,40 +260,43 @@ async function sendPinnedRequest(input: {
 		};
 		const request = (
 			input.endpoint.protocol === "https:" ? requestHttps : requestHttp
-		)({
-			protocol: input.endpoint.protocol,
-			hostname: endpointHostname,
-			port: input.endpoint.port || undefined,
-			path: `${input.endpoint.pathname}${input.endpoint.search}`,
-			method: "POST",
-			headers: {
-				Host: input.endpoint.host,
-				"Content-Type": "application/json",
-				"Content-Length": Buffer.byteLength(input.body),
+		)(
+			{
+				protocol: input.endpoint.protocol,
+				hostname: endpointHostname,
+				port: input.endpoint.port || undefined,
+				path: `${input.endpoint.pathname}${input.endpoint.search}`,
+				method: "POST",
+				headers: {
+					Host: input.endpoint.host,
+					"Content-Type": "application/json",
+					"Content-Length": Buffer.byteLength(input.body),
+				},
+				lookup: (_hostname, options, callback) => {
+					respondWithPinnedAddress(
+						input.address,
+						typeof options === "object" && options.all === true,
+						callback,
+					);
+				},
+				...(isIP(endpointHostname) === 0
+					? { servername: endpointHostname }
+					: {}),
+				signal: input.signal,
 			},
-			lookup: (_hostname, options, callback) => {
-				respondWithPinnedAddress(
-					input.address,
-					typeof options === "object" && options.all === true,
-					callback,
-				);
+			async (response) => {
+				try {
+					const body = await readLimitedResponseBody(
+						response,
+						CUSTOM_TOOL_MAX_RESPONSE_BYTES,
+					);
+					resolveOnce({ status: response.statusCode ?? 0, body });
+				} catch (error) {
+					request.destroy();
+					rejectOnce(error);
+				}
 			},
-			...(isIP(endpointHostname) === 0
-				? { servername: endpointHostname }
-				: {}),
-			signal: input.signal,
-		}, async (response) => {
-			try {
-				const body = await readLimitedResponseBody(
-					response,
-					CUSTOM_TOOL_MAX_RESPONSE_BYTES,
-				);
-				resolveOnce({ status: response.statusCode ?? 0, body });
-			} catch (error) {
-				request.destroy();
-				rejectOnce(error);
-			}
-		});
+		);
 		request.on("error", rejectOnce);
 		request.end(input.body);
 	});
@@ -330,8 +324,9 @@ export async function readLimitedResponseBody(
 
 function isAbortError(error: unknown) {
 	return (
-		error instanceof DOMException && error.name === "AbortError"
-	) || (error instanceof Error && error.name === "AbortError");
+		(error instanceof DOMException && error.name === "AbortError") ||
+		(error instanceof Error && error.name === "AbortError")
+	);
 }
 
 export async function invokeCustomToolRequest(
@@ -339,10 +334,9 @@ export async function invokeCustomToolRequest(
 	input: unknown,
 	dependencies: Partial<ExecutorDependencies> = {},
 ) {
-	const endpoint = new URL(
-		composeCustomToolEndpoint(configuration.baseUrl, configuration.path),
-	);
-	const development = dependencies.development ?? process.env.NODE_ENV === "development";
+	const endpoint = new URL(configuration.endpoint);
+	const development =
+		dependencies.development ?? process.env.NODE_ENV === "development";
 	const explicitLoopback =
 		development && isExplicitLoopbackHostname(endpoint.hostname);
 	if (endpoint.protocol !== "https:" && !explicitLoopback) {
@@ -375,7 +369,10 @@ export async function invokeCustomToolRequest(
 			}),
 		]);
 		if (addresses.length === 0) {
-			executionError("REQUEST_FAILED", "Custom tool endpoint could not be resolved.");
+			executionError(
+				"REQUEST_FAILED",
+				"Custom tool endpoint could not be resolved.",
+			);
 		}
 		for (const address of addresses) {
 			assertAllowedDestinationAddress(address, explicitLoopback);
@@ -409,7 +406,9 @@ export async function invokeCustomToolRequest(
 		}
 		let value: unknown;
 		try {
-			value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(response.body));
+			value = JSON.parse(
+				new TextDecoder("utf-8", { fatal: true }).decode(response.body),
+			);
 		} catch {
 			executionError("INVALID_JSON", "Custom tool returned invalid JSON.");
 		}
@@ -422,7 +421,10 @@ export async function invokeCustomToolRequest(
 	} catch (error) {
 		if (error instanceof CustomToolExecutionError) throw error;
 		if (controller.signal.aborted || isAbortError(error)) {
-			executionError("TIMEOUT", "Custom tool request timed out after 10 seconds.");
+			executionError(
+				"TIMEOUT",
+				"Custom tool request timed out after 10 seconds.",
+			);
 		}
 		executionError("REQUEST_FAILED", "Custom tool request failed.");
 	} finally {

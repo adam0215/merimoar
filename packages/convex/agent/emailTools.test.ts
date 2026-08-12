@@ -8,6 +8,7 @@ import { insertResendIntegration } from "#/test.setup";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import {
+	claimExactRun,
 	createFixture,
 	delegateAndClaim,
 	finishWithTaskStatus,
@@ -184,19 +185,11 @@ async function approveAndClaim(
 		answers: [{ approvalId, approved: true }],
 	});
 	if (!answer.resumed) throw new Error("Expected approval continuation");
-	const claimToken = crypto.randomUUID();
-	const continuation = await fixture.base.mutation(
-		api.agent.runtime.claimNextRun,
-		{
-			runtimeSecret: RUNTIME_SECRET,
-			claimToken,
-			leaseDurationMs: 60_000,
-		},
-	);
+	const continuation = await claimExactRun(fixture, answer.runId, 0);
 	if (!continuation || continuation.runId !== answer.runId) {
 		throw new Error("Expected claimed approval continuation");
 	}
-	return { ...continuation, claimToken };
+	return continuation;
 }
 
 async function startApprovedEmailReplay(

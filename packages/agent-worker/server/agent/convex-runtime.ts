@@ -7,6 +7,8 @@ import {
 	type ClaimedRun,
 	type CustomToolDefinition,
 } from "@merimoar/agent";
+import { invokeCustomToolRequest } from "@merimoar/agent/runtime/custom-tool-request";
+import { composeCustomToolEndpoint } from "@merimoar/convex/agent/custom-tool-model";
 import { api } from "@merimoar/convex/api";
 import type { Id, TableNames } from "@merimoar/convex/data-model";
 import type {
@@ -14,7 +16,6 @@ import type {
 	FunctionReference,
 	FunctionReturnType,
 } from "convex/server";
-import { invokeCustomToolRequest } from "../custom-tools/executor";
 
 const RUN_LEASE_DURATION_MS = 60_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
@@ -136,7 +137,7 @@ export function createConvexAgentRunInvoker(
 		});
 }
 
-export function createConvexRuntimeAdapter(
+function createConvexRuntimeAdapter(
 	client: ConvexAgentRuntimeClient,
 	runtimeSecret: string,
 	claim: ClaimedRun,
@@ -173,7 +174,16 @@ export function createConvexRuntimeAdapter(
 			if (!definition) {
 				throw new Error("Custom tool is not available for this agent run.");
 			}
-			const result = await invokeCustomToolRequest(definition, input);
+			const result = await invokeCustomToolRequest(
+				{
+					endpoint: composeCustomToolEndpoint(
+						definition.baseUrl,
+						definition.path,
+					),
+					parameters: definition.parameters,
+				},
+				input,
+			);
 			return result.value;
 		},
 		getTranscript() {

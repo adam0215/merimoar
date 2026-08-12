@@ -2,7 +2,6 @@ import type { LanguageModel, TextStreamPart, ToolSet } from "ai";
 import { createMerimoarAgent } from "../agent";
 import { type BuiltInToolKey, builtInToolCatalog } from "../builtins/catalog";
 import {
-	AGENT_RUN_SHUTDOWN,
 	type AgentContext,
 	type AgentRuntimeAdapter,
 	type ClaimedRun,
@@ -349,7 +348,6 @@ async function handleRunFailure(input: {
 	finishPendingText(): Promise<void>;
 }) {
 	await Promise.allSettled([input.finishPendingText()]);
-	if (input.abortReason === AGENT_RUN_SHUTDOWN) return;
 	if (input.taskStatusSelected) {
 		const [finalization] = await Promise.allSettled([
 			input.runtime.finishRun(),

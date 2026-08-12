@@ -6,6 +6,7 @@
 		".": "./src/index.ts",
 		"./manifest": "./src/manifest.ts",
 		"./builtins/catalog": "./src/builtins/catalog.ts",
+		"./runtime/custom-tool-request": "./src/runtime/custom-tool-request.ts",
 		"./runtime/push": "./src/runtime/push.ts"
 	},
 	"scripts": {

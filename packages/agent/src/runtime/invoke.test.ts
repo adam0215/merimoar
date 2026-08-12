@@ -1,7 +1,7 @@
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it, vi } from "vitest";
-import { AGENT_RUN_SHUTDOWN, type AgentRuntimeAdapter } from "../types";
+import type { AgentRuntimeAdapter } from "../types";
 import { invokeAgentRun } from "./invoke";
 
 const usage = {
@@ -644,51 +644,6 @@ describe("invokeAgentRun", () => {
 			"Agent execution failed.",
 			"Agent execution deadline exceeded.",
 		);
-	});
-
-	it("leaves a run retryable when the subscriber shuts down", async () => {
-		const failRun = vi.fn<AgentRuntimeAdapter["failRun"]>(async () => "failed");
-		const finishRun = vi.fn<AgentRuntimeAdapter["finishRun"]>(async () => {});
-		const runtime = createMinimalRuntime({ failRun, finishRun });
-		const abortController = new AbortController();
-		let streamStarted: () => void = () => {};
-		const started = new Promise<void>((resolve) => {
-			streamStarted = resolve;
-		});
-		const model = new MockLanguageModelV4({
-			doStream: async (options) => ({
-				stream: new ReadableStream({
-					start(controller) {
-						controller.enqueue({ type: "stream-start", warnings: [] });
-						streamStarted();
-						options.abortSignal?.addEventListener(
-							"abort",
-							() => {
-								controller.enqueue({
-									type: "error",
-									error: options.abortSignal?.reason,
-								});
-								controller.close();
-							},
-							{ once: true },
-						);
-					},
-				}),
-			}),
-		});
-
-		const invocation = invokeAgentRun({
-			claim: createClaim(),
-			runtime,
-			model,
-			abortSignal: abortController.signal,
-		});
-		await started;
-		abortController.abort(AGENT_RUN_SHUTDOWN);
-		await invocation;
-
-		expect(failRun).not.toHaveBeenCalled();
-		expect(finishRun).not.toHaveBeenCalled();
 	});
 
 	it("finalizes a status-tool result recovered from the durable ledger", async () => {

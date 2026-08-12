@@ -1,7 +1,5 @@
 import type { BuiltInToolKey } from "./builtins/catalog";
 
-export const AGENT_RUN_SHUTDOWN = Symbol("agent-run-shutdown");
-
 export type GlobalSearchFilter =
 	| { kind: "all" }
 	| { kind: "cases" }

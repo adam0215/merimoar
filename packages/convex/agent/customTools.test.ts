@@ -8,6 +8,7 @@ import {
 	computeLegacyCustomToolConfigurationHash,
 } from "./customToolModel";
 import {
+	claimExactRun,
 	createFixture,
 	delegateAndClaim,
 	RUNTIME_SECRET,
@@ -359,29 +360,24 @@ describe("custom tool configuration", () => {
 		);
 		expect(state[0]?.tools[0]?.needsRetest).toBe(true);
 
-		await fixture.actor.mutation(api.agent.tasks.delegateCase, {
-			caseId: fixture.secondCaseId,
-			input: "Check that stale custom tools are unavailable.",
-		});
-		const nextClaimToken = crypto.randomUUID();
-		const nextClaim = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
+		const secondDelegation = await fixture.actor.mutation(
+			api.agent.tasks.delegateCase,
 			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: nextClaimToken,
-				leaseDurationMs: 60_000,
+				caseId: fixture.secondCaseId,
+				input: "Check that stale custom tools are unavailable.",
 			},
 		);
+		const nextClaim = await claimExactRun(fixture, secondDelegation.runId, 0);
 		if (!nextClaim) throw new Error("Expected a second claimed run");
 		expect(
 			await loadTools(fixture, {
 				runId: nextClaim.runId,
-				claimToken: nextClaimToken,
+				claimToken: nextClaim.claimToken,
 			}),
 		).toEqual([]);
 	});
 
-	it("reuses the persisted snapshot after a worker relinquishes the run", async () => {
+	it("reuses the persisted snapshot after a worker lease is retried", async () => {
 		const fixture = await createFixture();
 		const integrationId = await createIntegration(fixture.actor);
 		await saveTool(fixture.actor, integrationId);
@@ -392,26 +388,20 @@ describe("custom tool configuration", () => {
 			name: "Metrics",
 			baseUrl: "https://metrics.example/v2",
 		});
-		await fixture.base.mutation(api.agent.runtime.relinquishRun, {
-			runtimeSecret: RUNTIME_SECRET,
-			runId: firstClaim.runId,
-			claimToken: firstClaim.claimToken,
+		await fixture.base.run(async (ctx) => {
+			await ctx.db.patch(firstClaim.runId, { leaseExpiresAt: 0 });
 		});
-		const nextClaimToken = crypto.randomUUID();
-		const reclaimed = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: nextClaimToken,
-				leaseDurationMs: 60_000,
-			},
-		);
+		await fixture.base.mutation(internal.agent.leases.requeueExpiredRun, {
+			runId: firstClaim.runId,
+			leaseGeneration: 1,
+		});
+		const reclaimed = await claimExactRun(fixture, firstClaim.runId, 1);
 		expect(reclaimed?.runId).toBe(firstClaim.runId);
 		if (!reclaimed) throw new Error("Expected the run to be reclaimed");
 		expect(
 			await loadTools(fixture, {
 				runId: reclaimed.runId,
-				claimToken: nextClaimToken,
+				claimToken: reclaimed.claimToken,
 			}),
 		).toMatchObject([{ baseUrl: "https://metrics.example/api" }]);
 	});
@@ -465,21 +455,13 @@ describe("custom tool configuration", () => {
 			},
 		);
 		if (!resumed.resumed) throw new Error("Expected approval continuation");
-		const continuationToken = crypto.randomUUID();
-		const continuation = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: continuationToken,
-				leaseDurationMs: 60_000,
-			},
-		);
+		const continuation = await claimExactRun(fixture, resumed.runId, 0);
 		expect(continuation?.runId).toBe(resumed.runId);
 		if (!continuation) throw new Error("Expected claimed continuation");
 		expect(
 			await loadTools(fixture, {
 				runId: continuation.runId,
-				claimToken: continuationToken,
+				claimToken: continuation.claimToken,
 			}),
 		).toMatchObject([
 			{

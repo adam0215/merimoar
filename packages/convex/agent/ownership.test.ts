@@ -73,15 +73,19 @@ describe("agent ownership and projections", () => {
 			}),
 		).rejects.toThrow("case could not be found");
 		await expect(
-			fixture.base.mutation(api.agent.runtime.claimNextRun, {
+			fixture.base.mutation(api.agent.runtime.claimRun, {
 				runtimeSecret: RUNTIME_SECRET,
+				runId: delegation.runId,
+				leaseGeneration: 0,
 				claimToken: "predictable",
 				leaseDurationMs: 60_000,
 			}),
 		).rejects.toThrow("at least 32 characters");
 		expect(
-			await fixture.base.mutation(api.agent.runtime.claimNextRun, {
+			await fixture.base.mutation(api.agent.runtime.claimRun, {
 				runtimeSecret: RUNTIME_SECRET,
+				runId: delegation.runId,
+				leaseGeneration: 0,
 				claimToken: crypto.randomUUID(),
 				leaseDurationMs: 60_000,
 			}),

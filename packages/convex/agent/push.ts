@@ -28,7 +28,7 @@ export async function scheduleAgentRunPush(
 	ctx: Pick<MutationCtx, "db" | "scheduler">,
 	args: { runId: Id<"agentRuns">; leaseGeneration: number },
 ) {
-	if (env.AGENT_RUN_TRANSPORT !== "push") return;
+	requirePushConfiguration();
 	const run = await ctx.db.get(args.runId);
 	if (
 		run?.status !== "queued" ||
@@ -141,7 +141,6 @@ async function pushDeliveryIsCurrent(
 	ctx: Pick<QueryCtx, "db">,
 	delivery: PushDeliveryCoordinates,
 ) {
-	if (env.AGENT_RUN_TRANSPORT !== "push") return false;
 	const run = await ctx.db.get(delivery.runId);
 	return (
 		run?.status === "queued" &&
@@ -178,12 +177,6 @@ async function schedulePushDeliveryAttempt(
 }
 
 function requirePushConfiguration() {
-	if (env.AGENT_RUN_TRANSPORT !== "push") {
-		throw new Error("Agent run push delivery is not enabled.");
-	}
-	if (!env.AGENT_RUN_PUSH_URL || !env.AGENT_RUN_PUSH_SIGNING_SECRET) {
-		throw new Error("Agent run push delivery is not configured.");
-	}
 	if (env.AGENT_RUN_PUSH_SIGNING_SECRET.length < 32) {
 		throw new Error(
 			"AGENT_RUN_PUSH_SIGNING_SECRET must contain at least 32 characters.",

@@ -3,87 +3,11 @@ import { api, internal } from "../_generated/api";
 import {
 	createFixture,
 	delegateAndClaim,
-	loadCompleteRuntimeTranscript,
 	RUNTIME_SECRET,
 	startTool,
 } from "./testSupport.test-helper";
 
 describe("agent status and write barriers", () => {
-	it("relinquishes three graceful shutdowns without spending the lease-loss budget and recovers staged status", async () => {
-		const fixture = await createFixture();
-		const claim = await delegateAndClaim(fixture);
-		const update = {
-			status: "completed" as const,
-			result: "Recovered after repeated orderly worker replacement.",
-		};
-		let claimToken = claim.claimToken;
-		for (let cycle = 1; cycle <= 3; cycle += 1) {
-			if (cycle === 3) {
-				await startTool(
-					fixture,
-					{ runId: claim.runId, claimToken },
-					"shutdown-status",
-					"update_task_status",
-				);
-				await fixture.base.mutation(api.agent.runtime.stageTaskStatus, {
-					runtimeSecret: RUNTIME_SECRET,
-					runId: claim.runId,
-					claimToken,
-					toolCallId: "shutdown-status",
-					update,
-				});
-			}
-			await fixture.base.mutation(api.agent.runtime.relinquishRun, {
-				runtimeSecret: RUNTIME_SECRET,
-				runId: claim.runId,
-				claimToken,
-			});
-			const relinquished = await fixture.base.run(async (ctx) => ({
-				run: await ctx.db.get(claim.runId),
-				task: await ctx.db.get(claim.taskId),
-			}));
-			expect(relinquished.run).toMatchObject({
-				status: "queued",
-				attemptCount: cycle,
-				leaseFailureCount: 0,
-			});
-			expect(relinquished.task).toMatchObject({
-				status: "active",
-				ownershipReleasedAt: null,
-				activeRunIds: [claim.runId],
-			});
-
-			claimToken = crypto.randomUUID();
-			const reclaimed = await fixture.base.mutation(
-				api.agent.runtime.claimNextRun,
-				{
-					runtimeSecret: RUNTIME_SECRET,
-					claimToken,
-					leaseDurationMs: 60_000,
-				},
-			);
-			expect(reclaimed?.runId).toBe(claim.runId);
-		}
-
-		const transcript = await loadCompleteRuntimeTranscript(fixture, {
-			runId: claim.runId,
-			claimToken,
-		});
-		expect(transcript.selectedStatusItemId).toBeTypeOf("string");
-		await fixture.base.mutation(api.agent.runtime.finishRun, {
-			runtimeSecret: RUNTIME_SECRET,
-			runId: claim.runId,
-			claimToken,
-		});
-		expect(
-			await fixture.base.run(async (ctx) => ctx.db.get(claim.taskId)),
-		).toMatchObject({
-			status: "completed",
-			result: update.result,
-			ownershipReleasedAt: expect.any(Number),
-		});
-	});
-
 	it("preserves a durable task status when its caller observes a later failure", async () => {
 		const fixture = await createFixture();
 		const claim = await delegateAndClaim(fixture);
@@ -220,11 +144,6 @@ describe("agent status and write barriers", () => {
 			result: update.result,
 			ownershipReleasedAt: expect.any(Number),
 		});
-		expect(
-			await fixture.base.query(api.agent.runtime.observeNextQueuedRun, {
-				runtimeSecret: RUNTIME_SECRET,
-			}),
-		).toBeNull();
 	});
 
 	it("rejects a selected status item cross-linked from another turn", async () => {
@@ -569,8 +488,10 @@ describe("agent status and write barriers", () => {
 			input: "A different task owns the second case.",
 		});
 		const claimToken = crypto.randomUUID();
-		const claim = await fixture.base.mutation(api.agent.runtime.claimNextRun, {
+		const claim = await fixture.base.mutation(api.agent.runtime.claimRun, {
 			runtimeSecret: RUNTIME_SECRET,
+			runId: firstDelegation.runId,
+			leaseGeneration: 0,
 			claimToken,
 			leaseDurationMs: 60_000,
 		});

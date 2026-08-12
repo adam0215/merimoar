@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import { describe, expect, it, vi } from "vitest";
-import { loadCompleteTranscript } from "../../../server/agent/convex-runtime";
+import { loadCompleteTranscript } from "../server/agent/convex-runtime";
 
 describe("Convex runtime transcript pagination", () => {
 	it("reconstructs every turn and item exactly across multiple pages", async () => {

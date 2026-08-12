@@ -9,11 +9,10 @@ import {
 	readLimitedResponseBody,
 	respondWithPinnedAddress,
 	validateCustomToolInput,
-} from "../../../server/custom-tools/executor.ts";
+} from "./custom-tool-request";
 
 const configuration = {
-	baseUrl: "https://api.example.com/base",
-	path: "temperature",
+	endpoint: "https://api.example.com/base/temperature",
 	parameters: [
 		{
 			name: "sensor_id",
@@ -123,7 +122,7 @@ describe("custom tool HTTP executor", () => {
 	it("allows HTTP loopback only in development", async () => {
 		const localConfiguration = {
 			...configuration,
-			baseUrl: "http://localhost:8787/api",
+			endpoint: "http://localhost:8787/api/temperature",
 		};
 		const dependencies = {
 			resolveHostname: async () => [
@@ -153,7 +152,7 @@ describe("custom tool HTTP executor", () => {
 			invokeCustomToolRequest(
 				{
 					...configuration,
-					baseUrl: "http://service.example.test/api",
+					endpoint: "http://service.example.test/api/temperature",
 				},
 				{ sensor_id: "sensor-1" },
 				{
@@ -190,11 +189,11 @@ describe("custom tool HTTP executor", () => {
 		"https://0x7f000001/api",
 		"https://2130706433/api",
 		"https://[::ffff:127.0.0.1]/api",
-	])("blocks normalized loopback URL representation %s", async (baseUrl) => {
+	])("blocks normalized loopback URL representation %s", async (endpoint) => {
 		const sendRequest = requestSpy();
 		await expect(
 			invokeCustomToolRequest(
-				{ ...configuration, baseUrl },
+				{ ...configuration, endpoint },
 				{ sensor_id: "sensor-1" },
 				{ sendRequest, development: false },
 			),

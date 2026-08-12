@@ -1,5 +1,4 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
 import { getAuth } from "@workos/authkit-tanstack-react-start";
 import { Authenticated, AuthLoading, Unauthenticated } from "convex/react";
 import { CustomToolNamesProvider } from "#/components/agents/custom-tool-names.tsx";
@@ -8,11 +7,6 @@ import { AppSplashScreen } from "#/components/app-splash-screen";
 import { TooltipProvider } from "#/components/ui/tooltip";
 import { loadAvailableOrganizations } from "#/integrations/workos/organization-functions.ts";
 import WorkspaceAccessGate from "#/integrations/workos/workspace-access-gate";
-import { isAgentRuntimeAvailable } from "../../server/agent/runtime-state.ts";
-
-const loadAgentRuntimeAvailability = createServerFn({
-	method: "GET",
-}).handler(isAgentRuntimeAvailable);
 
 export const Route = createFileRoute("/_authenticated")({
 	loader: async ({ location }) => {
@@ -22,11 +16,8 @@ export const Route = createFileRoute("/_authenticated")({
 				href: `/api/auth/sign-in?returnPathname=${encodeURIComponent(location.href)}`,
 			});
 		}
-		const [availableOrganizations, agentRuntimeAvailable] = await Promise.all([
-			loadAvailableOrganizations(),
-			loadAgentRuntimeAvailability(),
-		]);
-		return { ...auth, agentRuntimeAvailable, availableOrganizations };
+		const availableOrganizations = await loadAvailableOrganizations();
+		return { ...auth, availableOrganizations };
 	},
 	component: AuthenticatedLayout,
 });

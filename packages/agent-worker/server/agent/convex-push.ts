@@ -3,14 +3,14 @@ import { api } from "@merimoar/convex/api";
 import type { Id } from "@merimoar/convex/data-model";
 import { ConvexHttpClient } from "convex/browser";
 import {
-	type AgentInvocationConfiguration,
 	createConvexAgentRunInvoker,
 } from "./convex-runtime";
+import type { AgentWorkerConfiguration } from "./configuration";
 
 const RUN_LEASE_DURATION_MS = 60_000;
 
 export function createConvexAgentPushHost(
-	configuration: AgentInvocationConfiguration & { convexUrl: string },
+	configuration: AgentWorkerConfiguration,
 	onError: (error: unknown) => void,
 ): AgentRunPushHost {
 	const client = new ConvexHttpClient(configuration.convexUrl);

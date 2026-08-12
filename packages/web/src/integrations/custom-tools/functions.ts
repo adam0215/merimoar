@@ -1,5 +1,10 @@
 import { defaultAgentDefinition } from "@merimoar/agent/manifest";
 import {
+	invokeCustomToolRequest,
+	validateCustomToolInput,
+} from "@merimoar/agent/runtime/custom-tool-request";
+import {
+	composeCustomToolEndpoint,
 	computeCustomToolConfigurationHash,
 	normalizeCustomIntegrationInput,
 	normalizeCustomToolFields,
@@ -10,10 +15,6 @@ import { createServerFn } from "@tanstack/react-start";
 import { getAuth } from "@workos/authkit-tanstack-react-start";
 import * as validation from "valibot";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
-import {
-	invokeCustomToolRequest,
-	validateCustomToolInput,
-} from "../../../server/custom-tools/executor.ts";
 import {
 	createCustomToolTestProof,
 	hashCustomToolTestInput,
@@ -87,8 +88,7 @@ async function prepareCustomToolRequest(
 					})
 				).baseUrl;
 	const configuration = {
-		baseUrl,
-		path: fields.path,
+		endpoint: composeCustomToolEndpoint(baseUrl, fields.path),
 		parameters: fields.parameters,
 	};
 	return {
@@ -100,7 +100,11 @@ async function prepareCustomToolRequest(
 		client,
 		fields,
 		configuration,
-		configurationHash: await computeCustomToolConfigurationHash(configuration),
+		configurationHash: await computeCustomToolConfigurationHash({
+			baseUrl,
+			path: fields.path,
+			parameters: fields.parameters,
+		}),
 	};
 }
 

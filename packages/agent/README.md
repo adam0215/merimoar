@@ -5,12 +5,16 @@ Merimoar.
 
 The package has no dependency on TanStack Start or Convex. A host supplies an
 `AgentRuntimeAdapter` for persistence and organization-scoped capabilities.
-The pull subscriber and signed push handler both execute through the
-caller-independent `invokeAgentRun` primitive. Pull drains the queue with
-bounded process concurrency. Push claims only the exact delivered run and is
-safe under duplicate, delayed, and concurrently delivered requests. Its host
-injects a durable background-execution registrar so delivery can be
-acknowledged without tying dispatcher concurrency to the model execution.
+The signed push handler executes through the caller-independent
+`invokeAgentRun` primitive and claims only the exact delivered run. It is safe
+under duplicate, delayed, and concurrently delivered requests. Its host injects
+a durable background-execution registrar so delivery can be acknowledged
+without tying dispatcher concurrency to the model execution.
+
+The Node-only custom-tool request primitive validates inputs, pins DNS
+resolution, blocks private destinations, bounds response size, and returns only
+parsed JSON. Framework and persistence composition live in
+`@merimoar/agent-worker`, not in this package.
 
 Built-in schemas and execution live together in their AI SDK definitions.
 The catalog also owns each built-in's default active state. Hosts provide the

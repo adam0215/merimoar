@@ -223,14 +223,25 @@ export async function delegateAndClaim(
 			input: "Resolve the case and document the outcome.",
 		},
 	);
+	const claim = await claimExactRun(fixture, delegation.runId, 0);
+	return { ...delegation, ...claim };
+}
+
+export async function claimExactRun(
+	fixture: Awaited<ReturnType<typeof createFixture>>,
+	runId: Id<"agentRuns">,
+	leaseGeneration: number,
+) {
 	const claimToken = crypto.randomUUID();
-	const claim = await fixture.base.mutation(api.agent.runtime.claimNextRun, {
+	const claim = await fixture.base.mutation(api.agent.runtime.claimRun, {
 		runtimeSecret: RUNTIME_SECRET,
+		runId,
+		leaseGeneration,
 		claimToken,
 		leaseDurationMs: 60_000,
 	});
 	if (!claim) throw new Error("Expected a claimed run");
-	return { ...delegation, ...claim, claimToken };
+	return { ...claim, claimToken };
 }
 
 type TranscriptTurnPage = FunctionReturnType<

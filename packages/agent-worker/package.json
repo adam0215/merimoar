@@ -1,0 +1,24 @@
+{
+	"name": "@merimoar/agent-worker",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "bun --env-file=../../.env.local vite dev --port 3001",
+		"build": "nitro build",
+		"preview": "bun --env-file=../../.env.local vite preview",
+		"typecheck": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@ai-sdk/openai": "^4.0.24",
+		"@merimoar/agent": "workspace:*",
+		"@merimoar/convex": "workspace:*",
+		"convex": "^1.42.3"
+	},
+	"devDependencies": {
+		"@types/node": "^22.10.2",
+		"nitro": "3.0.260610-beta",
+		"typescript": "^6.0.2",
+		"vite": "^8.0.0",
+		"vitest": "^4.1.10"
+	}
+}

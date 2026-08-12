@@ -87,6 +87,8 @@
 		// Agent/plugin sources are vendored tooling, not application code.
 		".agents/**",
 		".codex/**",
+		// Serverless build output is generated and may contain bundled dependencies.
+		"**/.vercel/**",
 		// Convex and TanStack generate these files; their sources are linted instead.
 		"packages/convex/_generated/**",
 		"packages/web/src/routeTree.gen.ts"

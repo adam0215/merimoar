@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { api, internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import {
@@ -9,10 +9,6 @@ import {
 	loadCompleteRuntimeTranscript,
 	RUNTIME_SECRET,
 } from "./testSupport.test-helper";
-
-afterEach(() => {
-	vi.unstubAllEnvs();
-});
 
 describe("agent runs, leases, and transcript", () => {
 	it("claims only the exact run delivered by a push", async () => {
@@ -66,19 +62,17 @@ describe("agent runs, leases, and transcript", () => {
 				leaseDurationMs: 60_000,
 			}),
 		).resolves.toBeNull();
-		const nextClaim = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: crypto.randomUUID(),
-				leaseDurationMs: 60_000,
-			},
-		);
-		expect(nextClaim?.runId).toBe(first.runId);
+		const firstClaim = await fixture.base.mutation(api.agent.runtime.claimRun, {
+			runtimeSecret: RUNTIME_SECRET,
+			runId: first.runId,
+			leaseGeneration: 0,
+			claimToken: crypto.randomUUID(),
+			leaseDurationMs: 60_000,
+		});
+		expect(firstClaim?.runId).toBe(first.runId);
 	});
 
-	it("durably pushes each new queue generation only in push mode", async () => {
-		vi.stubEnv("AGENT_RUN_TRANSPORT", "push");
+	it("durably pushes each new queue generation", async () => {
 		const fixture = await createFixture();
 		const delegation = await fixture.actor.mutation(
 			api.agent.tasks.delegateCase,
@@ -146,7 +140,6 @@ describe("agent runs, leases, and transcript", () => {
 	});
 
 	it("advances only one push retry chain while the generation is queued", async () => {
-		vi.stubEnv("AGENT_RUN_TRANSPORT", "push");
 		const fixture = await createFixture();
 		const delegation = await fixture.actor.mutation(
 			api.agent.tasks.delegateCase,
@@ -188,15 +181,6 @@ describe("agent runs, leases, and transcript", () => {
 			"agent/push:deliver",
 			"agent/push:recoverDelivery",
 		]);
-		vi.stubEnv("AGENT_RUN_TRANSPORT", "pull");
-		await expect(
-			fixture.base.mutation(internal.agent.push.retryDelivery, {
-				...initialDelivery,
-				attempt: 1,
-			}),
-		).resolves.toBe(false);
-		vi.stubEnv("AGENT_RUN_TRANSPORT", "push");
-
 		await fixture.base.mutation(api.agent.runtime.claimRun, {
 			runtimeSecret: RUNTIME_SECRET,
 			runId: delegation.runId,
@@ -284,7 +268,7 @@ describe("agent runs, leases, and transcript", () => {
 		]);
 	});
 
-	it("atomically claims work and wakes subscribers when the current lease expires", async () => {
+	it("atomically claims an exact run and requeues it when the current lease expires", async () => {
 		const fixture = await createFixture();
 		const delegation = await fixture.actor.mutation(
 			api.agent.tasks.delegateCase,
@@ -293,38 +277,26 @@ describe("agent runs, leases, and transcript", () => {
 				input: "Claim me once.",
 			},
 		);
-		await expect(
-			fixture.base.query(api.agent.runtime.observeNextQueuedRun, {
-				runtimeSecret: "not-the-runtime-secret",
-			}),
-		).rejects.toThrow("access denied");
-		expect(
-			await fixture.base.query(api.agent.runtime.observeNextQueuedRun, {
-				runtimeSecret: RUNTIME_SECRET,
-			}),
-		).toBe(delegation.runId);
-
 		const firstToken = crypto.randomUUID();
 		const competingToken = crypto.randomUUID();
 		const [firstClaim, overlappingClaim] = await Promise.all([
-			fixture.base.mutation(api.agent.runtime.claimNextRun, {
+			fixture.base.mutation(api.agent.runtime.claimRun, {
 				runtimeSecret: RUNTIME_SECRET,
+				runId: delegation.runId,
+				leaseGeneration: 0,
 				claimToken: firstToken,
 				leaseDurationMs: 60_000,
 			}),
-			fixture.base.mutation(api.agent.runtime.claimNextRun, {
+			fixture.base.mutation(api.agent.runtime.claimRun, {
 				runtimeSecret: RUNTIME_SECRET,
+				runId: delegation.runId,
+				leaseGeneration: 0,
 				claimToken: competingToken,
 				leaseDurationMs: 60_000,
 			}),
 		]);
 		expect([firstClaim, overlappingClaim].filter(Boolean)).toHaveLength(1);
 		const winningToken = firstClaim ? firstToken : competingToken;
-		expect(
-			await fixture.base.query(api.agent.runtime.observeNextQueuedRun, {
-				runtimeSecret: RUNTIME_SECRET,
-			}),
-		).toBeNull();
 
 		await fixture.base.mutation(api.agent.runtime.renewRunLease, {
 			runtimeSecret: RUNTIME_SECRET,
@@ -405,20 +377,17 @@ describe("agent runs, leases, and transcript", () => {
 			leaseGeneration: 2,
 		});
 		expect(
-			await fixture.base.query(api.agent.runtime.observeNextQueuedRun, {
-				runtimeSecret: RUNTIME_SECRET,
-			}),
-		).toBe(delegation.runId);
+			await fixture.base.run(async (ctx) => ctx.db.get(delegation.runId)),
+		).toMatchObject({ status: "queued", leaseGeneration: 2 });
 
 		const secondToken = crypto.randomUUID();
-		const reclaimed = await fixture.base.mutation(
-			api.agent.runtime.claimNextRun,
-			{
-				runtimeSecret: RUNTIME_SECRET,
-				claimToken: secondToken,
-				leaseDurationMs: 60_000,
-			},
-		);
+		const reclaimed = await fixture.base.mutation(api.agent.runtime.claimRun, {
+			runtimeSecret: RUNTIME_SECRET,
+			runId: delegation.runId,
+			leaseGeneration: 2,
+			claimToken: secondToken,
+			leaseDurationMs: 60_000,
+		});
 		expect(reclaimed?.runId).toBe(delegation.runId);
 		expect(
 			await fixture.base.run(async (ctx) => ctx.db.get(delegation.runId)),
@@ -433,10 +402,8 @@ describe("agent runs, leases, and transcript", () => {
 			leaseGeneration: 2,
 		});
 		expect(
-			await fixture.base.query(api.agent.runtime.observeNextQueuedRun, {
-				runtimeSecret: RUNTIME_SECRET,
-			}),
-		).toBeNull();
+			await fixture.base.run(async (ctx) => ctx.db.get(delegation.runId)),
+		).toMatchObject({ status: "running", leaseGeneration: 3 });
 
 		await expect(
 			fixture.base.mutation(api.agent.runtime.updateActivity, {
@@ -474,9 +441,11 @@ describe("agent runs, leases, and transcript", () => {
 			});
 			if (loss < 3) {
 				const reclaimed = await fixture.base.mutation(
-					api.agent.runtime.claimNextRun,
+					api.agent.runtime.claimRun,
 					{
 						runtimeSecret: RUNTIME_SECRET,
+						runId: claim.runId,
+						leaseGeneration: run.leaseGeneration,
 						claimToken: crypto.randomUUID(),
 						leaseDurationMs: 60_000,
 					},
@@ -544,8 +513,18 @@ describe("agent runs, leases, and transcript", () => {
 			});
 		});
 
-		const claim = await fixture.base.mutation(api.agent.runtime.claimNextRun, {
+		const staleClaim = await fixture.base.mutation(api.agent.runtime.claimRun, {
 			runtimeSecret: RUNTIME_SECRET,
+			runId: staleDelegation.runId,
+			leaseGeneration: 0,
+			claimToken: crypto.randomUUID(),
+			leaseDurationMs: 60_000,
+		});
+		expect(staleClaim).toBeNull();
+		const claim = await fixture.base.mutation(api.agent.runtime.claimRun, {
+			runtimeSecret: RUNTIME_SECRET,
+			runId: freshDelegation.runId,
+			leaseGeneration: 0,
 			claimToken: crypto.randomUUID(),
 			leaseDurationMs: 60_000,
 		});

@@ -32,7 +32,7 @@ Agent work must be:
   records;
 - resumable across waits without keeping an execution process alive;
 - isolated to the requesting organization; and
-- safe under retries, concurrent servers, lease loss, and member takeover.
+- safe under retries, concurrent deliveries, lease loss, and member takeover.
 
 ## 2. Scope
 
@@ -41,7 +41,7 @@ Agent work must be:
 - Manual delegation from an existing case.
 - A portable agent package built on AI SDK `ToolLoopAgent`.
 - A caller-independent invocation primitive.
-- A TanStack server subscriber that observes and claims queued Convex runs.
+- A standalone Node worker that accepts signed Convex push deliveries.
 - Convex persistence for tasks, turns, runs, transcript items, approvals, and
   case ownership.
 - Built-in Merimoar tools.
@@ -55,8 +55,6 @@ Agent work must be:
 
 - Automatic email delegation and autocapture rules.
 - User-configurable hooks or domain-event subscriptions.
-- An inbound HTTP or webhook invocation transport.
-- A separate production worker runtime.
 - Agent configuration/version CRUD.
 - User-configurable integrations and tools.
 - A Custom Integration HTTP wrapper.
@@ -244,33 +242,33 @@ Takeover must atomically:
 - terminalize the task as `cancelled`; and
 - prevent late approval answers or run completions from reviving it.
 
-## 7. Invocation and subscriber boundary
+## 7. Invocation and worker boundary
 
-`invokeAgentRun` or its equivalent must be independent of Convex, TanStack, and
-the model provider. A host supplies:
+`invokeAgentRun` or its equivalent must be independent of Convex, Nitro, and the
+model provider. A host supplies:
 
 - the claimed run identity;
 - the language model;
 - durable transcript and lifecycle operations; and
 - organization-scoped business capabilities.
 
-The first host is a TanStack server plugin using a Convex subscription.
+The first host is a standalone Nitro/Node worker. Convex delivers an HMAC-signed
+request containing an exact run ID and lease generation.
 
-The subscriber must:
+The worker must:
 
-- observe queued work without periodic queue polling;
-- atomically claim before execution;
-- tolerate multiple competing server processes;
-- serialize claiming while allowing bounded parallel execution;
-- use a configurable bounded concurrency;
+- reject unsigned, altered, malformed, oversized, or expired deliveries before
+  claiming;
+- atomically claim the exact delivered run and lease generation before
+  execution;
+- tolerate duplicate, delayed, and concurrent deliveries;
+- acknowledge accepted deliveries before the complete model invocation ends;
+- let the serverless platform scale independent invocations without a
+  process-local concurrency limit;
 - use a total execution deadline and abort provider work on expiry;
 - renew a time-bounded lease while running;
-- relinquish claims cleanly on host shutdown without releasing task ownership;
-- retry known transient claim failures with bounded backoff; and
-- never use retry polling to discover otherwise unseen jobs.
-
-A future worker or push transport must be able to call the same invocation
-primitive.
+- rely on durable lease recovery when a worker terminates unexpectedly; and
+- retain retry and delivery state in Convex rather than process memory.
 
 ## 8. Claims, leases, retries, and idempotency
 
@@ -287,8 +285,8 @@ primitive.
 - Expired current leases without a selected status requeue the run.
 - Lease-loss retries are bounded; repeated loss terminalizes the task rather
   than creating an infinite retry loop.
-- Provider deadlines and execution failures are distinct from graceful host
-  shutdown.
+- Provider deadlines and execution failures are distinct from abrupt worker
+  loss, which is recovered by lease expiry.
 - Mutating built-ins use `(runId, toolCallId)` as their idempotency identity.
 - A business mutation and its completed tool record commit atomically.
 - Retried or reclaimed execution returns the committed result without repeating
@@ -470,8 +468,8 @@ Rules:
   contact, entity, email, approval, or member IDs.
 - Public functions expose only the minimum surface needed by authenticated
   members.
-- Missing or invalid local runtime configuration disables the subscriber
-  without weakening backend authorization.
+- Missing or invalid worker configuration fails push ingress closed without
+  weakening backend authorization.
 
 ## 14. Local terminal UI
 
@@ -508,7 +506,7 @@ The backend is ready to commit only when all of the following are true:
 11. Focused positive and negative/adversarial tests cover:
     - delegation and duplicate ownership;
     - provenance and organization isolation;
-    - claim competition, renewal, expiry, shutdown, and retry limits;
+    - duplicate claim delivery, renewal, expiry, worker loss, and retry limits;
     - transcript ordering and coalescing;
     - idempotent mutating tools;
     - one-winner terminal status;

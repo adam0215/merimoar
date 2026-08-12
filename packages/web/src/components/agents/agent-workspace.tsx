@@ -1,13 +1,12 @@
 import { api } from "@merimoar/convex/api";
 import {
-	IconAlertCircle,
 	IconAlertTriangle,
 	IconCircleCheck,
 	IconClock,
 	IconHandStop,
 	IconPlayerPlay,
 } from "@tabler/icons-react";
-import { getRouteApi, Link } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { useQuery } from "convex/react";
 import { useState } from "react";
 import {
@@ -23,7 +22,6 @@ import {
 } from "#/components/agents/agent-types.ts";
 import { TakeOverTaskDialog } from "#/components/agents/take-over-task-dialog.tsx";
 import { OverviewMetric } from "#/components/overview-metric.tsx";
-import { Alert, AlertDescription } from "#/components/ui/alert.tsx";
 import {
 	Select,
 	SelectContent,
@@ -43,8 +41,6 @@ const TASK_FILTERS: { value: TaskFilter; label: string }[] = [
 	{ value: "finished", label: "Finished" },
 ];
 
-const authenticatedRoute = getRouteApi("/_authenticated");
-
 function taskMatchesFilter(status: AgentTaskStatus, filter: TaskFilter) {
 	if (filter === "current") return status === "active";
 	if (filter === "attention") {
@@ -59,7 +55,6 @@ function taskMatchesFilter(status: AgentTaskStatus, filter: TaskFilter) {
 }
 
 export function AgentOverview() {
-	const { agentRuntimeAvailable } = authenticatedRoute.useLoaderData();
 	const tasks = useQuery(api.agent.reader.listWorkspaceTasks, {});
 	const currentTasks =
 		tasks?.filter((task) => taskRetainsAgentOwnership(task.task.status)) ?? [];
@@ -67,14 +62,6 @@ export function AgentOverview() {
 
 	return (
 		<AgentWorkspacePage>
-			{!agentRuntimeAvailable && (
-				<Alert variant="destructive" className="max-w-xl" role="status">
-					<IconAlertCircle />
-					<AlertDescription>
-						Agent is temporarily unavailable. Try again later.
-					</AlertDescription>
-				</Alert>
-			)}
 			<h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
 			<section aria-labelledby="task-overview-heading">
 				<h2 id="task-overview-heading" className="font-semibold">

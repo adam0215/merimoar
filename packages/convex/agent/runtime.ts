@@ -10,7 +10,6 @@ import {
 	agentRunUsageValidator,
 	agentTaskStatusUpdateValidator,
 } from "#/agent/model";
-import { scheduleAgentRunPush } from "#/agent/push";
 import { finalizeClaimedRun } from "#/agent/runFinalization";
 import {
 	nextItemSequence,
@@ -38,11 +37,10 @@ import {
 import { internal } from "../_generated/api";
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
-import { mutation, query } from "../_generated/server";
+import { mutation } from "../_generated/server";
 
 const MIN_LEASE_DURATION_MS = 5_000;
 const MAX_LEASE_DURATION_MS = 5 * 60_000;
-const MAX_CLAIM_CANDIDATES = 20;
 const MAX_ACTIVITY_TITLE_LENGTH = 200;
 const MAX_ACTIVITY_DETAIL_LENGTH = 2_000;
 
@@ -81,24 +79,6 @@ const claimedRunValidator = v.union(
 	v.null(),
 );
 
-async function findClaimableRun(ctx: MutationCtx, now: number) {
-	const queuedRuns = await ctx.db
-		.query("agentRuns")
-		.withIndex("by_status_and_requested_at", (index) =>
-			index.eq("status", "queued"),
-		)
-		.take(MAX_CLAIM_CANDIDATES);
-	for (const run of queuedRuns) {
-		const owner = await getCurrentActiveTaskForRun(ctx, run);
-		if (!owner) {
-			await cancelUnclaimableRun(ctx, run, now);
-			continue;
-		}
-		return { run, ...owner };
-	}
-	return null;
-}
-
 async function getCurrentActiveTaskForRun(
 	ctx: MutationCtx,
 	run: Doc<"agentRuns">,
@@ -127,36 +107,6 @@ async function cancelUnclaimableRun(
 		reason: "The task ended before this run could continue.",
 	});
 }
-
-export const observeNextQueuedRun = query({
-	args: {
-		runtimeSecret: v.string(),
-	},
-	returns: v.union(v.id("agentRuns"), v.null()),
-	handler: async (ctx, args) => {
-		requireAgentRuntimeSecret(args.runtimeSecret);
-		const run = await ctx.db
-			.query("agentRuns")
-			.withIndex("by_status_and_requested_at", (index) =>
-				index.eq("status", "queued"),
-			)
-			.first();
-		return run?._id ?? null;
-	},
-});
-
-export const claimNextRun = mutation({
-	args: claimRunArgs,
-	returns: claimedRunValidator,
-	handler: async (ctx, args) => {
-		requireAgentRuntimeSecret(args.runtimeSecret);
-		requireClaimArguments(args);
-		const now = Date.now();
-		const candidate = await findClaimableRun(ctx, now);
-		if (!candidate) return null;
-		return await claimCandidate(ctx, args, candidate, now);
-	},
-});
 
 export const claimRun = mutation({
 	args: {
@@ -203,7 +153,11 @@ function requireClaimArguments(args: {
 async function claimCandidate(
 	ctx: MutationCtx,
 	args: { claimToken: string; leaseDurationMs: number },
-	candidate: NonNullable<Awaited<ReturnType<typeof findClaimableRun>>>,
+	candidate: {
+		run: Doc<"agentRuns">;
+		turn: Doc<"agentTurns">;
+		task: Doc<"agentTasks">;
+	},
 	now: number,
 ) {
 	const leaseExpiresAt = now + args.leaseDurationMs;
@@ -287,68 +241,6 @@ export const renewRunLease = mutation({
 			},
 		);
 		return leaseExpiresAt;
-	},
-});
-
-export const relinquishRun = mutation({
-	args: {
-		runtimeSecret: v.string(),
-		runId: v.id("agentRuns"),
-		claimToken: v.string(),
-	},
-	returns: v.null(),
-	handler: async (ctx, args) => {
-		requireAgentRuntimeSecret(args.runtimeSecret);
-		const existingRun = await ctx.db.get(args.runId);
-		if (!existingRun || existingRun.status !== "running") return null;
-
-		const { isCurrentTurn, run, task } = await requireClaimedAgentRun(
-			ctx,
-			args,
-			"claimed_run",
-		);
-		if (task.status === "active" && isCurrentTurn) {
-			await ctx.db.replace("agentRuns", run._id, {
-				...agentRunBaseFields(run),
-				status: "queued",
-			});
-			await scheduleAgentRunPush(ctx, {
-				runId: run._id,
-				leaseGeneration: run.leaseGeneration,
-			});
-			return null;
-		}
-
-		const now = Date.now();
-		await ctx.db.replace("agentRuns", run._id, {
-			...agentRunBaseFields(run),
-			status: "cancelled",
-			endedAt: now,
-			reason: "The worker relinquished a run that no longer owned active work.",
-		});
-		if (
-			task.status === "waiting_for_approval" &&
-			task.activeRunIds.includes(run._id)
-		) {
-			const taskAfterApprovalReplay = await retireAssignedApprovalDecisions(
-				ctx,
-				task,
-				run._id,
-				now,
-			);
-			await ctx.db.patch(taskAfterApprovalReplay._id, {
-				activeRunIds: taskAfterApprovalReplay.activeRunIds.filter(
-					(runId) => runId !== run._id,
-				),
-			});
-			if (taskAfterApprovalReplay.activeApprovalIds.length > 0) {
-				await queueApprovalContinuationIfReady(ctx, {
-					taskId: taskAfterApprovalReplay._id,
-					requestedAt: now,
-				});
-			}
-		}
-		return null;
 	},
 });
 
