@@ -238,7 +238,7 @@ public URL:
 
 ```dotenv
 AGENT_RUNTIME_SECRET=a-random-secret-of-at-least-32-characters
-AGENT_RUN_PUSH_URL=https://your-node-host.example/agent-runs/push
+AGENT_RUN_PUSH_URL=https://your-node-host.example/agent/runs/push
 AGENT_RUN_PUSH_SIGNING_SECRET=a-different-random-secret-of-at-least-32-characters
 ```
 
@@ -263,7 +263,7 @@ bun run dev:agent
 It listens on `http://localhost:3001`. When developing against Convex Cloud,
 expose that port through an HTTPS tunnel such as ngrok and set the dev
 deployment's `AGENT_RUN_PUSH_URL` to the resulting
-`https://.../agent-runs/push` URL. This exercises the same signed delivery,
+`https://.../agent/runs/push` URL. This exercises the same signed delivery,
 claim, retry, lease, and Nitro lifecycle as production; there is no development
 subscriber or alternate dispatcher.
 

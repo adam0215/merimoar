@@ -1,3 +1,4 @@
+import * as v from "valibot";
 import type { ClaimedRun } from "../types";
 import { getDiagnosticErrorMessage } from "./diagnostics";
 
@@ -8,13 +9,23 @@ const DEFAULT_MAXIMUM_AGE_MS = 5 * 60_000;
 const MAXIMUM_BODY_BYTES = 4_096;
 const MAXIMUM_IDENTIFIER_LENGTH = 500;
 
-export type AgentRunPushPayload = {
-	version: typeof PUSH_PROTOCOL_VERSION;
-	runId: string;
-	leaseGeneration: number;
-	deliveryId: string;
-	sentAt: number;
-};
+const pushIdentifierSchema = v.pipe(
+	v.string(),
+	v.minLength(1),
+	v.maxLength(MAXIMUM_IDENTIFIER_LENGTH),
+);
+
+const agentRunPushPayloadSchema = v.strictObject({
+	version: v.literal(PUSH_PROTOCOL_VERSION),
+	runId: pushIdentifierSchema,
+	leaseGeneration: v.pipe(v.number(), v.integer(), v.minValue(0)),
+	deliveryId: pushIdentifierSchema,
+	sentAt: v.pipe(v.number(), v.integer(), v.minValue(1)),
+});
+
+export type AgentRunPushPayload = v.InferOutput<
+	typeof agentRunPushPayloadSchema
+>;
 
 export type AgentRunPushHost = {
 	claimRun(
@@ -158,46 +169,8 @@ function parseAgentRunPushPayload(body: string): AgentRunPushPayload | null {
 	} catch {
 		return null;
 	}
-	if (!isPlainObject(value)) return null;
-	const keys = Object.keys(value);
-	if (
-		keys.length !== 5 ||
-		!keys.every((key) =>
-			["version", "runId", "leaseGeneration", "deliveryId", "sentAt"].includes(
-				key,
-			),
-		)
-	) {
-		return null;
-	}
-	if (
-		value.version !== PUSH_PROTOCOL_VERSION ||
-		!isIdentifier(value.runId) ||
-		!Number.isInteger(value.leaseGeneration) ||
-		(value.leaseGeneration as number) < 0 ||
-		!isIdentifier(value.deliveryId) ||
-		!Number.isInteger(value.sentAt) ||
-		(value.sentAt as number) < 1
-	) {
-		return null;
-	}
-	return value as AgentRunPushPayload;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
-		return false;
-	}
-	const prototype = Object.getPrototypeOf(value);
-	return prototype === Object.prototype || prototype === null;
-}
-
-function isIdentifier(value: unknown): value is string {
-	return (
-		typeof value === "string" &&
-		value.length >= 1 &&
-		value.length <= MAXIMUM_IDENTIFIER_LENGTH
-	);
+	const result = v.safeParse(agentRunPushPayloadSchema, value);
+	return result.success ? result.output : null;
 }
 
 async function readLimitedBody(request: Request, maximumBytes: number) {

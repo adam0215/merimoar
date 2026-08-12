@@ -5,7 +5,7 @@ export default defineConfig({
 	serverDir: "./server",
 	vercel: {
 		functionRules: {
-			"/agent-runs/push": { maxDuration: 600 },
+			"/agent/runs/push": { maxDuration: 600 },
 		},
 	},
 });

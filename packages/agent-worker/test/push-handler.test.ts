@@ -32,7 +32,7 @@ async function createSignedRequest() {
 		deliveryId: "run-1:0:0",
 		sentAt: Date.now(),
 	});
-	return new Request("http://localhost:3001/agent-runs/push", {
+	return new Request("http://localhost:3001/agent/runs/push", {
 		method: "POST",
 		headers: {
 			"content-type": "application/json",

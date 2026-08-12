@@ -40,7 +40,7 @@ async function createPushRequest(
 			deliveryId: "delivery-1",
 			sentAt: input.sentAt ?? NOW,
 		});
-	return new Request("https://runtime.example/api/agent-runs/push", {
+	return new Request("https://runtime.example/agent/runs/push", {
 		method: "POST",
 		headers: {
 			"content-type": "application/json",
@@ -187,7 +187,7 @@ describe("agent run push protocol", () => {
 				throw new Error("Rejected delivery must not be deferred.");
 			},
 		})(
-			new Request("https://runtime.example/api/agent-runs/push", {
+			new Request("https://runtime.example/agent/runs/push", {
 				method: "POST",
 				headers: {
 					"content-type": "application/json",
