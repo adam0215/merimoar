@@ -1,7 +1,8 @@
 import { NotFoundException } from "@workos-inc/node";
 import { createFunctionHandle, httpRouter } from "convex/server";
-import { type EmailReceivedEvent, type EmailSentEvent, Resend } from "resend";
+import { type EmailReceivedEvent, type EmailSentEvent } from "resend";
 import { readResendInternetMessageId } from "#/email/outboundModel";
+import { verifyResendWebhook } from "#/email/webhookVerification";
 import { getResendPipesProviderSlug } from "#/integrations/resendProvider";
 import {
 	AUTHKIT_ADDITIONAL_EVENT_TYPES,
@@ -105,9 +106,9 @@ http.route({
 		}
 
 		const rawPayload = await request.text();
-		let event: ReturnType<Resend["webhooks"]["verify"]>;
+		let event: ReturnType<typeof verifyResendWebhook>;
 		try {
-			event = new Resend().webhooks.verify({
+			event = verifyResendWebhook({
 				payload: rawPayload,
 				headers: {
 					id: externalEventId,
@@ -116,7 +117,13 @@ http.route({
 				},
 				webhookSecret: verification.webhookSecret,
 			});
-		} catch {
+		} catch (error) {
+			console.error("Resend webhook verification failed", {
+				error: error instanceof Error ? error.message : String(error),
+				externalEventId,
+				integrationId,
+				timestamp,
+			});
 			return new Response("Invalid webhook signature", { status: 400 });
 		}
 
