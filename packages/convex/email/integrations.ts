@@ -13,6 +13,10 @@ import {
 	type ResendProvisioningFence,
 	resendProvisioningFenceValidator,
 } from "#/integrations/model";
+import {
+	getResendPipesProviderSlug,
+	isResendPipesProviderSlug,
+} from "#/integrations/resendProvider";
 import { internalMutation, internalQuery, query } from "../_generated/server";
 
 function matchesResendProvisioningFence(
@@ -20,7 +24,7 @@ function matchesResendProvisioningFence(
 	fence: ResendProvisioningFence,
 ) {
 	return (
-		context.providerSlug === "resend" &&
+		isResendPipesProviderSlug(context.providerSlug) &&
 		context.connectedAccountId === fence.expectedConnectedAccountId &&
 		context.connectionStatus === "connected" &&
 		context.workosUpdatedAt === fence.expectedWorkosUpdatedAt &&
@@ -67,7 +71,7 @@ export const getSelectableResendAccessContext = internalQuery({
 		if (
 			!context ||
 			context.organizationId !== workspace.organization._id ||
-			context.providerSlug !== "resend" ||
+			!isResendPipesProviderSlug(context.providerSlug) ||
 			deriveEmailReadiness(
 				context.connectionStatus,
 				context.grantedScopes,
@@ -357,7 +361,7 @@ export const getResendConnectionOverview = query({
 				(index) =>
 					index
 						.eq("organizationId", workspace.organization._id)
-						.eq("providerSlug", "resend")
+						.eq("providerSlug", getResendPipesProviderSlug())
 						.eq("workosUserId", workspace.identity.subject),
 			)
 			.order("desc")

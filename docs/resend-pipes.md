@@ -257,7 +257,9 @@ must be empty, and every migration status must be `done`.
 ## Required Convex environment
 
 The integration uses the existing `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, and
-optional `WORKOS_API_HOSTNAME`. `CONVEX_SITE_URL` is provided automatically by
-Convex and constructs the email webhook endpoint.
+optional `WORKOS_API_HOSTNAME`. `WORKOS_RESEND_PROVIDER_SLUG` selects the
+environment-specific WorkOS provider and defaults to `resend`; Production uses
+`resend-prod`. `CONVEX_SITE_URL` is provided automatically by Convex and
+constructs the email webhook endpoint.
 
 The legacy `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` variables are not used.

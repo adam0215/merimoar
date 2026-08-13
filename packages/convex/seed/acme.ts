@@ -1,5 +1,6 @@
 import { normalizeEntityIdentifier } from "#/entity/constants";
 import { syncGlobalSearchEntry } from "#/globalSearch/model";
+import { getResendPipesProviderSlug } from "#/integrations/resendProvider";
 import {
 	ACME_CASE_RELATIONS,
 	ACME_CASES,
@@ -552,7 +553,7 @@ export async function insertAcmeDataset(
 	assertAcmeDatasetIsInternallyConsistent();
 	const connectedAccountId = await ctx.db.insert("connectedAccounts", {
 		organizationId: organization._id,
-		providerSlug: "resend",
+		providerSlug: getResendPipesProviderSlug(),
 		workosUserId: owner.workosUserId,
 		workosDataIntegrationId: `seed:${ACME_DATASET_VERSION}`,
 		workosConnectedAccountId: `seed:${ACME_DATASET_VERSION}:${organization._id}`,

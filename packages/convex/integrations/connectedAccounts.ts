@@ -9,6 +9,7 @@ import {
 	deriveEmailReadiness,
 	type EmailIntegrationAccessContext,
 } from "./model";
+import { isResendPipesProviderSlug } from "./resendProvider";
 
 const STATUS_PRECEDENCE = {
 	connected: 0,
@@ -274,7 +275,7 @@ export const applyWorkosReconciliation = internalMutation({
 			connectionStatus: args.connectionStatus,
 			workosUpdatedAt: args.workosUpdatedAt,
 		});
-		if (result.connectedAccount.providerSlug === "resend") {
+		if (isResendPipesProviderSlug(result.connectedAccount.providerSlug)) {
 			await synchronizeResendEmailIntegration(ctx, result.connectedAccount);
 		}
 		return null;

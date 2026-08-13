@@ -15,6 +15,7 @@ import {
 import { setThreadUnread } from "#/email/unreadCounts";
 import { getEmailIntegrationAccessContext } from "#/integrations/connectedAccounts";
 import { deriveEmailReadiness } from "#/integrations/model";
+import { getResendPipesProviderSlug } from "#/integrations/resendProvider";
 import type { Id, TableNames } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
@@ -59,7 +60,7 @@ export const listOutboundIntegrations = query({
 			.withIndex("by_organization_id_and_provider_slug", (index) =>
 				index
 					.eq("organizationId", workspace.organization._id)
-					.eq("providerSlug", "resend"),
+					.eq("providerSlug", getResendPipesProviderSlug()),
 			)
 			.take(100);
 		const integrations = await Promise.all(
@@ -80,7 +81,7 @@ export const listOutboundIntegrations = query({
 				);
 				return {
 					integrationId: integration._id,
-					provider: account.providerSlug,
+					provider: "resend",
 					connectionStatus: account.connectionStatus,
 					outboundReadiness: readiness.outbound,
 				};

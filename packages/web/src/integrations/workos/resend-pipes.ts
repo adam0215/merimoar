@@ -1,4 +1,4 @@
-export const RESEND_PIPES_PROVIDER = "resend";
+export const DEFAULT_RESEND_PIPES_PROVIDER = "resend";
 const EMAIL_SETTINGS_PATH = "/settings/organization/email";
 
 export type ResendPipesConnectionState =
@@ -16,10 +16,9 @@ type PipesProviderState = {
 
 export function resolveResendPipesConnectionState(
 	providers: PipesProviderState[],
+	providerSlug = DEFAULT_RESEND_PIPES_PROVIDER,
 ): ResendPipesConnectionState {
-	const resend = providers.find(
-		(provider) => provider.slug === RESEND_PIPES_PROVIDER,
-	);
+	const resend = providers.find((provider) => provider.slug === providerSlug);
 	if (!resend) {
 		return "unavailable";
 	}

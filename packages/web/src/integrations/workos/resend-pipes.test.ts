@@ -19,6 +19,21 @@ describe("Resend Pipes connection state", () => {
 		).toBe("not_connected");
 	});
 
+	test("uses the configured Production provider slug", () => {
+		expect(
+			resolveResendPipesConnectionState(
+				[
+					{ slug: "resend", connectedAccount: null },
+					{
+						slug: "resend-prod",
+						connectedAccount: { state: "connected" },
+					},
+				],
+				"resend-prod",
+			),
+		).toBe("connected");
+	});
+
 	test.each([
 		"connected",
 		"needs_reauthorization",

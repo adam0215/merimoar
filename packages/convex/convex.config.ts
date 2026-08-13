@@ -14,6 +14,7 @@ const app = defineApp({
 		WORKOS_API_HOSTNAME: v.optional(v.string()),
 		WORKOS_API_KEY: v.string(),
 		WORKOS_CLIENT_ID: v.string(),
+		WORKOS_RESEND_PROVIDER_SLUG: v.optional(v.string()),
 		WORKOS_WEBHOOK_SECRET: v.string(),
 	},
 });

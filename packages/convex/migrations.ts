@@ -7,6 +7,7 @@ import {
 	computeCustomToolConfigurationHash,
 	computeLegacyCustomToolConfigurationHash,
 } from "./agent/customToolModel";
+import { isResendPipesProviderSlug } from "./integrations/resendProvider";
 
 const migrations = new Migrations<DataModel>(components.migrations);
 
@@ -268,7 +269,7 @@ export const validateConnectedAccountSplit = migrations.define({
 			"connectedAccounts",
 			integration.connectedAccountId,
 		);
-		if (!account || account.providerSlug !== "resend") {
+		if (!account || !isResendPipesProviderSlug(account.providerSlug)) {
 			throw new Error(
 				`Email integration ${integration._id} has an invalid connected account`,
 			);
@@ -432,7 +433,7 @@ export const verifyConnectedAccountSplit = internalQuery({
 		const invalidIntegrations: Doc<"emailIntegrations">[] = [];
 		for (const integration of integrations) {
 			const account = await ctx.db.get(integration.connectedAccountId);
-			if (!account || account.providerSlug !== "resend") {
+			if (!account || !isResendPipesProviderSlug(account.providerSlug)) {
 				invalidIntegrations.push(integration);
 			}
 		}

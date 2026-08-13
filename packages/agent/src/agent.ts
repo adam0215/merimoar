@@ -6,7 +6,7 @@ import {
 } from "ai";
 import type { BuiltInToolKey } from "./builtins/catalog";
 import { createAgentTools } from "./custom-tools";
-import prompt from "./prompts/agent-v1.md?raw";
+import prompt from "./prompts/agent-v1";
 import type { AgentContext, CustomToolDefinition } from "./types";
 
 export type AgentToolObserver = {

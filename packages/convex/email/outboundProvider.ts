@@ -3,6 +3,7 @@
 import type { EmailSendFailure } from "#/email/model";
 import { connectResendOutboundEmailProvider } from "#/email/outboundResendProvider";
 import type { EmailIntegrationAccessContext } from "#/integrations/model";
+import { isResendPipesProviderSlug } from "#/integrations/resendProvider";
 import type { Doc } from "../_generated/dataModel";
 
 export type ProviderSendResult =
@@ -34,17 +35,15 @@ export type OutboundProviderConnection =
 export async function connectOutboundEmailProvider(
 	integration: EmailIntegrationAccessContext,
 ): Promise<OutboundProviderConnection> {
-	switch (integration.providerSlug) {
-		case "resend":
-			return await connectResendOutboundEmailProvider(integration);
-		default:
-			return {
-				status: "unavailable",
-				failure: {
-					kind: "before_provider",
-					reason: "configuration",
-					message: "This connected account has no email provider binding.",
-				},
-			};
+	if (isResendPipesProviderSlug(integration.providerSlug)) {
+		return await connectResendOutboundEmailProvider(integration);
 	}
+	return {
+		status: "unavailable",
+		failure: {
+			kind: "before_provider",
+			reason: "configuration",
+			message: "This connected account has no email provider binding.",
+		},
+	};
 }

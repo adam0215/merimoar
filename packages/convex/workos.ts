@@ -6,6 +6,7 @@ import {
 	upsertConnectedAccount,
 } from "#/integrations/connectedAccounts";
 import type { ConnectedAccountSnapshot } from "#/integrations/model";
+import { isResendPipesProviderSlug } from "#/integrations/resendProvider";
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import type {
@@ -278,7 +279,7 @@ export const processConnectedAccountWebhookEvent = internalMutation({
 			snapshot.workosOrganizationId,
 		);
 		const result = await upsertConnectedAccount(ctx, organizationId, snapshot);
-		if (result.connectedAccount.providerSlug === "resend") {
+		if (isResendPipesProviderSlug(result.connectedAccount.providerSlug)) {
 			await synchronizeResendEmailIntegration(ctx, result.connectedAccount);
 		}
 		await ctx.db.insert("connectedAccountSyncEvents", {

@@ -5,15 +5,21 @@ import type { WorkOS } from "@workos-inc/node";
 import { createWorkOSClient } from "#/integrations/workos/client.ts";
 import {
 	createEmailSettingsReturnTo,
+	DEFAULT_RESEND_PIPES_PROVIDER,
 	hasResendEmailScope,
 	isResendAuthorizationRejected,
-	RESEND_PIPES_PROVIDER,
 	type ResendPipesConnectionState,
 	resolveResendPipesConnectionState,
 } from "#/integrations/workos/resend-pipes";
 
 const RESEND_DOMAINS_URL = "https://api.resend.com/domains";
 const RESEND_HEALTH_CHECK_TIMEOUT_MS = 5_000;
+
+function getResendPipesProviderSlug() {
+	return (
+		process.env.WORKOS_RESEND_PROVIDER_SLUG ?? DEFAULT_RESEND_PIPES_PROVIDER
+	);
+}
 
 async function getPipesSubject() {
 	const auth = await getAuth();
@@ -30,9 +36,10 @@ async function validateConnectedResendAccount(
 	workos: WorkOS,
 	subject: Awaited<ReturnType<typeof getPipesSubject>>,
 ): Promise<ResendPipesConnectionState> {
+	const providerSlug = getResendPipesProviderSlug();
 	const access = await workos.pipes.getAccessToken({
 		...subject,
-		provider: RESEND_PIPES_PROVIDER,
+		provider: providerSlug,
 	});
 	if (!access.active) {
 		return access.error === "needs_reauthorization"
@@ -62,7 +69,7 @@ async function validateConnectedResendAccount(
 	try {
 		await workos.pipes.updateUserConnectedAccount({
 			...subject,
-			slug: RESEND_PIPES_PROVIDER,
+			slug: providerSlug,
 			state: "needs_reauthorization",
 		});
 	} catch (error) {
@@ -81,7 +88,10 @@ export const refreshResendPipesConnectionState = createServerFn({
 		const subject = await getPipesSubject();
 		const workos = createWorkOSClient();
 		const providers = await workos.pipes.listUserDataProviders(subject);
-		const connectionState = resolveResendPipesConnectionState(providers.data);
+		const connectionState = resolveResendPipesConnectionState(
+			providers.data,
+			getResendPipesProviderSlug(),
+		);
 		if (connectionState !== "connected") {
 			return connectionState;
 		}
@@ -99,7 +109,7 @@ export const createResendPipesAuthorization = createServerFn({
 	const returnTo = createEmailSettingsReturnTo(getRequestUrl());
 	return await createWorkOSClient().pipes.authorizeDataIntegration({
 		...subject,
-		slug: RESEND_PIPES_PROVIDER,
+		slug: getResendPipesProviderSlug(),
 		returnTo,
 	});
 });
