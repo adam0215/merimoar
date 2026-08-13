@@ -168,6 +168,121 @@ describe("email integrations", () => {
 		);
 	});
 
+	it("moves inbox routes to a replacement connection for the same user", async () => {
+		const test = createTest();
+		await processConnectedAccount(test, {
+			connectedAccountId: "connected_account_old",
+			dataIntegrationId: "data_integration_resend",
+			eventId: "event_old_connected",
+			userId: "user_adam",
+		});
+		const old = await requireResendState(test);
+		const inboxId = await test.run(async (ctx) =>
+			ctx.db.insert("emailInboxes", {
+				organizationId: old.account.organizationId,
+				displayName: "Main",
+				address: "inbound@example.com",
+				status: "active",
+				unreadThreadCount: 0,
+				outbound: {
+					integrationId: old.integration._id,
+					address: "reply@example.com",
+				},
+			}),
+		);
+
+		await processConnectedAccount(test, {
+			connectedAccountId: "connected_account_old",
+			dataIntegrationId: "data_integration_resend",
+			event: "pipes.connected_account.disconnected",
+			eventId: "event_old_disconnected",
+			scopes: [],
+			updatedAt: "2026-01-01T00:02:00.000Z",
+			userId: "user_adam",
+		});
+		await processConnectedAccount(test, {
+			connectedAccountId: "connected_account_replacement",
+			dataIntegrationId: "data_integration_resend",
+			eventId: "event_replacement_connected",
+			updatedAt: "2026-01-01T00:03:00.000Z",
+			userId: "user_adam",
+		});
+
+		const state = await test.run(async (ctx) => {
+			const replacementAccount = await ctx.db
+				.query("connectedAccounts")
+				.withIndex("by_workos_connected_account_id", (query) =>
+					query.eq("workosConnectedAccountId", "connected_account_replacement"),
+				)
+				.unique();
+			const replacementIntegration = replacementAccount
+				? await ctx.db
+						.query("emailIntegrations")
+						.withIndex("by_connected_account_id", (query) =>
+							query.eq("connectedAccountId", replacementAccount._id),
+						)
+						.unique()
+				: null;
+			return {
+				inbox: await ctx.db.get(inboxId),
+				replacementIntegration,
+			};
+		});
+
+		expect(state.replacementIntegration).not.toBeNull();
+		expect(state.inbox?.outbound).toEqual({
+			integrationId: state.replacementIntegration?._id,
+			address: "reply@example.com",
+		});
+	});
+
+	it("does not move an inbox route owned by another user", async () => {
+		const test = createTest();
+		await processConnectedAccount(test, {
+			connectedAccountId: "connected_account_sara",
+			dataIntegrationId: "data_integration_resend",
+			eventId: "event_sara_connected",
+			userId: "user_sara",
+		});
+		const sara = await requireResendState(test);
+		const inboxId = await test.run(async (ctx) =>
+			ctx.db.insert("emailInboxes", {
+				organizationId: sara.account.organizationId,
+				displayName: "Sara",
+				address: "sara@example.com",
+				status: "active",
+				unreadThreadCount: 0,
+				outbound: {
+					integrationId: sara.integration._id,
+					address: "reply-sara@example.com",
+				},
+			}),
+		);
+		await processConnectedAccount(test, {
+			connectedAccountId: "connected_account_sara",
+			dataIntegrationId: "data_integration_resend",
+			event: "pipes.connected_account.disconnected",
+			eventId: "event_sara_disconnected",
+			scopes: [],
+			updatedAt: "2026-01-01T00:02:00.000Z",
+			userId: "user_sara",
+		});
+		await processConnectedAccount(test, {
+			connectedAccountId: "connected_account_adam",
+			dataIntegrationId: "data_integration_resend",
+			eventId: "event_adam_connected",
+			updatedAt: "2026-01-01T00:03:00.000Z",
+			userId: "user_adam",
+		});
+
+		expect(await test.run(async (ctx) => ctx.db.get(inboxId))).toMatchObject({
+			outbound: {
+				integrationId: sara.integration._id,
+				address: "reply-sara@example.com",
+			},
+		});
+	});
+
 	it("rejects stale snapshots and fences webhook activation", async () => {
 		const test = createTest();
 		const initial = await connectResend(test);

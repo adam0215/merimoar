@@ -137,6 +137,55 @@ async function createWebhookCleanupTask(
 	});
 }
 
+async function rebindInactiveResendInboxRoutes(
+	ctx: MutationCtx,
+	connectedAccount: Doc<"connectedAccounts">,
+	replacementIntegrationId: Id<"emailIntegrations">,
+) {
+	if (
+		connectedAccount.connectionStatus !== "connected" ||
+		!connectedAccount.grantedScopes.includes("full_access")
+	) {
+		return;
+	}
+
+	const inboxes = await ctx.db
+		.query("emailInboxes")
+		.withIndex("by_organization_id", (query) =>
+			query.eq("organizationId", connectedAccount.organizationId),
+		)
+		.collect();
+
+	for (const inbox of inboxes) {
+		const outbound = inbox.outbound;
+		if (!outbound || outbound.integrationId === replacementIntegrationId) {
+			continue;
+		}
+
+		const previousIntegration = await ctx.db.get(outbound.integrationId);
+		const previousAccount = previousIntegration
+			? await ctx.db.get(previousIntegration.connectedAccountId)
+			: null;
+		if (
+			!previousAccount ||
+			previousAccount.connectionStatus === "connected" ||
+			previousAccount.organizationId !== connectedAccount.organizationId ||
+			previousAccount.workosUserId !== connectedAccount.workosUserId ||
+			previousAccount.workosDataIntegrationId !==
+				connectedAccount.workosDataIntegrationId
+		) {
+			continue;
+		}
+
+		await ctx.db.patch(inbox._id, {
+			outbound: {
+				...outbound,
+				integrationId: replacementIntegrationId,
+			},
+		});
+	}
+}
+
 export async function synchronizeResendEmailIntegration(
 	ctx: MutationCtx,
 	connectedAccount: Doc<"connectedAccounts">,
@@ -152,6 +201,8 @@ export async function synchronizeResendEmailIntegration(
 		: await ctx.db.insert("emailIntegrations", {
 				connectedAccountId: connectedAccount._id,
 			});
+
+	await rebindInactiveResendInboxRoutes(ctx, connectedAccount, integrationId);
 
 	if (
 		connectedAccount.connectionStatus !== "connected" &&
