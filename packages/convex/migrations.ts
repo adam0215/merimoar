@@ -2,13 +2,129 @@ import { Migrations } from "@convex-dev/migrations";
 import { v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import type { DataModel, Doc } from "./_generated/dataModel";
-import { internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import {
 	computeCustomToolConfigurationHash,
 	computeLegacyCustomToolConfigurationHash,
 } from "./agent/customToolModel";
 
 const migrations = new Migrations<DataModel>(components.migrations);
+
+const MAX_EMAIL_INTEGRATION_REFERENCE_REPAIRS = 500;
+
+export const repairOrphanedEmailIntegrationReferences = internalMutation({
+	args: {
+		organizationId: v.id("organizations"),
+		orphanedIntegrationId: v.id("emailIntegrations"),
+		replacementIntegrationId: v.id("emailIntegrations"),
+		expectedMessageCount: v.number(),
+		expectedThreadReferenceCount: v.number(),
+		dryRun: v.boolean(),
+	},
+	returns: v.object({
+		messageCount: v.number(),
+		threadReferenceCount: v.number(),
+	}),
+	handler: async (ctx, args) => {
+		if (args.orphanedIntegrationId === args.replacementIntegrationId) {
+			throw new Error("Replacement integration must differ from the orphan");
+		}
+		if (await ctx.db.get(args.orphanedIntegrationId)) {
+			throw new Error("The integration being repaired is not orphaned");
+		}
+
+		const replacement = await ctx.db.get(args.replacementIntegrationId);
+		const connectedAccount = replacement
+			? await ctx.db.get(replacement.connectedAccountId)
+			: null;
+		if (
+			!replacement ||
+			connectedAccount?.organizationId !== args.organizationId
+		) {
+			throw new Error(
+				"Replacement integration belongs to another organization",
+			);
+		}
+
+		const [messages, threadReferences] = await Promise.all([
+			ctx.db
+				.query("emailMessages")
+				.filter((filter) =>
+					filter.eq(filter.field("integrationId"), args.orphanedIntegrationId),
+				)
+				.take(MAX_EMAIL_INTEGRATION_REFERENCE_REPAIRS + 1),
+			ctx.db
+				.query("emailThreadExternalReferences")
+				.filter((filter) =>
+					filter.eq(filter.field("integrationId"), args.orphanedIntegrationId),
+				)
+				.take(MAX_EMAIL_INTEGRATION_REFERENCE_REPAIRS + 1),
+		]);
+
+		if (
+			messages.length !== args.expectedMessageCount ||
+			threadReferences.length !== args.expectedThreadReferenceCount
+		) {
+			throw new Error(
+				`Expected ${args.expectedMessageCount} messages and ${args.expectedThreadReferenceCount} thread references, found ${messages.length} and ${threadReferences.length}`,
+			);
+		}
+
+		for (const message of messages) {
+			const [thread, inbox] = await Promise.all([
+				ctx.db.get(message.threadId),
+				ctx.db.get(message.inboxId),
+			]);
+			if (
+				!thread ||
+				!inbox ||
+				thread.organizationId !== args.organizationId ||
+				inbox.organizationId !== args.organizationId ||
+				thread.inboxId !== inbox._id
+			) {
+				throw new Error(`Email message ${message._id} crosses organizations`);
+			}
+		}
+
+		for (const reference of threadReferences) {
+			const [thread, inbox] = await Promise.all([
+				ctx.db.get(reference.threadId),
+				ctx.db.get(reference.inboxId),
+			]);
+			if (
+				!thread ||
+				!inbox ||
+				thread.organizationId !== args.organizationId ||
+				inbox.organizationId !== args.organizationId ||
+				thread.inboxId !== inbox._id
+			) {
+				throw new Error(
+					`Email thread reference ${reference._id} crosses organizations`,
+				);
+			}
+		}
+
+		if (!args.dryRun) {
+			await Promise.all([
+				...messages.map((message) =>
+					ctx.db.patch(message._id, {
+						integrationId: args.replacementIntegrationId,
+					}),
+				),
+				...threadReferences.map((reference) =>
+					ctx.db.patch(reference._id, {
+						integrationId: args.replacementIntegrationId,
+					}),
+				),
+			]);
+		}
+
+		return {
+			messageCount: messages.length,
+			threadReferenceCount: threadReferences.length,
+		};
+	},
+});
 
 export const normalizeCustomToolPaths = migrations.define({
 	table: "agentCustomTools",
