@@ -9,7 +9,6 @@ import {
 	deriveEmailReadiness,
 	type EmailIntegrationAccessContext,
 } from "./model";
-import { isResendPipesProviderSlug } from "./resendProvider";
 
 const STATUS_PRECEDENCE = {
 	connected: 0,
@@ -192,6 +191,20 @@ export async function synchronizeResendEmailIntegration(
 	return integrationId;
 }
 
+export async function hasResendEmailIntegration(
+	ctx: Pick<QueryCtx | MutationCtx, "db">,
+	connectedAccountId: Id<"connectedAccounts">,
+) {
+	return (
+		(await ctx.db
+			.query("emailIntegrations")
+			.withIndex("by_connected_account_id", (query) =>
+				query.eq("connectedAccountId", connectedAccountId),
+			)
+			.unique()) !== null
+	);
+}
+
 export async function getEmailIntegrationAccessContext(
 	ctx: QueryCtx | MutationCtx,
 	integrationId: Id<"emailIntegrations">,
@@ -252,6 +265,7 @@ export const applyWorkosReconciliation = internalMutation({
 	args: {
 		connectedAccountId: v.id("connectedAccounts"),
 		expectedWorkosUpdatedAt: v.number(),
+		resendDataIntegrationId: v.optional(v.string()),
 		connectionStatus: v.union(
 			v.literal("connected"),
 			v.literal("needs_reauthorization"),
@@ -275,7 +289,11 @@ export const applyWorkosReconciliation = internalMutation({
 			connectionStatus: args.connectionStatus,
 			workosUpdatedAt: args.workosUpdatedAt,
 		});
-		if (isResendPipesProviderSlug(result.connectedAccount.providerSlug)) {
+		if (
+			(await hasResendEmailIntegration(ctx, result.connectedAccount._id)) ||
+			result.connectedAccount.workosDataIntegrationId ===
+				args.resendDataIntegrationId
+		) {
 			await synchronizeResendEmailIntegration(ctx, result.connectedAccount);
 		}
 		return null;

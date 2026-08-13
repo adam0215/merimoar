@@ -4,7 +4,6 @@ import { v } from "convex/values";
 import { Resend } from "resend";
 import { fetchResendAccess } from "#/email/resendAccess";
 import { resendProvisioningFenceValidator } from "#/integrations/model";
-import { getResendPipesProviderSlug } from "#/integrations/resendProvider";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { ActionCtx } from "../_generated/server";
@@ -165,10 +164,7 @@ export const retryWebhookCleanup = internalAction({
 
 		let deleted = false;
 		try {
-			const access = await fetchResendAccess({
-				...context,
-				providerSlug: getResendPipesProviderSlug(),
-			});
+			const access = await fetchResendAccess(context);
 			deleted =
 				access.active &&
 				(await deleteResendWebhook(

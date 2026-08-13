@@ -12,18 +12,24 @@ async function processConnectedAccount(
 	test: ReturnType<typeof createTest>,
 	{
 		connectedAccountId = "connected_account_resend",
+		userId = "user_adam",
+		dataIntegrationId = `data_integration_${userId}`,
 		event = "pipes.connected_account.connected",
 		eventId,
+		providerSlug = "custom",
+		resendDataIntegrationId = dataIntegrationId,
 		scopes = ["full_access"],
 		updatedAt = INITIAL_UPDATED_AT,
-		userId = "user_adam",
 	}: {
 		connectedAccountId?: string;
+		dataIntegrationId?: string;
 		event?:
 			| "pipes.connected_account.connected"
 			| "pipes.connected_account.disconnected"
 			| "pipes.connected_account.reauthorization_needed";
 		eventId: string;
+		providerSlug?: string;
+		resendDataIntegrationId?: string;
 		scopes?: string[];
 		updatedAt?: string;
 		userId?: string;
@@ -32,11 +38,12 @@ async function processConnectedAccount(
 	await test.mutation(internal.workos.processConnectedAccountWebhookEvent, {
 		eventId,
 		event,
+		resendDataIntegrationId,
 		data: {
 			id: connectedAccountId,
-			data_integration_id: `data_integration_${userId}`,
+			data_integration_id: dataIntegrationId,
 			organization_id: "org_merimoar",
-			provider_slug: "resend",
+			provider_slug: providerSlug,
 			scopes,
 			updated_at: updatedAt,
 			user_id: userId,
@@ -147,6 +154,18 @@ describe("email integrations", () => {
 			inboundReadiness: "ready",
 			outboundReadiness: "ready",
 		});
+		expect(
+			await actor.query(api.email.reader.listOutboundIntegrations, {}),
+		).toEqual(
+			expect.arrayContaining([
+				{
+					integrationId: expect.any(String),
+					provider: "resend",
+					connectionStatus: "connected",
+					outboundReadiness: "ready",
+				},
+			]),
+		);
 	});
 
 	it("rejects stale snapshots and fences webhook activation", async () => {

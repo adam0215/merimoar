@@ -122,7 +122,7 @@ export async function insertResendIntegration(
 	const connectionStatus = options.connectionStatus ?? "connected";
 	const connectedAccountId = await ctx.db.insert("connectedAccounts", {
 		organizationId,
-		providerSlug: "resend",
+		providerSlug: "custom",
 		workosUserId: options.workosUserId ?? `user_${suffix}`,
 		workosDataIntegrationId: `data_integration_${suffix}`,
 		workosConnectedAccountId: `connected_account_${suffix}`,

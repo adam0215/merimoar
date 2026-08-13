@@ -36,6 +36,7 @@ async function processConnectedAccount(
 		eventId,
 		organizationId = ORGANIZATION.id,
 		providerSlug = "resend",
+		resendDataIntegrationId = "data_integration_resend",
 		scopes = [],
 		updatedAt = "2026-01-01T00:01:00.000Z",
 	}: {
@@ -47,6 +48,7 @@ async function processConnectedAccount(
 		eventId: string;
 		organizationId?: string | null;
 		providerSlug?: string;
+		resendDataIntegrationId?: string;
 		scopes?: string[];
 		updatedAt?: string;
 	},
@@ -56,6 +58,7 @@ async function processConnectedAccount(
 		{
 			eventId,
 			event,
+			resendDataIntegrationId,
 			data: {
 				id: "connected_account_resend",
 				data_integration_id: dataIntegrationId,
@@ -321,6 +324,25 @@ describe("official WorkOS component projection", () => {
 		});
 	});
 
+	it("binds an initial custom-provider event by data integration identity", async () => {
+		const base = createTest();
+		await processConnectedAccount(base, {
+			eventId: "event_connected",
+			providerSlug: "custom",
+			scopes: ["full_access"],
+		});
+
+		const state = await base.run(async (ctx) => ({
+			account: await ctx.db.query("connectedAccounts").first(),
+			integration: await ctx.db.query("emailIntegrations").first(),
+		}));
+		expect(state.account).toMatchObject({
+			providerSlug: "custom",
+			workosDataIntegrationId: "data_integration_resend",
+		});
+		expect(state.integration?.connectedAccountId).toBe(state.account?._id);
+	});
+
 	it.each([
 		"google",
 		"github",
@@ -330,6 +352,7 @@ describe("official WorkOS component projection", () => {
 		await expect(
 			processConnectedAccount(base, {
 				eventId: `event_${providerSlug}`,
+				dataIntegrationId: `data_integration_${providerSlug}`,
 				providerSlug,
 				scopes: ["read"],
 			}),

@@ -2,6 +2,7 @@
 
 import { NotFoundException } from "@workos-inc/node";
 import { v } from "convex/values";
+import { getResendPipesProviderSlug } from "#/integrations/resendProvider";
 import { createWorkOSClient } from "#/integrations/workosAccess";
 import { internal } from "../_generated/api";
 import { internalAction } from "../_generated/server";
@@ -12,6 +13,18 @@ export const reconcileConnectedAccountsWithWorkos = internalAction({
 	args: { cursor: v.optional(v.string()) },
 	returns: v.null(),
 	handler: async (ctx, args) => {
+		const workos = createWorkOSClient();
+		const resendProviderSlug = getResendPipesProviderSlug();
+		let resendDataIntegrationId: string | undefined;
+		try {
+			resendDataIntegrationId = (
+				await workos.pipes.getDataIntegration({ slug: resendProviderSlug })
+			).id;
+		} catch (error) {
+			if (!(error instanceof NotFoundException)) {
+				throw error;
+			}
+		}
 		const page = await ctx.runQuery(
 			internal.integrations.connectedAccounts.listForWorkosReconciliation,
 			{
@@ -25,14 +38,19 @@ export const reconcileConnectedAccountsWithWorkos = internalAction({
 			if (account.workosDataIntegrationId.startsWith("seed:")) {
 				continue;
 			}
+			const isResendDataIntegration =
+				account.workosDataIntegrationId === resendDataIntegrationId;
+			if (!isResendDataIntegration && account.providerSlug === "custom") {
+				continue;
+			}
 			try {
-				const remote = await createWorkOSClient().pipes.getUserConnectedAccount(
-					{
-						slug: account.providerSlug,
-						organizationId: account.workosOrganizationId,
-						userId: account.workosUserId,
-					},
-				);
+				const remote = await workos.pipes.getUserConnectedAccount({
+					slug: isResendDataIntegration
+						? resendProviderSlug
+						: account.providerSlug,
+					organizationId: account.workosOrganizationId,
+					userId: account.workosUserId,
+				});
 				const remoteUpdatedAt = Date.parse(remote.updatedAt);
 				if (
 					remote.id !== account.workosConnectedAccountId ||
@@ -49,6 +67,7 @@ export const reconcileConnectedAccountsWithWorkos = internalAction({
 					{
 						connectedAccountId: account._id,
 						expectedWorkosUpdatedAt: account.workosUpdatedAt,
+						resendDataIntegrationId,
 						connectionStatus: remote.state,
 						grantedScopes: remote.scopes,
 						workosUpdatedAt: remoteUpdatedAt,
@@ -63,6 +82,7 @@ export const reconcileConnectedAccountsWithWorkos = internalAction({
 					{
 						connectedAccountId: account._id,
 						expectedWorkosUpdatedAt: account.workosUpdatedAt,
+						resendDataIntegrationId,
 						connectionStatus: "disconnected",
 						grantedScopes: [],
 						workosUpdatedAt: account.workosUpdatedAt,

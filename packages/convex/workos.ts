@@ -2,11 +2,11 @@ import { type AuthFunctions, AuthKit } from "@convex-dev/workos-authkit";
 import { type GenericMutationCtx } from "convex/server";
 import { v } from "convex/values";
 import {
+	hasResendEmailIntegration,
 	synchronizeResendEmailIntegration,
 	upsertConnectedAccount,
 } from "#/integrations/connectedAccounts";
 import type { ConnectedAccountSnapshot } from "#/integrations/model";
-import { isResendPipesProviderSlug } from "#/integrations/resendProvider";
 import { components, internal } from "./_generated/api";
 import type { DataModel } from "./_generated/dataModel";
 import type {
@@ -235,6 +235,7 @@ export const processConnectedAccountWebhookEvent = internalMutation({
 			v.literal("pipes.connected_account.reauthorization_needed"),
 		),
 		data: v.record(v.string(), v.any()),
+		resendDataIntegrationId: v.optional(v.string()),
 	},
 	returns: v.null(),
 	handler: async (ctx, args): Promise<null> => {
@@ -279,7 +280,11 @@ export const processConnectedAccountWebhookEvent = internalMutation({
 			snapshot.workosOrganizationId,
 		);
 		const result = await upsertConnectedAccount(ctx, organizationId, snapshot);
-		if (isResendPipesProviderSlug(result.connectedAccount.providerSlug)) {
+		if (
+			(await hasResendEmailIntegration(ctx, result.connectedAccount._id)) ||
+			result.connectedAccount.workosDataIntegrationId ===
+				args.resendDataIntegrationId
+		) {
 			await synchronizeResendEmailIntegration(ctx, result.connectedAccount);
 		}
 		await ctx.db.insert("connectedAccountSyncEvents", {

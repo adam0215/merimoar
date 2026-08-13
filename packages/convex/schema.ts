@@ -53,6 +53,11 @@ export default defineSchema({
 			"providerSlug",
 			"workosUserId",
 		])
+		.index("by_organization_id_and_workos_user_id_and_updated_at", [
+			"organizationId",
+			"workosUserId",
+			"workosUpdatedAt",
+		])
 		.index("by_organization_id_provider_slug_workos_user_id_updated_at", [
 			"organizationId",
 			"providerSlug",

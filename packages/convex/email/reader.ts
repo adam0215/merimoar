@@ -15,7 +15,6 @@ import {
 import { setThreadUnread } from "#/email/unreadCounts";
 import { getEmailIntegrationAccessContext } from "#/integrations/connectedAccounts";
 import { deriveEmailReadiness } from "#/integrations/model";
-import { getResendPipesProviderSlug } from "#/integrations/resendProvider";
 import type { Id, TableNames } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
@@ -58,9 +57,7 @@ export const listOutboundIntegrations = query({
 		const accounts = await ctx.db
 			.query("connectedAccounts")
 			.withIndex("by_organization_id_and_provider_slug", (index) =>
-				index
-					.eq("organizationId", workspace.organization._id)
-					.eq("providerSlug", getResendPipesProviderSlug()),
+				index.eq("organizationId", workspace.organization._id),
 			)
 			.take(100);
 		const integrations = await Promise.all(
@@ -121,7 +118,7 @@ export const listInboxes = query({
 							workspace.organization._id && outbound
 							? {
 									integrationId: outboundIntegration.integrationId,
-									provider: outboundIntegration.providerSlug,
+									provider: "resend",
 									connectionStatus: outboundIntegration.connectionStatus,
 									outboundReadiness: deriveEmailReadiness(
 										outboundIntegration.connectionStatus,

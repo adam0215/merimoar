@@ -1,6 +1,8 @@
+import { NotFoundException } from "@workos-inc/node";
 import { createFunctionHandle, httpRouter } from "convex/server";
 import { type EmailReceivedEvent, type EmailSentEvent, Resend } from "resend";
 import { readResendInternetMessageId } from "#/email/outboundModel";
+import { getResendPipesProviderSlug } from "#/integrations/resendProvider";
 import {
 	AUTHKIT_ADDITIONAL_EVENT_TYPES,
 	authKit,
@@ -18,6 +20,20 @@ type VerifiedWorkosWebhookEvent = {
 	event: string;
 	id: string;
 };
+
+async function getResendDataIntegrationId() {
+	try {
+		const integration = await authKit.workos.pipes.getDataIntegration({
+			slug: getResendPipesProviderSlug(),
+		});
+		return integration.id;
+	} catch (error) {
+		if (error instanceof NotFoundException) {
+			return undefined;
+		}
+		throw error;
+	}
+}
 
 http.route({
 	path: "/workos/webhook",
@@ -41,12 +57,14 @@ http.route({
 		}
 
 		if (isPipesConnectedAccountEvent(event.event)) {
+			const resendDataIntegrationId = await getResendDataIntegrationId();
 			await ctx.runMutation(
 				internal.workos.processConnectedAccountWebhookEvent,
 				{
 					eventId: event.id,
 					event: event.event,
 					data: event.data,
+					resendDataIntegrationId,
 				},
 			);
 			return new Response("OK", { status: 200 });

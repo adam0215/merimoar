@@ -13,10 +13,7 @@ import {
 	type ResendProvisioningFence,
 	resendProvisioningFenceValidator,
 } from "#/integrations/model";
-import {
-	getResendPipesProviderSlug,
-	isResendPipesProviderSlug,
-} from "#/integrations/resendProvider";
+import type { Doc } from "../_generated/dataModel";
 import { internalMutation, internalQuery, query } from "../_generated/server";
 
 function matchesResendProvisioningFence(
@@ -24,7 +21,6 @@ function matchesResendProvisioningFence(
 	fence: ResendProvisioningFence,
 ) {
 	return (
-		isResendPipesProviderSlug(context.providerSlug) &&
 		context.connectedAccountId === fence.expectedConnectedAccountId &&
 		context.connectionStatus === "connected" &&
 		context.workosUpdatedAt === fence.expectedWorkosUpdatedAt &&
@@ -71,7 +67,6 @@ export const getSelectableResendAccessContext = internalQuery({
 		if (
 			!context ||
 			context.organizationId !== workspace.organization._id ||
-			!isResendPipesProviderSlug(context.providerSlug) ||
 			deriveEmailReadiness(
 				context.connectionStatus,
 				context.grantedScopes,
@@ -354,18 +349,31 @@ export const getResendConnectionOverview = query({
 	}),
 	handler: async (ctx) => {
 		const workspace = await requireActor(ctx);
-		const account = await ctx.db
+		const accounts = await ctx.db
 			.query("connectedAccounts")
 			.withIndex(
-				"by_organization_id_provider_slug_workos_user_id_updated_at",
+				"by_organization_id_and_workos_user_id_and_updated_at",
 				(index) =>
 					index
 						.eq("organizationId", workspace.organization._id)
-						.eq("providerSlug", getResendPipesProviderSlug())
 						.eq("workosUserId", workspace.identity.subject),
 			)
 			.order("desc")
-			.first();
+			.take(100);
+		let account: (typeof accounts)[number] | undefined;
+		let integration: Doc<"emailIntegrations"> | null = null;
+		for (const candidate of accounts) {
+			integration = await ctx.db
+				.query("emailIntegrations")
+				.withIndex("by_connected_account_id", (index) =>
+					index.eq("connectedAccountId", candidate._id),
+				)
+				.unique();
+			if (integration) {
+				account = candidate;
+				break;
+			}
+		}
 		if (!account) {
 			return {
 				connectionStatus: "not_connected" as const,
@@ -373,12 +381,6 @@ export const getResendConnectionOverview = query({
 				outboundReadiness: "connection_inactive" as const,
 			};
 		}
-		const integration = await ctx.db
-			.query("emailIntegrations")
-			.withIndex("by_connected_account_id", (index) =>
-				index.eq("connectedAccountId", account._id),
-			)
-			.unique();
 		const readiness = deriveEmailReadiness(
 			account.connectionStatus,
 			account.grantedScopes,

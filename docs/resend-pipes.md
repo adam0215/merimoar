@@ -61,6 +61,14 @@ mutation code even though Convex indexes are not unique. A known external
 account ID cannot change organization, provider, WorkOS user, or data
 integration.
 
+WorkOS keeps two identifiers deliberately separate. The configured data
+integration has an environment-specific slug such as `resend` or
+`resend-prod`, while connected-account events report the underlying provider
+type in `provider_slug` (`custom` for Resend). Event routing therefore resolves
+the configured slug to its canonical `data_integration_id` and compares that
+ID with the webhook payload. Provider type is never used to fetch tokens or to
+decide whether an account is Resend.
+
 `emailIntegrations` is a one-to-one Resend product binding. It contains only the
 `connectedAccountId` foreign key and the atomic `resendWebhook` object. Email
 inboxes, messages, thread references, ingest events, and cleanup tasks continue
@@ -258,8 +266,8 @@ must be empty, and every migration status must be `done`.
 
 The integration uses the existing `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, and
 optional `WORKOS_API_HOSTNAME`. `WORKOS_RESEND_PROVIDER_SLUG` selects the
-environment-specific WorkOS provider and defaults to `resend`; Production uses
-`resend-prod`. `CONVEX_SITE_URL` is provided automatically by Convex and
-constructs the email webhook endpoint.
+environment-specific WorkOS data-integration slug and defaults to `resend`;
+Production uses `resend-prod`. `CONVEX_SITE_URL` is provided automatically by
+Convex and constructs the email webhook endpoint.
 
 The legacy `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` variables are not used.

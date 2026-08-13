@@ -86,7 +86,7 @@ describe("outbound domains", () => {
 			),
 		).resolves.toMatchObject({
 			integrationId,
-			providerSlug: "resend",
+			providerSlug: "custom",
 		});
 		await expect(
 			otherActor.query(

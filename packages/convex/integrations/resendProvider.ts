@@ -11,7 +11,3 @@ export function resolveResendPipesProviderSlug(
 export function getResendPipesProviderSlug() {
 	return resolveResendPipesProviderSlug(env.WORKOS_RESEND_PROVIDER_SLUG);
 }
-
-export function isResendPipesProviderSlug(providerSlug: string) {
-	return providerSlug === getResendPipesProviderSlug();
-}

@@ -2,6 +2,7 @@
 
 import type { DataIntegrationAccessTokenResponse } from "@workos-inc/node";
 import type { EmailIntegrationAccessContext } from "#/integrations/model";
+import { getResendPipesProviderSlug } from "#/integrations/resendProvider";
 import { createWorkOSClient } from "#/integrations/workosAccess";
 
 const RESEND_REQUIRED_SCOPE = "full_access";
@@ -42,11 +43,11 @@ export function resolveResendAccess(
 export async function fetchResendAccess(
 	context: Pick<
 		EmailIntegrationAccessContext,
-		"providerSlug" | "workosOrganizationId" | "workosUserId"
+		"workosOrganizationId" | "workosUserId"
 	>,
 ): Promise<ResendAccess> {
 	const response = await createWorkOSClient().pipes.getAccessToken({
-		provider: context.providerSlug,
+		provider: getResendPipesProviderSlug(),
 		organizationId: context.workosOrganizationId,
 		userId: context.workosUserId,
 	});
