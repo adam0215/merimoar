@@ -228,7 +228,7 @@ Set the following server-only values for `@merimoar/agent-worker`:
 ```dotenv
 CONVEX_URL=https://your-deployment.convex.cloud
 AGENT_RUNTIME_SECRET=a-random-secret-of-at-least-32-characters
-AGENT_RUN_EXECUTION_TIMEOUT_MS=600000
+AGENT_RUN_EXECUTION_TIMEOUT_MS=300000
 OPENAI_API_KEY=your-development-key
 AGENT_RUN_PUSH_SIGNING_SECRET=a-different-random-secret-of-at-least-32-characters
 ```
