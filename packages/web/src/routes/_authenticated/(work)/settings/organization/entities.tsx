@@ -64,6 +64,7 @@ function OrganizationEntitySettings() {
 			onTypeCreated={(entityTypeId) =>
 				navigate({ search: { type: entityTypeId } })
 			}
+			onTypeDeleted={() => navigate({ search: {} })}
 		/>
 	);
 }

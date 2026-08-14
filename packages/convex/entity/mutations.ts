@@ -20,6 +20,7 @@ import {
 	normalizeEntityFieldValues,
 } from "#/entity/values";
 import { syncGlobalSearchEntry } from "#/globalSearch/model";
+import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import type { MutationCtx } from "../_generated/server";
 import { mutation } from "../_generated/server";
@@ -103,6 +104,30 @@ export const createType = mutation({
 			icon: input.output.icon,
 			archivedAt: null,
 		});
+	},
+});
+
+export const deleteType = mutation({
+	args: {
+		entityTypeId: v.id("entityTypes"),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const workspace = await requireActor(ctx);
+		const entityType = await requireEntityType(
+			ctx,
+			workspace.organization._id,
+			args.entityTypeId,
+		);
+
+		await ctx.db.delete("entityTypes", entityType._id);
+		await ctx.scheduler.runAfter(
+			0,
+			internal.entity.deletion.continueTypeDeletion,
+			{ entityTypeId: entityType._id },
+		);
+
+		return null;
 	},
 });
 

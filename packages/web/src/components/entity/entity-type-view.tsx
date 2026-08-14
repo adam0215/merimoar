@@ -1,6 +1,7 @@
 import { IconDatabase, IconHash } from "@tabler/icons-react";
 import { AddFieldDialog } from "#/components/entity/add-field-dialog.tsx";
 import { CreateEntityDialog } from "#/components/entity/create-entity-dialog.tsx";
+import { DeleteEntityTypeDialog } from "#/components/entity/delete-entity-type-dialog.tsx";
 import { EntityFieldTypeIcon } from "#/components/entity/entity-field-type.tsx";
 import {
 	ENTITY_FIELD_TYPE_LABELS,
@@ -11,8 +12,10 @@ import { EntityIcon } from "#/lib/entity-icons.tsx";
 
 export function EntityTypeView({
 	detail,
+	onDeleted,
 }: {
 	detail: EntityTypeDetail | null | undefined;
+	onDeleted: () => void;
 }) {
 	if (detail === undefined) {
 		return (
@@ -53,10 +56,16 @@ export function EntityTypeView({
 				<h1 className="min-w-0 truncate text-2xl font-semibold tracking-tight">
 					{entityType.pluralName}
 				</h1>
-				<CreateEntityDialog
-					entityType={entityType}
-					fieldDefinitions={fieldDefinitions}
-				/>
+				<div className="flex items-center gap-1">
+					<DeleteEntityTypeDialog
+						entityType={entityType}
+						onDeleted={onDeleted}
+					/>
+					<CreateEntityDialog
+						entityType={entityType}
+						fieldDefinitions={fieldDefinitions}
+					/>
+				</div>
 				<p className="col-start-2 mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
 					{entityType.description || `Manage ${entityType.pluralName}.`}
 				</p>

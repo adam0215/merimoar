@@ -15,11 +15,13 @@ export function EntitySettings({
 	selectedTypeId,
 	detail,
 	onTypeCreated,
+	onTypeDeleted,
 }: {
 	entityTypes: Doc<"entityTypes">[] | undefined;
 	selectedTypeId?: string;
 	detail: EntityTypeDetail | null | undefined;
 	onTypeCreated: (entityTypeId: Id<"entityTypes">) => void;
+	onTypeDeleted: () => void;
 }) {
 	return (
 		<div className="grid h-full min-h-0 overflow-hidden lg:grid-cols-[20rem_minmax(0,1fr)] xl:grid-cols-[23rem_minmax(0,1fr)]">
@@ -73,7 +75,7 @@ export function EntitySettings({
 
 			<main className="min-h-0 min-w-0 overflow-y-auto">
 				{selectedTypeId ? (
-					<EntityTypeView detail={detail} />
+					<EntityTypeView detail={detail} onDeleted={onTypeDeleted} />
 				) : (
 					<EntityOverview entityTypes={entityTypes} />
 				)}

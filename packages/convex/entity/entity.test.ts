@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { MAX_FIELDS_PER_ENTITY_TYPE } from "#/entity/constants";
 import { createTest, syncWorkosUser } from "#/test.setup";
 import { api } from "../_generated/api";
@@ -276,6 +276,9 @@ describe("entity configuration", () => {
 
 		const entityTypeId = await createPropertyType(actor);
 		await expect(
+			base.mutation(api.entity.mutations.deleteType, { entityTypeId }),
+		).rejects.toThrow("Sign in");
+		await expect(
 			otherActor.mutation(api.entity.mutations.addField, {
 				entityTypeId,
 				label: "Cross tenant",
@@ -283,12 +286,132 @@ describe("entity configuration", () => {
 				required: false,
 			}),
 		).rejects.toThrow("could not be found");
+		await expect(
+			otherActor.mutation(api.entity.mutations.deleteType, { entityTypeId }),
+		).rejects.toThrow("could not be found");
 		expect(
 			await otherActor.query(api.entity.reader.getType, { entityTypeId }),
 		).toBeNull();
 		expect(
 			await otherActor.query(api.entity.reader.previewType, { entityTypeId }),
 		).toBeNull();
+	});
+
+	it("permanently deletes an entity type and its complete dependent graph", async () => {
+		vi.useFakeTimers();
+		try {
+			const { base, actor, organizationId } = await createFixture();
+			const entityTypeId = await createPropertyType(actor);
+			const fieldIds = await Promise.all(
+				(
+					[
+						["Address", "text"],
+						["Price", "number"],
+						["Approved", "boolean"],
+						["Inspection", "date"],
+					] as const
+				).map(([label, valueType]) =>
+					actor.mutation(api.entity.mutations.addField, {
+						entityTypeId,
+						label,
+						valueType,
+						required: false,
+					}),
+				),
+			);
+			const entityId = await actor.mutation(api.entity.mutations.createEntity, {
+				entityTypeId,
+				identifier: "FAST-DELETE",
+				displayName: "Delete me",
+				values: [
+					{ kind: "text", fieldDefinitionId: fieldIds[0], value: "Main" },
+					{ kind: "number", fieldDefinitionId: fieldIds[1], value: 1 },
+					{
+						kind: "boolean",
+						fieldDefinitionId: fieldIds[2],
+						value: true,
+					},
+					{ kind: "date", fieldDefinitionId: fieldIds[3], value: 1 },
+				],
+			});
+			const { caseId, globalSearchEntryId } = await base.run(async (ctx) => {
+				const caseId = await ctx.db.insert("cases", {
+					organizationId,
+					reference: "MER-DELETE",
+					title: "Keep me",
+					description: "",
+					ownerMemberId: null,
+					dueAt: null,
+					status: "open",
+					lastActivityAt: 1,
+					createdAt: 1,
+					updatedAt: 1,
+				});
+				for (let index = 0; index < 501; index += 1) {
+					await ctx.db.insert("caseEntityRelations", {
+						caseId,
+						entityId,
+						startedAt: index,
+						endedAt: index % 2 === 0 ? null : index,
+						addedByMemberId: null,
+						removedByMemberId: null,
+					});
+				}
+
+				const entity = await ctx.db.get(entityId);
+				if (!entity?.globalSearchEntryId) {
+					throw new Error("Expected the entity to have a search entry.");
+				}
+				return { caseId, globalSearchEntryId: entity.globalSearchEntryId };
+			});
+
+			await actor.mutation(api.entity.mutations.deleteType, { entityTypeId });
+			expect(
+				await actor.query(api.entity.reader.getType, { entityTypeId }),
+			).toBeNull();
+			const replacementTypeId = await createPropertyType(actor);
+			expect(replacementTypeId).not.toBe(entityTypeId);
+
+			await base.finishAllScheduledFunctions(vi.runAllTimers);
+
+			const state = await base.run(async (ctx) => ({
+				caseRecord: await ctx.db.get(caseId),
+				entityType: await ctx.db.get(entityTypeId),
+				entity: await ctx.db.get(entityId),
+				fieldDefinitions: await ctx.db
+					.query("entityFieldDefinitions")
+					.withIndex("by_entity_type_id_and_position", (index) =>
+						index.eq("entityTypeId", entityTypeId),
+					)
+					.collect(),
+				textValues: await ctx.db.query("entityTextFieldValues").collect(),
+				numberValues: await ctx.db.query("entityNumberFieldValues").collect(),
+				booleanValues: await ctx.db.query("entityBooleanFieldValues").collect(),
+				dateValues: await ctx.db.query("entityDateFieldValues").collect(),
+				relations: await ctx.db
+					.query("caseEntityRelations")
+					.withIndex("by_entity_id_and_ended_at", (index) =>
+						index.eq("entityId", entityId),
+					)
+					.collect(),
+				globalSearchEntry: await ctx.db.get(globalSearchEntryId),
+			}));
+
+			expect(state).toMatchObject({
+				entityType: null,
+				entity: null,
+				fieldDefinitions: [],
+				textValues: [],
+				numberValues: [],
+				booleanValues: [],
+				dateValues: [],
+				relations: [],
+				globalSearchEntry: null,
+			});
+			expect(state.caseRecord?.title).toBe("Keep me");
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("limits previews to ten records", async () => {

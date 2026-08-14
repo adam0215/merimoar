@@ -77,6 +77,7 @@ import type * as email_router from "../email/router.js";
 import type * as email_unreadCounts from "../email/unreadCounts.js";
 import type * as email_webhookVerification from "../email/webhookVerification.js";
 import type * as entity_constants from "../entity/constants.js";
+import type * as entity_deletion from "../entity/deletion.js";
 import type * as entity_input from "../entity/input.js";
 import type * as entity_model from "../entity/model.js";
 import type * as entity_mutations from "../entity/mutations.js";
@@ -174,6 +175,7 @@ declare const fullApi: ApiFromModules<{
   "email/unreadCounts": typeof email_unreadCounts;
   "email/webhookVerification": typeof email_webhookVerification;
   "entity/constants": typeof entity_constants;
+  "entity/deletion": typeof entity_deletion;
   "entity/input": typeof entity_input;
   "entity/model": typeof entity_model;
   "entity/mutations": typeof entity_mutations;
