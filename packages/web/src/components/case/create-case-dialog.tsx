@@ -22,7 +22,6 @@ import {
 } from "#/components/case/case-relationships.tsx";
 import type { CaseCreateOptions } from "#/components/case/types.ts";
 import { Button } from "#/components/ui/button.tsx";
-import { Checkbox } from "#/components/ui/checkbox.tsx";
 import {
 	Dialog,
 	DialogContent,
@@ -261,6 +260,9 @@ export function CreateCaseDialog({
 			: (options?.contacts.filter((contact) =>
 					initialContactIds.includes(contact._id),
 				) ?? []);
+	const selectedEmailContacts = emailContacts.filter((contact) =>
+		contactIds.has(contact._id),
+	);
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
@@ -378,16 +380,12 @@ export function CreateCaseDialog({
 						{variant === "email" ? (
 							<div className="space-y-2">
 								<p className="text-sm font-medium">Contact</p>
-								<div className="rounded-xl border p-2">
-									{emailContacts.map((contact) => (
-										<RelationCheckbox
+								<div className="grid gap-2">
+									{selectedEmailContacts.map((contact) => (
+										<CaseRelationshipCard
 											key={contact._id}
-											checked={contactIds.has(contact._id)}
-											onCheckedChange={(checked) =>
-												toggleContact(contact._id, checked)
-											}
-											label={contact.name || contact.address}
-											description={contact.name ? contact.address : undefined}
+											item={initialContactToRelationshipCard(contact)}
+											onRemove={() => toggleContact(contact._id, false)}
 										/>
 									))}
 								</div>
@@ -517,40 +515,12 @@ export function CreateCaseDialog({
 	);
 }
 
-function RelationCheckbox({
-	checked,
-	onCheckedChange,
-	label,
-	description,
-}: {
-	checked: boolean;
-	onCheckedChange: (checked: boolean) => void;
-	label: string;
-	description?: string;
-}) {
-	const checkboxId = useId();
-
-	return (
-		<label
-			htmlFor={checkboxId}
-			className={cn(
-				"flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 transition-[background-color,box-shadow] duration-150 ease-out hover:bg-muted",
-				checked && "bg-muted ring-2 ring-primary ring-inset",
-			)}
-		>
-			<span className="min-w-0 flex-1">
-				<span className="block truncate text-sm font-medium">{label}</span>
-				{description && (
-					<span className="block truncate text-xs text-muted-foreground">
-						{description}
-					</span>
-				)}
-			</span>
-			<Checkbox
-				id={checkboxId}
-				checked={checked}
-				onCheckedChange={(value) => onCheckedChange(value === true)}
-			/>
-		</label>
-	);
+function initialContactToRelationshipCard(contact: InitialCaseContact) {
+	return relationshipCandidateToCard({
+		target: { kind: "contact", contactId: contact._id },
+		identifier: contact.address,
+		label: contact.name || contact.address,
+		descriptor: "Contact",
+		icon: null,
+	});
 }
