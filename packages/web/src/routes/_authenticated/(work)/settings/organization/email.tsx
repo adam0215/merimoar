@@ -1,7 +1,12 @@
 import { api } from "@merimoar/convex/api";
 import type { Id } from "@merimoar/convex/data-model";
-import { IconInbox, IconMailbox, IconMailShare } from "@tabler/icons-react";
-import { createFileRoute } from "@tanstack/react-router";
+import {
+	IconArchive,
+	IconInbox,
+	IconMailbox,
+	IconMailShare,
+} from "@tabler/icons-react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
 import { useMutation } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
@@ -133,7 +138,25 @@ function OrganizationEmailSettings() {
 						<h2 id="inboxes-heading" className="font-semibold">
 							Inboxes
 						</h2>
-						<AddEmailInboxDialog outboundIntegrations={outboundIntegrations} />
+						<div className="flex items-center gap-1">
+							<Button
+								nativeButton={false}
+								variant="ghost"
+								size="sm"
+								render={
+									<Link
+										to="/settings/organization/email/archived"
+										search={{}}
+									/>
+								}
+							>
+								<IconArchive />
+								Archived Mail
+							</Button>
+							<AddEmailInboxDialog
+								outboundIntegrations={outboundIntegrations}
+							/>
+						</div>
 					</div>
 					<div className="mt-3 space-y-3">
 						{inboxes.length === 0 && (

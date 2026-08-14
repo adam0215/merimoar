@@ -24,6 +24,7 @@ import { Route as ApiAuthSignOutRouteImport } from './routes/api/auth/sign-out'
 import { Route as AuthenticatedworkSettingsOrganizationEmailRouteImport } from './routes/_authenticated/(work)/settings/organization/email'
 import { Route as AuthenticatedworkSettingsOrganizationEntitiesRouteImport } from './routes/_authenticated/(work)/settings/organization/entities'
 import { Route as AuthenticatedworkSettingsOrganizationGeneralRouteImport } from './routes/_authenticated/(work)/settings/organization/general'
+import { Route as AuthenticatedworkSettingsOrganizationEmailArchivedRouteImport } from './routes/_authenticated/(work)/settings/organization/email_.archived'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
@@ -105,6 +106,12 @@ const AuthenticatedworkSettingsOrganizationGeneralRoute =
     path: '/settings/organization/general',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedworkSettingsOrganizationEmailArchivedRoute =
+  AuthenticatedworkSettingsOrganizationEmailArchivedRouteImport.update({
+    id: '/(work)/settings/organization/email_/archived',
+    path: '/settings/organization/email/archived',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByFullPath {
   '/settings/organization/email': typeof AuthenticatedworkSettingsOrganizationEmailRoute
   '/settings/organization/entities': typeof AuthenticatedworkSettingsOrganizationEntitiesRoute
   '/settings/organization/general': typeof AuthenticatedworkSettingsOrganizationGeneralRoute
+  '/settings/organization/email/archived': typeof AuthenticatedworkSettingsOrganizationEmailArchivedRoute
 }
 export interface FileRoutesByTo {
   '/auth-error': typeof AuthErrorRoute
@@ -137,6 +145,7 @@ export interface FileRoutesByTo {
   '/settings/organization/email': typeof AuthenticatedworkSettingsOrganizationEmailRoute
   '/settings/organization/entities': typeof AuthenticatedworkSettingsOrganizationEntitiesRoute
   '/settings/organization/general': typeof AuthenticatedworkSettingsOrganizationGeneralRoute
+  '/settings/organization/email/archived': typeof AuthenticatedworkSettingsOrganizationEmailArchivedRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -155,6 +164,7 @@ export interface FileRoutesById {
   '/_authenticated/(work)/settings/organization/email': typeof AuthenticatedworkSettingsOrganizationEmailRoute
   '/_authenticated/(work)/settings/organization/entities': typeof AuthenticatedworkSettingsOrganizationEntitiesRoute
   '/_authenticated/(work)/settings/organization/general': typeof AuthenticatedworkSettingsOrganizationGeneralRoute
+  '/_authenticated/(work)/settings/organization/email_/archived': typeof AuthenticatedworkSettingsOrganizationEmailArchivedRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -173,6 +183,7 @@ export interface FileRouteTypes {
     | '/settings/organization/email'
     | '/settings/organization/entities'
     | '/settings/organization/general'
+    | '/settings/organization/email/archived'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth-error'
@@ -189,6 +200,7 @@ export interface FileRouteTypes {
     | '/settings/organization/email'
     | '/settings/organization/entities'
     | '/settings/organization/general'
+    | '/settings/organization/email/archived'
   id:
     | '__root__'
     | '/_authenticated'
@@ -206,6 +218,7 @@ export interface FileRouteTypes {
     | '/_authenticated/(work)/settings/organization/email'
     | '/_authenticated/(work)/settings/organization/entities'
     | '/_authenticated/(work)/settings/organization/general'
+    | '/_authenticated/(work)/settings/organization/email_/archived'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -323,6 +336,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedworkSettingsOrganizationGeneralRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/(work)/settings/organization/email_/archived': {
+      id: '/_authenticated/(work)/settings/organization/email_/archived'
+      path: '/settings/organization/email/archived'
+      fullPath: '/settings/organization/email/archived'
+      preLoaderRoute: typeof AuthenticatedworkSettingsOrganizationEmailArchivedRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -337,6 +357,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedworkSettingsOrganizationEmailRoute: typeof AuthenticatedworkSettingsOrganizationEmailRoute
   AuthenticatedworkSettingsOrganizationEntitiesRoute: typeof AuthenticatedworkSettingsOrganizationEntitiesRoute
   AuthenticatedworkSettingsOrganizationGeneralRoute: typeof AuthenticatedworkSettingsOrganizationGeneralRoute
+  AuthenticatedworkSettingsOrganizationEmailArchivedRoute: typeof AuthenticatedworkSettingsOrganizationEmailArchivedRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -353,6 +374,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedworkSettingsOrganizationEntitiesRoute,
   AuthenticatedworkSettingsOrganizationGeneralRoute:
     AuthenticatedworkSettingsOrganizationGeneralRoute,
+  AuthenticatedworkSettingsOrganizationEmailArchivedRoute:
+    AuthenticatedworkSettingsOrganizationEmailArchivedRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

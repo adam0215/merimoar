@@ -78,7 +78,10 @@ describe("inbound email ingestion", () => {
 			if (!firstMessage) {
 				throw new Error("Expected the first email to exist");
 			}
-			await ctx.db.patch(firstMessage.threadId, { isUnread: false });
+			await ctx.db.patch(firstMessage.threadId, {
+				isUnread: false,
+				archivedAt: 1_500,
+			});
 			await ctx.db.patch(inboxId, { unreadThreadCount: 0 });
 		});
 
@@ -208,6 +211,7 @@ describe("inbound email ingestion", () => {
 		).toBe(true);
 		expect(state.threads[0]?.latestMessageId).toBe(thirdMessageId);
 		expect(state.threads[0]?.isUnread).toBe(true);
+		expect(state.threads[0]).not.toHaveProperty("archivedAt");
 		expect(state.inbox?.unreadThreadCount).toBe(1);
 		expect(state.duplicateEvent?.status).toBe("processed");
 	});

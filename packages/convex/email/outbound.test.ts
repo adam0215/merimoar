@@ -354,6 +354,20 @@ describe("outbound email replies", () => {
 		expect(state.inbox?.unreadThreadCount).toBe(0);
 	});
 
+	it("returns an archived thread to the inbox when a reply is sent", async () => {
+		const fixture = await createFixture();
+		await fixture.base.run(async (ctx) => {
+			await ctx.db.patch(fixture.threadId, { archivedAt: 500 });
+		});
+
+		await saveAndQueue(fixture);
+
+		const thread = await fixture.base.run(async (ctx) =>
+			ctx.db.get(fixture.threadId),
+		);
+		expect(thread).not.toHaveProperty("archivedAt");
+	});
+
 	it("rejects a whitespace-only reply before queueing", async () => {
 		const fixture = await createFixture();
 		const draft = await fixture.actor.mutation(api.email.outbound.saveDraft, {

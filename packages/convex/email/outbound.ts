@@ -201,6 +201,7 @@ export async function queueEmailReply(
 	await ctx.db.patch(thread._id, {
 		latestMessageId: messageId,
 		lastActivityAt: queuedAt,
+		archivedAt: undefined,
 	});
 	await setThreadUnread(ctx, thread, false);
 	await enqueueSendWork(ctx, sendId, messageId, 0);

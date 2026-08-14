@@ -45,6 +45,9 @@ function getPageTitle(pathname: string, agentView: AgentView) {
 	if (pathname === "/settings/organization/email") {
 		return "Email settings";
 	}
+	if (pathname === "/settings/organization/email/archived") {
+		return "Archived Mail";
+	}
 	if (pathname === "/cases") {
 		return "Cases";
 	}

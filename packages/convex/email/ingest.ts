@@ -353,6 +353,9 @@ export const storeInboundEmail = internalMutation({
 				lastActivityAt: args.email.receivedAt,
 			});
 		}
+		if (thread.archivedAt !== undefined) {
+			await ctx.db.patch(thread._id, { archivedAt: undefined });
+		}
 		await dispatchDomainEvent(ctx, {
 			name: "email.messageReceived",
 			payload: {

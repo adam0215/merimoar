@@ -177,14 +177,21 @@ export default defineSchema({
 		latestMessageId: v.optional(v.id("emailMessages")),
 		lastActivityAt: v.number(),
 		isUnread: v.optional(v.boolean()),
+		archivedAt: v.optional(v.number()),
 	})
 		.index("by_organization_id_and_last_activity_at", [
 			"organizationId",
 			"lastActivityAt",
 		])
-		.index("by_organization_id_and_inbox_id_and_last_activity_at", [
+		.index("by_org_archive_activity", [
+			"organizationId",
+			"archivedAt",
+			"lastActivityAt",
+		])
+		.index("by_org_inbox_archive_activity", [
 			"organizationId",
 			"inboxId",
+			"archivedAt",
 			"lastActivityAt",
 		])
 		.index("by_inbox_id_and_is_unread", ["inboxId", "isUnread"]),

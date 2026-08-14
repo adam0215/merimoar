@@ -215,7 +215,9 @@ export function WorkSidebar({
 	const agentInboxIsActive = pathname === "/agent-inbox";
 	const contactsIsActive = pathname === "/contacts";
 	const casesIsActive = pathname === "/cases";
-	const settingsEmailIsActive = pathname === "/settings/organization/email";
+	const settingsEmailIsActive = pathname.startsWith(
+		"/settings/organization/email",
+	);
 	const settingsGeneralIsActive = pathname === "/settings/organization/general";
 	const settingsEntitiesIsActive =
 		pathname === "/settings/organization/entities";

@@ -3,6 +3,7 @@ import type { Id } from "@merimoar/convex/data-model";
 import {
 	IconAddressBook,
 	IconAlertCircle,
+	IconArchive,
 	IconChevronDown,
 	IconInbox,
 	IconLoader2,
@@ -10,6 +11,7 @@ import {
 	IconMailOpened,
 	IconMessages,
 	IconRefresh,
+	IconRestore,
 } from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import type { OptimisticLocalStore } from "convex/browser";
@@ -78,7 +80,10 @@ function optimisticallySetThreadUnread(
 		});
 	}
 
-	function updateCachedThreadList(queryArgs: { inboxId?: string }) {
+	function updateCachedThreadList(queryArgs: {
+		inboxId?: string;
+		view: "inbox";
+	}) {
 		optimisticallyUpdateValueInPaginatedQuery(
 			localStore,
 			api.email.reader.listThreads,
@@ -93,9 +98,9 @@ function optimisticallySetThreadUnread(
 		);
 	}
 
-	updateCachedThreadList({});
+	updateCachedThreadList({ view: "inbox" });
 	if (inboxId) {
-		updateCachedThreadList({ inboxId });
+		updateCachedThreadList({ inboxId, view: "inbox" });
 	}
 
 	const inboxes = localStore.getQuery(api.email.reader.listInboxes, {});
@@ -392,6 +397,7 @@ function OutboundSendFailure({
 
 export function ThreadList({
 	items,
+	variant,
 	selectedInboxId,
 	selectedThreadId,
 	status,
@@ -399,12 +405,16 @@ export function ThreadList({
 	compact,
 }: {
 	items: ThreadListItem[];
+	variant: "inbox" | "archive";
 	selectedInboxId?: string;
 	selectedThreadId?: string;
 	status: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";
 	loadMore: () => void;
 	compact: boolean;
 }) {
+	const threadRoute =
+		variant === "archive" ? "/settings/organization/email/archived" : "/email";
+
 	if (status === "LoadingFirstPage") {
 		return (
 			<div className="space-y-1 p-2 pb-16">
@@ -445,9 +455,13 @@ export function ThreadList({
 		return (
 			<div className="flex h-full flex-col items-center justify-center px-8 text-center">
 				<IconInbox className="mb-4 size-6 text-muted-foreground/50" />
-				<h2 className="font-medium">No inbound email yet</h2>
+				<h2 className="font-medium">
+					{variant === "archive" ? "No archived email" : "No inbound email yet"}
+				</h2>
 				<p className="mt-1 max-w-64 text-sm text-muted-foreground">
-					New messages will appear here as soon as they reach an inbox.
+					{variant === "archive"
+						? "Archived threads will appear here."
+						: "New messages will appear here as soon as they reach an inbox."}
 				</p>
 			</div>
 		);
@@ -468,7 +482,7 @@ export function ThreadList({
 					return (
 						<Link
 							key={thread._id}
-							to="/email"
+							to={threadRoute}
 							search={{
 								inbox: selectedInboxId,
 								thread: thread._id,
@@ -534,7 +548,7 @@ export function ThreadList({
 				return (
 					<Link
 						key={thread._id}
-						to="/email"
+						to={threadRoute}
 						search={{
 							inbox: selectedInboxId,
 							thread: thread._id,
@@ -608,12 +622,18 @@ export function ThreadView({
 	thread,
 	createOptions,
 	closeButton,
+	variant,
+	onMoved,
 }: {
 	thread: EmailThreadDetail | null | undefined;
 	createOptions: CaseCreateOptions | undefined;
 	closeButton: React.ReactNode;
+	variant: "inbox" | "archive";
+	onMoved: () => void;
 }) {
 	const setUnreadMutation = useMutation(api.email.reader.setUnread);
+	const setThreadArchived = useMutation(api.email.reader.setThreadArchived);
+	const [isMoving, setIsMoving] = useState(false);
 	const setUnread = useMemo(
 		() => setUnreadMutation.withOptimisticUpdate(optimisticallySetThreadUnread),
 		[setUnreadMutation],
@@ -621,10 +641,10 @@ export function ThreadView({
 	const threadId = thread?.thread._id;
 
 	useEffect(() => {
-		if (threadId) {
+		if (variant === "inbox" && threadId) {
 			void setUnread({ threadId, isUnread: false }).catch(() => undefined);
 		}
-	}, [setUnread, threadId]);
+	}, [setUnread, threadId, variant]);
 
 	async function toggleUnread() {
 		if (!thread) {
@@ -645,6 +665,36 @@ export function ThreadView({
 				),
 				type: "error",
 			});
+		}
+	}
+
+	async function moveThread() {
+		if (!thread || isMoving) {
+			return;
+		}
+
+		setIsMoving(true);
+		try {
+			await setThreadArchived({
+				threadId: thread.thread._id,
+				archived: variant === "inbox",
+			});
+			onMoved();
+		} catch (error) {
+			toast.add({
+				title:
+					variant === "archive"
+						? "Thread could not be restored"
+						: "Thread could not be archived",
+				description: getConvexErrorMessage(
+					error,
+					variant === "archive"
+						? "The email thread could not be restored."
+						: "The email thread could not be archived.",
+				),
+				type: "error",
+			});
+			setIsMoving(false);
 		}
 	}
 
@@ -686,27 +736,59 @@ export function ThreadView({
 					aria-label="Thread actions"
 					className="absolute inset-x-0 top-0 z-30 flex h-8 items-center justify-between border-b bg-background px-4"
 				>
-					<Tooltip>
-						<TooltipTrigger
-							render={
-								<Button
-									variant="ghost"
-									size="icon-sm"
-									onClick={() => void toggleUnread()}
-									aria-label={
-										thread.thread.isUnread
-											? "Mark thread as read"
-											: "Mark thread as unread"
+					<div className="flex items-center gap-1">
+						{variant === "inbox" && (
+							<Tooltip>
+								<TooltipTrigger
+									render={
+										<Button
+											variant="ghost"
+											size="icon-sm"
+											onClick={() => void toggleUnread()}
+											aria-label={
+												thread.thread.isUnread
+													? "Mark thread as read"
+													: "Mark thread as unread"
+											}
+										/>
 									}
-								/>
-							}
-						>
-							{thread.thread.isUnread ? <IconMailOpened /> : <IconMail />}
-						</TooltipTrigger>
-						<TooltipContent side="bottom">
-							{thread.thread.isUnread ? "Mark as read" : "Mark as unread"}
-						</TooltipContent>
-					</Tooltip>
+								>
+									{thread.thread.isUnread ? <IconMailOpened /> : <IconMail />}
+								</TooltipTrigger>
+								<TooltipContent side="bottom">
+									{thread.thread.isUnread ? "Mark as read" : "Mark as unread"}
+								</TooltipContent>
+							</Tooltip>
+						)}
+						<Tooltip>
+							<TooltipTrigger
+								render={
+									<Button
+										variant="ghost"
+										size="icon-sm"
+										disabled={isMoving}
+										onClick={() => void moveThread()}
+										aria-label={
+											variant === "archive"
+												? "Restore thread"
+												: "Archive thread"
+										}
+									/>
+								}
+							>
+								{isMoving ? (
+									<IconLoader2 className="animate-spin" />
+								) : variant === "archive" ? (
+									<IconRestore />
+								) : (
+									<IconArchive />
+								)}
+							</TooltipTrigger>
+							<TooltipContent side="bottom">
+								{variant === "archive" ? "Restore" : "Archive"}
+							</TooltipContent>
+						</Tooltip>
+					</div>
 					{closeButton}
 				</div>
 				<ScrollArea

@@ -15,8 +15,8 @@ import {
 import { setThreadUnread } from "#/email/unreadCounts";
 import { getEmailIntegrationAccessContext } from "#/integrations/connectedAccounts";
 import { deriveEmailReadiness } from "#/integrations/model";
-import type { Id, TableNames } from "../_generated/dataModel";
-import type { QueryCtx } from "../_generated/server";
+import type { Doc, Id, TableNames } from "../_generated/dataModel";
+import type { MutationCtx, QueryCtx } from "../_generated/server";
 import { mutation, query } from "../_generated/server";
 import schema from "../schema";
 
@@ -35,6 +35,10 @@ const emailDraftDocumentValidator = schema.tables.emailDrafts.validator.extend(
 const caseDocumentValidator = schema.tables.cases.validator.extend(
 	systemFields("cases"),
 );
+const emailThreadViewValidator = v.union(
+	v.literal("inbox"),
+	v.literal("archive"),
+);
 
 async function listLatestThreadMessages(
 	ctx: QueryCtx,
@@ -48,6 +52,56 @@ async function listLatestThreadMessages(
 		.order("desc")
 		.take(100);
 	return messages.reverse();
+}
+
+async function requireOrganizationInboxId(
+	ctx: QueryCtx,
+	organizationId: Id<"organizations">,
+	inboxId: string | undefined,
+) {
+	if (!inboxId) {
+		return null;
+	}
+
+	const normalizedInboxId = ctx.db.normalizeId("emailInboxes", inboxId);
+	const inbox = normalizedInboxId ? await ctx.db.get(normalizedInboxId) : null;
+	if (!inbox || inbox.organizationId !== organizationId) {
+		throw new ConvexError({
+			code: "EMAIL_INBOX_NOT_FOUND",
+			message: "The email inbox could not be found.",
+		});
+	}
+
+	return inbox._id;
+}
+
+async function requireOrganizationEmailThread(
+	ctx: QueryCtx | MutationCtx,
+	organizationId: Id<"organizations">,
+	threadId: Id<"emailThreads">,
+) {
+	const thread = await ctx.db.get(threadId);
+	if (!thread || thread.organizationId !== organizationId) {
+		throw new ConvexError({
+			code: "EMAIL_THREAD_NOT_FOUND",
+			message: "The email thread could not be found.",
+		});
+	}
+	return thread;
+}
+
+async function includeLatestMessages(
+	ctx: QueryCtx,
+	threads: Doc<"emailThreads">[],
+) {
+	return await Promise.all(
+		threads.map(async (thread) => ({
+			thread,
+			latestMessage: thread.latestMessageId
+				? await ctx.db.get(thread.latestMessageId)
+				: null,
+		})),
+	);
 }
 
 export const listOutboundIntegrations = query({
@@ -138,51 +192,44 @@ export const listThreads = query({
 	args: {
 		paginationOpts: paginationOptsValidator,
 		inboxId: v.optional(v.string()),
+		view: emailThreadViewValidator,
 	},
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
-		let inboxId = args.inboxId
-			? ctx.db.normalizeId("emailInboxes", args.inboxId)
-			: null;
-		if (args.inboxId) {
-			const inbox = inboxId ? await ctx.db.get(inboxId) : null;
-			if (!inbox || inbox.organizationId !== workspace.organization._id) {
-				throw new ConvexError({
-					code: "EMAIL_INBOX_NOT_FOUND",
-					message: "The email inbox could not be found.",
-				});
-			}
-			inboxId = inbox._id;
-		}
+		const inboxId = await requireOrganizationInboxId(
+			ctx,
+			workspace.organization._id,
+			args.inboxId,
+		);
 
 		const result = inboxId
 			? await ctx.db
 					.query("emailThreads")
-					.withIndex(
-						"by_organization_id_and_inbox_id_and_last_activity_at",
-						(query) =>
-							query
-								.eq("organizationId", workspace.organization._id)
-								.eq("inboxId", inboxId),
-					)
+					.withIndex("by_org_inbox_archive_activity", (query) => {
+						const inboxThreads = query
+							.eq("organizationId", workspace.organization._id)
+							.eq("inboxId", inboxId);
+						return args.view === "archive"
+							? inboxThreads.gt("archivedAt", 0)
+							: inboxThreads.eq("archivedAt", undefined);
+					})
 					.order("desc")
 					.paginate(args.paginationOpts)
 			: await ctx.db
 					.query("emailThreads")
-					.withIndex("by_organization_id_and_last_activity_at", (query) =>
-						query.eq("organizationId", workspace.organization._id),
-					)
+					.withIndex("by_org_archive_activity", (query) => {
+						const organizationThreads = query.eq(
+							"organizationId",
+							workspace.organization._id,
+						);
+						return args.view === "archive"
+							? organizationThreads.gt("archivedAt", 0)
+							: organizationThreads.eq("archivedAt", undefined);
+					})
 					.order("desc")
 					.paginate(args.paginationOpts);
 
-		const page = await Promise.all(
-			result.page.map(async (thread) => ({
-				thread,
-				latestMessage: thread.latestMessageId
-					? await ctx.db.get(thread.latestMessageId)
-					: null,
-			})),
-		);
+		const page = await includeLatestMessages(ctx, result.page);
 
 		return {
 			...result,
@@ -315,11 +362,15 @@ export const setUnread = mutation({
 	returns: v.null(),
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
-		const thread = await ctx.db.get(args.threadId);
-		if (!thread || thread.organizationId !== workspace.organization._id) {
+		const thread = await requireOrganizationEmailThread(
+			ctx,
+			workspace.organization._id,
+			args.threadId,
+		);
+		if (thread.archivedAt !== undefined) {
 			throw new ConvexError({
-				code: "EMAIL_THREAD_NOT_FOUND",
-				message: "The email thread could not be found.",
+				code: "EMAIL_THREAD_ARCHIVED",
+				message: "The archived email thread cannot be marked as unread.",
 			});
 		}
 
@@ -333,6 +384,38 @@ export const setUnread = mutation({
 			thread._id,
 		);
 		await setThreadUnread(ctx, thread, args.isUnread);
+		return null;
+	},
+});
+
+export const setThreadArchived = mutation({
+	args: {
+		threadId: v.id("emailThreads"),
+		archived: v.boolean(),
+	},
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const workspace = await requireActor(ctx);
+		const thread = await requireOrganizationEmailThread(
+			ctx,
+			workspace.organization._id,
+			args.threadId,
+		);
+		if ((thread.archivedAt !== undefined) === args.archived) {
+			return null;
+		}
+
+		await requireHumanEmailThreadWriteAccess(
+			ctx,
+			workspace.organization._id,
+			thread._id,
+		);
+		if (args.archived) {
+			await setThreadUnread(ctx, thread, false);
+		}
+		await ctx.db.patch(thread._id, {
+			archivedAt: args.archived ? Date.now() : undefined,
+		});
 		return null;
 	},
 });
