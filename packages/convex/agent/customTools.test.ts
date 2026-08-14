@@ -336,6 +336,131 @@ describe("custom tool configuration", () => {
 		expect(saved.toolId).not.toBe(otherSaved.toolId);
 	});
 
+	it("deletes a tool without deleting its integration or run history", async () => {
+		const fixture = await createFixture();
+		const integrationId = await createIntegration(fixture.actor);
+		const saved = await saveTool(fixture.actor, integrationId);
+		const claim = await delegateAndClaim(fixture);
+		await loadTools(fixture, claim);
+		await startTool(
+			fixture,
+			claim,
+			"custom-tool-call",
+			"read_temperature_metrics",
+			{ customToolId: saved.toolId },
+		);
+
+		await fixture.actor.mutation(api.agent.customTools.deleteTool, {
+			toolId: saved.toolId,
+		});
+
+		const state = await fixture.base.run(async (ctx) => ({
+			integration: await ctx.db.get(integrationId),
+			tool: await ctx.db.get(saved.toolId),
+			snapshots: await ctx.db
+				.query("agentRunCustomToolDefinitions")
+				.withIndex("by_run_id", (index) => index.eq("runId", claim.runId))
+				.collect(),
+			toolItem: await ctx.db
+				.query("agentItems")
+				.withIndex("by_run_id_and_tool_call_id", (index) =>
+					index.eq("runId", claim.runId).eq("toolCallId", "custom-tool-call"),
+				)
+				.unique(),
+		}));
+		expect(state.integration).not.toBeNull();
+		expect(state.tool).toBeNull();
+		expect(state.snapshots).toMatchObject([{ toolId: saved.toolId }]);
+		expect(state.toolItem).toMatchObject({ customToolId: saved.toolId });
+		expect(await loadTools(fixture, claim)).toMatchObject([
+			{ toolId: saved.toolId, normalizedName: "read_temperature_metrics" },
+		]);
+		expect(
+			await fixture.actor.query(
+				api.agent.customTools.listWorkspaceConfiguration,
+				{},
+			),
+		).toMatchObject([{ _id: integrationId, tools: [] }]);
+	});
+
+	it("deletes an integration and its tools without deleting run history", async () => {
+		const fixture = await createFixture();
+		const integrationId = await createIntegration(fixture.actor);
+		const first = await saveTool(fixture.actor, integrationId);
+		const second = await saveTool(fixture.actor, integrationId, {
+			fields: {
+				...fields,
+				name: "Read Humidity Metrics",
+				path: "metrics/humidity",
+			},
+		});
+		const claim = await delegateAndClaim(fixture);
+		await loadTools(fixture, claim);
+		await startTool(
+			fixture,
+			claim,
+			"custom-tool-call",
+			"read_temperature_metrics",
+			{ customToolId: first.toolId },
+		);
+
+		await fixture.actor.mutation(api.agent.customTools.deleteIntegration, {
+			integrationId,
+		});
+
+		const state = await fixture.base.run(async (ctx) => ({
+			integration: await ctx.db.get(integrationId),
+			firstTool: await ctx.db.get(first.toolId),
+			secondTool: await ctx.db.get(second.toolId),
+			snapshots: await ctx.db
+				.query("agentRunCustomToolDefinitions")
+				.withIndex("by_run_id", (index) => index.eq("runId", claim.runId))
+				.collect(),
+			toolItem: await ctx.db
+				.query("agentItems")
+				.withIndex("by_run_id_and_tool_call_id", (index) =>
+					index.eq("runId", claim.runId).eq("toolCallId", "custom-tool-call"),
+				)
+				.unique(),
+		}));
+		expect(state.integration).toBeNull();
+		expect(state.firstTool).toBeNull();
+		expect(state.secondTool).toBeNull();
+		expect(state.snapshots).toHaveLength(2);
+		expect(state.toolItem).toMatchObject({ customToolId: first.toolId });
+		expect(await loadTools(fixture, claim)).toHaveLength(2);
+		expect(
+			await fixture.actor.query(
+				api.agent.customTools.listWorkspaceConfiguration,
+				{},
+			),
+		).toEqual([]);
+	});
+
+	it("does not let another organization delete tools or integrations", async () => {
+		const fixture = await createFixture();
+		const integrationId = await createIntegration(fixture.actor);
+		const saved = await saveTool(fixture.actor, integrationId);
+
+		await expect(
+			fixture.otherActor.mutation(api.agent.customTools.deleteTool, {
+				toolId: saved.toolId,
+			}),
+		).rejects.toThrow("could not be found");
+		await expect(
+			fixture.otherActor.mutation(api.agent.customTools.deleteIntegration, {
+				integrationId,
+			}),
+		).rejects.toThrow("could not be found");
+
+		const state = await fixture.base.run(async (ctx) => ({
+			integration: await ctx.db.get(integrationId),
+			tool: await ctx.db.get(saved.toolId),
+		}));
+		expect(state.integration).not.toBeNull();
+		expect(state.tool).not.toBeNull();
+	});
+
 	it("invalidates future runs while preserving the claimed run snapshot", async () => {
 		const fixture = await createFixture();
 		const claim = await delegateAndClaim(fixture);

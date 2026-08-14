@@ -1,6 +1,8 @@
 import { composeCustomToolEndpoint } from "@merimoar/convex/agent/custom-tool-model";
+import { api } from "@merimoar/convex/api";
 import type { Doc } from "@merimoar/convex/data-model";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { useMutation } from "convex/react";
 import { type FormEvent, useState } from "react";
 import {
 	Accordion,
@@ -10,6 +12,7 @@ import {
 } from "#/components/ui/accordion.tsx";
 import { Badge } from "#/components/ui/badge.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { DeleteConfirmationDialog } from "#/components/ui/delete-confirmation-dialog.tsx";
 import {
 	Dialog,
 	DialogContent,
@@ -142,6 +145,7 @@ export function CustomToolDialog({
 	integrations: CustomIntegrationConfiguration[];
 	onClose(): void;
 }) {
+	const deleteTool = useMutation(api.agent.customTools.deleteTool);
 	const [form, setForm] = useState<ToolForm>(() => ({
 		integrationChoice: tool?.integrationId ?? integrations[0]?._id ?? "",
 		name: tool?.name ?? "",
@@ -159,13 +163,17 @@ export function CustomToolDialog({
 		configurationSignature(form, integrations),
 	);
 	const [result, setResult] = useState<TestResult | null>(null);
-	const [pending, setPending] = useState<"test" | "save" | null>(null);
+	const [pending, setPending] = useState<"delete" | "test" | "save" | null>(
+		null,
+	);
+	const [deleteConfirmationOpen, setDeleteConfirmationOpen] = useState(false);
 	const [creatingIntegration, setCreatingIntegration] = useState(false);
 	const [openParameterKeys, setOpenParameterKeys] = useState<string[]>(() =>
 		form.parameters[0] ? [form.parameters[0].key] : [],
 	);
 	const testing = pending === "test";
 	const saving = pending === "save";
+	const deleting = pending === "delete";
 
 	const fields = requestFields(form);
 	const values = testValues(form);
@@ -291,6 +299,24 @@ export function CustomToolDialog({
 		} catch (error) {
 			toast.add({
 				title: "Tool could not be saved",
+				description: errorMessage(error),
+				type: "error",
+			});
+		} finally {
+			setPending(null);
+		}
+	}
+
+	async function confirmDelete() {
+		if (!tool || pending) return;
+		setPending("delete");
+		try {
+			await deleteTool({ toolId: tool._id });
+			setDeleteConfirmationOpen(false);
+			onClose();
+		} catch (error) {
+			toast.add({
+				title: "Tool could not be deleted",
 				description: errorMessage(error),
 				type: "error",
 			});
@@ -543,10 +569,21 @@ export function CustomToolDialog({
 						</div>
 
 						<DialogFooter>
+							{tool && (
+								<Button
+									type="button"
+									variant="destructive-subtle"
+									className="sm:mr-auto"
+									disabled={pending !== null}
+									onClick={() => setDeleteConfirmationOpen(true)}
+								>
+									<IconTrash /> Delete
+								</Button>
+							)}
 							<Button
 								type="button"
 								variant="secondary"
-								disabled={testing || saving}
+								disabled={pending !== null}
 								onClick={onClose}
 							>
 								Cancel
@@ -554,18 +591,29 @@ export function CustomToolDialog({
 							<Button
 								type="button"
 								variant="secondary"
-								disabled={testing || saving || !endpoint}
+								disabled={pending !== null || !endpoint}
 								onClick={testRequest}
 							>
 								{testing ? "Testing…" : "Test request"}
 							</Button>
-							<Button type="submit" disabled={testing || saving || !canSave}>
+							<Button type="submit" disabled={pending !== null || !canSave}>
 								{saving ? "Saving…" : "Save"}
 							</Button>
 						</DialogFooter>
 					</form>
 				</DialogContent>
 			</Dialog>
+			{tool && (
+				<DeleteConfirmationDialog
+					open={deleteConfirmationOpen}
+					onOpenChange={(open) => !deleting && setDeleteConfirmationOpen(open)}
+					title={`Delete ${tool.name}?`}
+					description="The tool will be permanently deleted. Existing task history is kept."
+					actionLabel="Delete tool"
+					isDeleting={deleting}
+					onConfirm={() => void confirmDelete()}
+				/>
+			)}
 			{creatingIntegration && (
 				<CustomIntegrationDialog
 					onClose={() => setCreatingIntegration(false)}

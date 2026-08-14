@@ -300,6 +300,38 @@ export const updateIntegration = mutation({
 	},
 });
 
+export const deleteIntegration = mutation({
+	args: { integrationId: v.id("customIntegrations") },
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const { organization } = await requireActor(ctx);
+		await requireOwnedIntegration(ctx, args.integrationId, organization._id);
+		const tools = await ctx.db
+			.query("agentCustomTools")
+			.withIndex("by_integration_id", (index) =>
+				index.eq("integrationId", args.integrationId),
+			)
+			.take(MAX_CUSTOM_TOOLS_PER_ORGANIZATION + 1);
+		if (tools.length > MAX_CUSTOM_TOOLS_PER_ORGANIZATION) {
+			throw new Error("Custom integration exceeds its tool limit.");
+		}
+		for (const tool of tools) await ctx.db.delete(tool._id);
+		await ctx.db.delete(args.integrationId);
+		return null;
+	},
+});
+
+export const deleteTool = mutation({
+	args: { toolId: v.id("agentCustomTools") },
+	returns: v.null(),
+	handler: async (ctx, args) => {
+		const { organization } = await requireActor(ctx);
+		const { tool } = await requireOwnedTool(ctx, args.toolId, organization._id);
+		await ctx.db.delete(tool._id);
+		return null;
+	},
+});
+
 export const saveTestedTool = mutation({
 	args: {
 		runtimeSecret: v.string(),
