@@ -8,9 +8,9 @@ import {
 	ContactView,
 } from "#/components/contact/contact-browser.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { ContextPanelLayout } from "#/components/ui/context-panel-layout.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
-import { cn } from "#/lib/utils.ts";
 
 type ContactsSearch = {
 	contact?: string;
@@ -156,19 +156,9 @@ function ContactsPage() {
 		: liveRelatedCaseStatus;
 
 	return (
-		<div
-			className={cn(
-				"grid h-full min-h-0 grid-cols-1 overflow-hidden",
-				selectedContactId &&
-					"md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]",
-			)}
-		>
-			<section
-				className={cn(
-					"min-h-0 overflow-hidden bg-background",
-					selectedContactId && "hidden md:block md:border-r",
-				)}
-			>
+		<ContextPanelLayout
+			detailOpen={Boolean(selectedContactId)}
+			list={
 				<ScrollArea
 					className="h-full"
 					viewportProps={{ className: "overscroll-none" }}
@@ -184,64 +174,54 @@ function ContactsPage() {
 						}}
 					/>
 				</ScrollArea>
-			</section>
-
-			<section
-				className={cn(
-					"min-h-0 min-w-0 overflow-hidden bg-background",
-					!selectedContactId && "hidden",
-				)}
-			>
-				<div className="flex h-full min-h-0 flex-col">
-					<div className="flex h-12 shrink-0 items-center border-b px-3 md:hidden">
+			}
+			mobileBack={
+				<Button
+					nativeButton={false}
+					variant="ghost"
+					size="sm"
+					render={<Link to="/contacts" search={{}} />}
+				>
+					<IconArrowLeft />
+					Back to contacts
+				</Button>
+			}
+			detail={
+				<ContactView
+					contact={selectedContact}
+					cases={relatedCases}
+					caseStatus={relatedCaseStatus}
+					loadMoreCases={() => {
+						if (liveRelatedCaseStatus !== "LoadingFirstPage") {
+							loadMoreRelatedCases(20);
+						}
+					}}
+					messages={messages}
+					messageStatus={messageStatus}
+					loadMoreMessages={() => {
+						if (liveMessageStatus !== "LoadingFirstPage") {
+							loadMoreMessages(ADDITIONAL_MESSAGE_PAGE_SIZE);
+						}
+					}}
+					closeButton={
 						<Button
 							nativeButton={false}
 							variant="ghost"
-							size="sm"
-							render={<Link to="/contacts" search={{}} />}
-						>
-							<IconArrowLeft />
-							Back to contacts
-						</Button>
-					</div>
-					<div className="min-h-0 flex-1">
-						<ContactView
-							contact={selectedContact}
-							cases={relatedCases}
-							caseStatus={relatedCaseStatus}
-							loadMoreCases={() => {
-								if (liveRelatedCaseStatus !== "LoadingFirstPage") {
-									loadMoreRelatedCases(20);
-								}
-							}}
-							messages={messages}
-							messageStatus={messageStatus}
-							loadMoreMessages={() => {
-								if (liveMessageStatus !== "LoadingFirstPage") {
-									loadMoreMessages(ADDITIONAL_MESSAGE_PAGE_SIZE);
-								}
-							}}
-							closeButton={
-								<Button
-									nativeButton={false}
-									variant="ghost"
-									size="icon-sm"
-									render={
-										<Link
-											to="/contacts"
-											search={{}}
-											aria-label="Close contact"
-											title="Close contact"
-										/>
-									}
-								>
-									<IconX />
-								</Button>
+							size="icon-sm"
+							render={
+								<Link
+									to="/contacts"
+									search={{}}
+									aria-label="Close contact"
+									title="Close contact"
+								/>
 							}
-						/>
-					</div>
-				</div>
-			</section>
-		</div>
+						>
+							<IconX />
+						</Button>
+					}
+				/>
+			}
+		/>
 	);
 }

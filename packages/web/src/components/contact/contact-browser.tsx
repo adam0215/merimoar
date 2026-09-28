@@ -12,6 +12,7 @@ import { RetroDither } from "#/components/canvasui/RetroDither.tsx";
 import { CaseStatusDot } from "#/components/case/case-status.tsx";
 import { Avatar, AvatarFallback } from "#/components/ui/avatar.tsx";
 import { Badge } from "#/components/ui/badge.tsx";
+import { BrowserListItem } from "#/components/ui/browser-list-item.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { borderedSurfaceClassName } from "#/components/ui/field-surface.ts";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
@@ -108,36 +109,25 @@ export function ContactList({
 				const isActive = contact._id === selectedContactId;
 
 				return (
-					<Link
+					<BrowserListItem
 						key={contact._id}
-						to="/contacts"
-						search={{ contact: contact._id }}
-						className={cn(
-							"mb-1 flex gap-3 rounded-xl px-3 py-3.5 text-foreground no-underline outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring",
-							isActive && "bg-muted",
-						)}
-					>
-						<Avatar className="mt-0.5">
-							<AvatarFallback className={cn(isActive && "bg-background")}>
-								{initials(contact)}
-							</AvatarFallback>
-						</Avatar>
-						<div className="min-w-0 flex-1">
-							<div className="flex items-baseline gap-2">
-								<p className="min-w-0 flex-1 truncate text-sm font-medium">
-									{contactLabel(contact)}
-								</p>
-								<time className="shrink-0 text-xs text-muted-foreground">
-									{formatShortDate(contact.lastSeenAt)}
-								</time>
-							</div>
-							{contact.name && (
-								<p className="mt-0.5 truncate text-xs text-muted-foreground">
-									{contact.address}
-								</p>
-							)}
-						</div>
-					</Link>
+						active={isActive}
+						render={<Link to="/contacts" search={{ contact: contact._id }} />}
+						visual={
+							<Avatar className="mt-0.5">
+								<AvatarFallback className={cn(isActive && "bg-background")}>
+									{initials(contact)}
+								</AvatarFallback>
+							</Avatar>
+						}
+						title={contactLabel(contact)}
+						subtitle={contact.name ? contact.address : undefined}
+						trailing={
+							<time className="shrink-0 text-xs text-muted-foreground">
+								{formatShortDate(contact.lastSeenAt)}
+							</time>
+						}
+					/>
 				);
 			})}
 

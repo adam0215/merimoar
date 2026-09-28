@@ -12,6 +12,7 @@ import { usePaginatedQuery, useQuery } from "convex-helpers/react/cache";
 import { useState } from "react";
 import { ThreadList, ThreadView } from "#/components/email/email-reader.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { ContextPanelLayout } from "#/components/ui/context-panel-layout.tsx";
 import { ScrollArea } from "#/components/ui/scroll-area.tsx";
 import {
 	Select,
@@ -21,7 +22,6 @@ import {
 	SelectValue,
 } from "#/components/ui/select.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
-import { cn } from "#/lib/utils.ts";
 
 const PAGE_SIZE = 30;
 
@@ -146,19 +146,9 @@ export function EmailReaderPage({
 	}
 
 	return (
-		<div
-			className={cn(
-				"grid h-full min-h-0 grid-cols-1 overflow-hidden",
-				selectedThreadId &&
-					"md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]",
-			)}
-		>
-			<section
-				className={cn(
-					"min-h-0 overflow-hidden bg-background",
-					selectedThreadId && "hidden md:block md:border-r",
-				)}
-			>
+		<ContextPanelLayout
+			detailOpen={Boolean(selectedThreadId)}
+			list={
 				<div className="relative flex h-full min-h-0 flex-col">
 					{view === "archive" && (
 						<InboxFilter
@@ -187,54 +177,44 @@ export function EmailReaderPage({
 					</ScrollArea>
 					<DensityButton compact={isCompact} onChange={setIsCompact} />
 				</div>
-			</section>
-
-			<section
-				className={cn(
-					"min-h-0 min-w-0 overflow-hidden bg-background",
-					!selectedThreadId && "hidden",
-				)}
-			>
-				<div className="flex h-full min-h-0 flex-col">
-					<div className="flex h-12 shrink-0 items-center border-b px-3 md:hidden">
+			}
+			mobileBack={
+				<Button
+					nativeButton={false}
+					variant="ghost"
+					size="sm"
+					render={<Link to={route} search={listSearch} />}
+				>
+					<IconArrowLeft />
+					{view === "archive" ? "Back to archive" : "Back to inbox"}
+				</Button>
+			}
+			detail={
+				<ThreadView
+					thread={selectedThread}
+					createOptions={createOptions}
+					variant={view}
+					onMoved={() => navigateToList(selectedInboxId)}
+					closeButton={
 						<Button
 							nativeButton={false}
 							variant="ghost"
-							size="sm"
-							render={<Link to={route} search={listSearch} />}
-						>
-							<IconArrowLeft />
-							{view === "archive" ? "Back to archive" : "Back to inbox"}
-						</Button>
-					</div>
-					<div className="min-h-0 flex-1">
-						<ThreadView
-							thread={selectedThread}
-							createOptions={createOptions}
-							variant={view}
-							onMoved={() => navigateToList(selectedInboxId)}
-							closeButton={
-								<Button
-									nativeButton={false}
-									variant="ghost"
-									size="icon-sm"
-									render={
-										<Link
-											to={route}
-											search={listSearch}
-											aria-label="Close email"
-											title="Close email"
-										/>
-									}
-								>
-									<IconX />
-								</Button>
+							size="icon-sm"
+							render={
+								<Link
+									to={route}
+									search={listSearch}
+									aria-label="Close email"
+									title="Close email"
+								/>
 							}
-						/>
-					</div>
-				</div>
-			</section>
-		</div>
+						>
+							<IconX />
+						</Button>
+					}
+				/>
+			}
+		/>
 	);
 }
 

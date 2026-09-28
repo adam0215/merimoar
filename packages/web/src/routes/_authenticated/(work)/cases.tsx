@@ -12,8 +12,8 @@ import {
 } from "#/components/case/case-status.tsx";
 import { CaseView as CaseDetailPanel } from "#/components/case/case-view.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { ContextPanelLayout } from "#/components/ui/context-panel-layout.tsx";
 import { createAuthenticatedConvexHttpClient } from "#/integrations/convex/server.ts";
-import { cn } from "#/lib/utils.ts";
 
 type CasesSearch = {
 	case?: string;
@@ -120,19 +120,9 @@ function CasesPage() {
 	);
 
 	return (
-		<div
-			className={cn(
-				"grid h-full min-h-0 grid-cols-1 overflow-hidden",
-				hasOpenCase &&
-					"md:grid-cols-[22rem_minmax(0,1fr)] xl:grid-cols-[25rem_minmax(0,1fr)]",
-			)}
-		>
-			<section
-				className={cn(
-					"min-h-0 overflow-hidden bg-background",
-					hasOpenCase && "hidden md:block md:border-r",
-				)}
-			>
+		<ContextPanelLayout
+			detailOpen={hasOpenCase}
+			list={
 				<CaseList
 					items={cases}
 					selectedCaseId={selectedCaseId}
@@ -161,45 +151,31 @@ function CasesPage() {
 						})
 					}
 				/>
-			</section>
-
-			{hasOpenCase && (
-				<section className="min-h-0 min-w-0 overflow-hidden bg-background">
-					<div className="flex h-full min-h-0 flex-col">
-						<div className="flex h-12 shrink-0 items-center border-b px-3 md:hidden">
-							<Button
-								nativeButton={false}
-								variant="ghost"
-								size="sm"
-								render={
-									<Link
-										to="/cases"
-										search={{
-											view: selectedView,
-										}}
-									/>
-								}
-							>
-								<IconArrowLeft />
-								Back to cases
-							</Button>
-						</div>
-						<div className="min-h-0 flex-1">
-							<CaseDetailPanel
-								key={selectedCaseId}
-								detail={selectedDetail}
-								createOptions={createOptions}
-								closeButton={closeCaseButton}
-								onCaseDeleted={() => {
-									void navigate({
-										search: { view: selectedView },
-									});
-								}}
-							/>
-						</div>
-					</div>
-				</section>
-			)}
-		</div>
+			}
+			mobileBack={
+				<Button
+					nativeButton={false}
+					variant="ghost"
+					size="sm"
+					render={<Link to="/cases" search={{ view: selectedView }} />}
+				>
+					<IconArrowLeft />
+					Back to cases
+				</Button>
+			}
+			detail={
+				<CaseDetailPanel
+					key={selectedCaseId}
+					detail={selectedDetail}
+					createOptions={createOptions}
+					closeButton={closeCaseButton}
+					onCaseDeleted={() => {
+						void navigate({
+							search: { view: selectedView },
+						});
+					}}
+				/>
+			}
+		/>
 	);
 }
