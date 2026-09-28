@@ -4,6 +4,8 @@ import { IconChevronDown, IconEye } from "@tabler/icons-react";
 import { useQuery } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 import { useState } from "react";
+import { EntityTypeSelect } from "#/components/entity/entity-type-select.tsx";
+import { formatEntityFieldValue } from "#/components/entity/entity-value.ts";
 import { Button } from "#/components/ui/button.tsx";
 import {
 	Collapsible,
@@ -18,15 +20,7 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "#/components/ui/dialog.tsx";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "#/components/ui/select.tsx";
 import { Skeleton } from "#/components/ui/skeleton.tsx";
-import { EntityIcon } from "#/lib/entity-icons.tsx";
 
 type EntityPreview = NonNullable<
 	FunctionReturnType<typeof api.entity.reader.previewType>
@@ -67,36 +61,12 @@ export function EntityPreviewDialog({
 					</DialogDescription>
 				</DialogHeader>
 
-				<Select
-					items={(entityTypes ?? []).map((entityType) => ({
-						value: entityType._id,
-						label: (
-							<>
-								<EntityIcon icon={entityType.icon} />
-								{entityType.pluralName}
-							</>
-						),
-					}))}
+				<EntityTypeSelect
+					entityTypes={entityTypes ?? []}
 					value={selectedTypeId ?? undefined}
-					onValueChange={(value) => {
-						const selectedType = entityTypes?.find(
-							(entityType) => entityType._id === value,
-						);
-						setSelectedTypeId(selectedType?._id ?? null);
-					}}
-				>
-					<SelectTrigger className="w-full">
-						<SelectValue placeholder="Choose entity type" />
-					</SelectTrigger>
-					<SelectContent>
-						{entityTypes?.map((entityType) => (
-							<SelectItem key={entityType._id} value={entityType._id}>
-								<EntityIcon icon={entityType.icon} />
-								{entityType.pluralName}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
+					onValueChange={setSelectedTypeId}
+					className="w-full"
+				/>
 
 				{selectedTypeId && preview === undefined && <PreviewSkeleton />}
 
@@ -178,31 +148,11 @@ function FieldValue({
 	return (
 		<>
 			<dt className="text-muted-foreground">{label}</dt>
-			<dd className="min-w-0 break-words">{formatPreviewValue(value)}</dd>
+			<dd className="min-w-0 break-words">
+				{formatEntityFieldValue(value) ?? "—"}
+			</dd>
 		</>
 	);
-}
-
-function formatPreviewValue(
-	value: EntityPreview["records"][number]["values"][number] | undefined,
-) {
-	if (!value) {
-		return "—";
-	}
-	if (value.kind === "boolean") {
-		return value.value ? "Yes" : "No";
-	}
-	if (value.kind === "number") {
-		return value.value.toLocaleString();
-	}
-	if (value.kind === "date") {
-		return new Date(value.value).toLocaleDateString(undefined, {
-			year: "numeric",
-			month: "long",
-			day: "numeric",
-		});
-	}
-	return value.value;
 }
 
 function PreviewSkeleton() {

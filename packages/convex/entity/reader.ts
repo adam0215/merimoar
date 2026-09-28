@@ -1,5 +1,7 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { requireActor } from "#/auth/access";
+import { getEntityType, requireEntityType } from "#/entity/access";
 import {
 	MAX_ENTITY_TYPES_PER_ORGANIZATION,
 	MAX_FIELDS_PER_ENTITY_TYPE,
@@ -36,12 +38,12 @@ export const getType = query({
 			return null;
 		}
 
-		const entityType = await ctx.db.get(entityTypeId);
-		if (
-			!entityType ||
-			entityType.organizationId !== workspace.organization._id ||
-			entityType.archivedAt !== null
-		) {
+		const entityType = await getEntityType(
+			ctx,
+			workspace.organization._id,
+			entityTypeId,
+		);
+		if (!entityType) {
 			return null;
 		}
 
@@ -62,12 +64,12 @@ export const previewType = query({
 	},
 	handler: async (ctx, args) => {
 		const workspace = await requireActor(ctx);
-		const entityType = await ctx.db.get(args.entityTypeId);
-		if (
-			!entityType ||
-			entityType.organizationId !== workspace.organization._id ||
-			entityType.archivedAt !== null
-		) {
+		const entityType = await getEntityType(
+			ctx,
+			workspace.organization._id,
+			args.entityTypeId,
+		);
+		if (!entityType) {
 			return null;
 		}
 
@@ -91,7 +93,7 @@ export const previewType = query({
 		const records = await Promise.all(
 			entities.map(async (entity) => ({
 				entity,
-				values: await listPreviewFieldValuesForEntity(ctx, entity._id),
+				values: await listFieldValuesForEntity(ctx, entity._id),
 			})),
 		);
 
@@ -99,7 +101,70 @@ export const previewType = query({
 	},
 });
 
-async function listPreviewFieldValuesForEntity(
+export const listEntities = query({
+	args: {
+		entityTypeId: v.id("entityTypes"),
+		paginationOpts: paginationOptsValidator,
+	},
+	handler: async (ctx, args) => {
+		const workspace = await requireActor(ctx);
+		const entityType = await requireEntityType(
+			ctx,
+			workspace.organization._id,
+			args.entityTypeId,
+		);
+
+		return await ctx.db
+			.query("entities")
+			.withIndex(
+				"by_entity_type_id_and_archived_at_and_display_name",
+				(index) =>
+					index.eq("entityTypeId", entityType._id).eq("archivedAt", null),
+			)
+			.paginate(args.paginationOpts);
+	},
+});
+
+export const getEntity = query({
+	args: {
+		entityId: v.string(),
+	},
+	handler: async (ctx, args) => {
+		const workspace = await requireActor(ctx);
+		const entityId = ctx.db.normalizeId("entities", args.entityId);
+		if (!entityId) {
+			return null;
+		}
+
+		const entity = await ctx.db.get(entityId);
+		if (!entity || entity.archivedAt !== null) {
+			return null;
+		}
+
+		const entityType = await getEntityType(
+			ctx,
+			workspace.organization._id,
+			entity.entityTypeId,
+		);
+		if (!entityType) {
+			return null;
+		}
+
+		const [fieldDefinitions, values] = await Promise.all([
+			ctx.db
+				.query("entityFieldDefinitions")
+				.withIndex("by_entity_type_id_and_archived_at_and_position", (index) =>
+					index.eq("entityTypeId", entityType._id).eq("archivedAt", null),
+				)
+				.take(MAX_FIELDS_PER_ENTITY_TYPE),
+			listFieldValuesForEntity(ctx, entity._id),
+		]);
+
+		return { entity, entityType, fieldDefinitions, values };
+	},
+});
+
+async function listFieldValuesForEntity(
 	ctx: QueryCtx,
 	entityId: Id<"entities">,
 ) {

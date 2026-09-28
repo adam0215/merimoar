@@ -1,6 +1,7 @@
 import { api } from "@merimoar/convex/api";
 import {
 	IconAddressBook,
+	IconBox,
 	IconChevronRight,
 	IconFolder,
 	IconFolderFilled,
@@ -214,6 +215,7 @@ export function WorkSidebar({
 	const emailIsActive = pathname === "/email";
 	const agentInboxIsActive = pathname === "/agent-inbox";
 	const contactsIsActive = pathname === "/contacts";
+	const entitiesIsActive = pathname === "/entities";
 	const casesIsActive = pathname === "/cases";
 	const settingsEmailIsActive = pathname.startsWith(
 		"/settings/organization/email",
@@ -350,6 +352,29 @@ export function WorkSidebar({
 								>
 									<IconAddressBook />
 									<span>Contacts</span>
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+						</SidebarMenu>
+					</SidebarGroupContent>
+				</SidebarGroup>
+
+				<SidebarGroup className="pt-4">
+					<SidebarGroupLabel>Entity management</SidebarGroupLabel>
+					<SidebarGroupContent>
+						<SidebarMenu>
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									isActive={entitiesIsActive}
+									tooltip="Entities"
+									className={
+										entitiesIsActive
+											? "text-foreground"
+											: "text-muted-foreground"
+									}
+									render={<Link to="/entities" search={{}} />}
+								>
+									<IconBox />
+									<span>Entities</span>
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 						</SidebarMenu>

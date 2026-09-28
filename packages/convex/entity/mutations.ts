@@ -1,6 +1,7 @@
 import { ConvexError, v } from "convex/values";
 import * as validation from "valibot";
 import { requireActor } from "#/auth/access";
+import { requireEntityType } from "#/entity/access";
 import {
 	MAX_ENTITIES_PER_TYPE,
 	MAX_ENTITY_TYPES_PER_ORGANIZATION,
@@ -21,31 +22,10 @@ import {
 } from "#/entity/values";
 import { syncGlobalSearchEntry } from "#/globalSearch/model";
 import { internal } from "../_generated/api";
-import type { Id } from "../_generated/dataModel";
-import type { MutationCtx } from "../_generated/server";
 import { mutation } from "../_generated/server";
 
 function validationError(message: string) {
 	return new ConvexError({ code: "INVALID_ENTITY_INPUT", message });
-}
-
-async function requireEntityType(
-	ctx: MutationCtx,
-	organizationId: Id<"organizations">,
-	entityTypeId: Id<"entityTypes">,
-) {
-	const entityType = await ctx.db.get(entityTypeId);
-	if (
-		!entityType ||
-		entityType.organizationId !== organizationId ||
-		entityType.archivedAt !== null
-	) {
-		throw new ConvexError({
-			code: "ENTITY_TYPE_NOT_FOUND",
-			message: "The entity type could not be found.",
-		});
-	}
-	return entityType;
 }
 
 export const createType = mutation({

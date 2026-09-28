@@ -57,6 +57,9 @@ function getPageTitle(pathname: string, agentView: AgentView) {
 	if (pathname === "/contacts") {
 		return "Contacts";
 	}
+	if (pathname === "/entities") {
+		return "Entities";
+	}
 	if (pathname === "/profile") {
 		return "Profile";
 	}

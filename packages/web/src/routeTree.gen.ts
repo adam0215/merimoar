@@ -18,6 +18,7 @@ import { Route as AuthenticatedworkAgentInboxRouteImport } from './routes/_authe
 import { Route as AuthenticatedworkCasesRouteImport } from './routes/_authenticated/(work)/cases'
 import { Route as AuthenticatedworkContactsRouteImport } from './routes/_authenticated/(work)/contacts'
 import { Route as AuthenticatedworkEmailRouteImport } from './routes/_authenticated/(work)/email'
+import { Route as AuthenticatedworkEntitiesRouteImport } from './routes/_authenticated/(work)/entities'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as ApiAuthSignInRouteImport } from './routes/api/auth/sign-in'
 import { Route as ApiAuthSignOutRouteImport } from './routes/api/auth/sign-out'
@@ -73,6 +74,12 @@ const AuthenticatedworkEmailRoute = AuthenticatedworkEmailRouteImport.update({
   path: '/email',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedworkEntitiesRoute =
+  AuthenticatedworkEntitiesRouteImport.update({
+    id: '/(work)/entities',
+    path: '/entities',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
   id: '/api/auth/callback',
   path: '/api/auth/callback',
@@ -122,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/cases': typeof AuthenticatedworkCasesRoute
   '/contacts': typeof AuthenticatedworkContactsRoute
   '/email': typeof AuthenticatedworkEmailRoute
+  '/entities': typeof AuthenticatedworkEntitiesRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
   '/api/auth/sign-out': typeof ApiAuthSignOutRoute
@@ -139,6 +147,7 @@ export interface FileRoutesByTo {
   '/cases': typeof AuthenticatedworkCasesRoute
   '/contacts': typeof AuthenticatedworkContactsRoute
   '/email': typeof AuthenticatedworkEmailRoute
+  '/entities': typeof AuthenticatedworkEntitiesRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
   '/api/auth/sign-out': typeof ApiAuthSignOutRoute
@@ -158,6 +167,7 @@ export interface FileRoutesById {
   '/_authenticated/(work)/cases': typeof AuthenticatedworkCasesRoute
   '/_authenticated/(work)/contacts': typeof AuthenticatedworkContactsRoute
   '/_authenticated/(work)/email': typeof AuthenticatedworkEmailRoute
+  '/_authenticated/(work)/entities': typeof AuthenticatedworkEntitiesRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/api/auth/sign-in': typeof ApiAuthSignInRoute
   '/api/auth/sign-out': typeof ApiAuthSignOutRoute
@@ -177,6 +187,7 @@ export interface FileRouteTypes {
     | '/cases'
     | '/contacts'
     | '/email'
+    | '/entities'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
     | '/api/auth/sign-out'
@@ -194,6 +205,7 @@ export interface FileRouteTypes {
     | '/cases'
     | '/contacts'
     | '/email'
+    | '/entities'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
     | '/api/auth/sign-out'
@@ -212,6 +224,7 @@ export interface FileRouteTypes {
     | '/_authenticated/(work)/cases'
     | '/_authenticated/(work)/contacts'
     | '/_authenticated/(work)/email'
+    | '/_authenticated/(work)/entities'
     | '/api/auth/callback'
     | '/api/auth/sign-in'
     | '/api/auth/sign-out'
@@ -294,6 +307,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedworkEmailRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/(work)/entities': {
+      id: '/_authenticated/(work)/entities'
+      path: '/entities'
+      fullPath: '/entities'
+      preLoaderRoute: typeof AuthenticatedworkEntitiesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/api/auth/callback': {
       id: '/api/auth/callback'
       path: '/api/auth/callback'
@@ -354,6 +374,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedworkCasesRoute: typeof AuthenticatedworkCasesRoute
   AuthenticatedworkContactsRoute: typeof AuthenticatedworkContactsRoute
   AuthenticatedworkEmailRoute: typeof AuthenticatedworkEmailRoute
+  AuthenticatedworkEntitiesRoute: typeof AuthenticatedworkEntitiesRoute
   AuthenticatedworkSettingsOrganizationEmailRoute: typeof AuthenticatedworkSettingsOrganizationEmailRoute
   AuthenticatedworkSettingsOrganizationEntitiesRoute: typeof AuthenticatedworkSettingsOrganizationEntitiesRoute
   AuthenticatedworkSettingsOrganizationGeneralRoute: typeof AuthenticatedworkSettingsOrganizationGeneralRoute
@@ -368,6 +389,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedworkCasesRoute: AuthenticatedworkCasesRoute,
   AuthenticatedworkContactsRoute: AuthenticatedworkContactsRoute,
   AuthenticatedworkEmailRoute: AuthenticatedworkEmailRoute,
+  AuthenticatedworkEntitiesRoute: AuthenticatedworkEntitiesRoute,
   AuthenticatedworkSettingsOrganizationEmailRoute:
     AuthenticatedworkSettingsOrganizationEmailRoute,
   AuthenticatedworkSettingsOrganizationEntitiesRoute:

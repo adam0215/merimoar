@@ -155,6 +155,31 @@ describe("entity configuration", () => {
 				]),
 			},
 		]);
+
+		const list = await actor.query(api.entity.reader.listEntities, {
+			entityTypeId,
+			paginationOpts: { cursor: null, numItems: 20 },
+		});
+		expect(list.page).toMatchObject([
+			{ _id: entityId, displayName: "Storgatan 12", identifier: "FAST-1042" },
+		]);
+
+		const detail = await actor.query(api.entity.reader.getEntity, { entityId });
+		expect(detail).toMatchObject({
+			entity: { _id: entityId },
+			entityType: { _id: entityTypeId, name: "Property" },
+			fieldDefinitions: expect.arrayContaining([
+				expect.objectContaining({ _id: addressFieldId }),
+				expect.objectContaining({ _id: priceFieldId }),
+			]),
+			values: expect.arrayContaining([
+				expect.objectContaining({
+					fieldDefinitionId: addressFieldId,
+					kind: "text",
+					value: "Storgatan 12",
+				}),
+			]),
+		});
 	});
 
 	it("rejects blank required text and non-finite number/date values", async () => {
@@ -275,6 +300,12 @@ describe("entity configuration", () => {
 		).rejects.toThrow("Sign in");
 
 		const entityTypeId = await createPropertyType(actor);
+		const entityId = await actor.mutation(api.entity.mutations.createEntity, {
+			entityTypeId,
+			identifier: "FAST-PRIVATE",
+			displayName: "Private property",
+			values: [],
+		});
 		await expect(
 			base.mutation(api.entity.mutations.deleteType, { entityTypeId }),
 		).rejects.toThrow("Sign in");
@@ -294,6 +325,15 @@ describe("entity configuration", () => {
 		).toBeNull();
 		expect(
 			await otherActor.query(api.entity.reader.previewType, { entityTypeId }),
+		).toBeNull();
+		await expect(
+			otherActor.query(api.entity.reader.listEntities, {
+				entityTypeId,
+				paginationOpts: { cursor: null, numItems: 20 },
+			}),
+		).rejects.toThrow("could not be found");
+		expect(
+			await otherActor.query(api.entity.reader.getEntity, { entityId }),
 		).toBeNull();
 	});
 

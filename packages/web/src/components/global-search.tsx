@@ -99,8 +99,11 @@ export function GlobalSearch() {
 				return;
 			case "entity":
 				void navigate({
-					to: "/settings/organization/entities",
-					search: { type: result.target.entityTypeId },
+					to: "/entities",
+					search: {
+						entity: result.target.entityId,
+						type: result.target.entityTypeId,
+					},
 				});
 				return;
 		}
