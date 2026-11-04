@@ -12,6 +12,7 @@ export async function createAuthenticatedConvexHttpClient() {
 		throw new Error("Authentication required");
 	}
 
+	// @ts-expect-error CONVEX_URL is validated during module initialization.
 	const client = new ConvexHttpClient(CONVEX_URL);
 	client.setAuth(auth.accessToken);
 	return client;
