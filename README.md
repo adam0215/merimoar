@@ -23,6 +23,10 @@ investigation, inspect its tool activity, and steer its work as it happens.
 
 ## Your business model
 
+Your domain model evolves as you work. As you connect cases, contacts, and
+business records, each new relationship adds context for you and your agents
+to draw on in future work.
+
 Define entity types such as properties, contracts, or invoices with typed fields
 and required values. Reuse the same records across cases.
 
