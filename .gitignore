@@ -15,3 +15,7 @@ dist-ssr
 __unconfig*
 todos.json
 .local-docs/
+
+# Local agent skills
+skills/
+skills-lock.json
