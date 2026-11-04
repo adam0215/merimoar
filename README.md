@@ -16,6 +16,9 @@ point.
 Keep email, contacts, and business records together in a case. Follow an agent's
 investigation, inspect its tool activity, and steer its work as it happens.
 
+Connect your own tools through HTTPS APIs or webhooks that accept JSON POST
+requests and return JSON responses.
+
 <p>
   <img src="docs/images/case-sidebar-dark-clean.jpg" width="49%" alt="A case linked to contacts, a property, an owner, a supplier, and related cases">
   <img src="docs/images/agent-workspace-dark-clean.jpg" width="49%" alt="An agent investigating a case using contacts, business records, and email">
@@ -31,6 +34,23 @@ Define entity types such as properties, contracts, or invoices with typed fields
 and required values. Reuse the same records across cases.
 
 ![Custom entity types with unique identifiers and typed, required fields](docs/images/data-model-dark-clean.jpg)
+
+## The broad idea
+
+Agents need context about a business's processes, practices, and recurring
+problems to do useful work. The idea behind Merimoar is to build that context
+as a business ontology: a shared model of the business's concepts and how they
+relate, informed by two kinds of knowledge.
+
+- Top-down knowledge comes from experts who describe how the business works,
+  for example through agent skills, procedures, and policies.
+- Bottom-up knowledge comes from daily operations: emails, cases, customers,
+  business records, and the relationships built between them as work happens.
+
+Merimoar collects the bottom-up knowledge. Combined with expert knowledge, it
+builds a business ontology grounded in both intended processes and actual work.
+The goal is to make this context available through a semantic layer, so other
+agents can understand the business and automate more of its operations.
 
 ## Run locally
 
