@@ -1,30 +1,93 @@
-# Merimoar
+![Merimoar](docs/images/merimoar-logo.png)
 
-Merimoar is a work-in-progress case management system for long-running,
-email-driven customer service. It combines a shared inbox with flexible cases,
-contacts, and organization-specific entities to flexibly model the businesses operations and its ontology.
+Agentic case management, built around your business model.
 
-Built with TanStack Start, React, Convex, WorkOS, Resend, Tailwind CSS, and
-shadcn/ui.
+Merimoar is an agentic case management system. Agents handle cases from
+investigation to resolution, using email, contacts, and a business model you
+define.
 
-Resend accounts are connected through
-[WorkOS Pipes](docs/resend-pipes.md).
+Create your own entity types with typed fields and connect reusable
+records to cases, so agents work with your organization's actual structure.
+Follow their activity, steer their work, review approvals, or take over at any
+point.
 
-Email threads use Gemini embeddings and Convex vector search for
-[semantic case suggestions](docs/semantic-case-suggestions.md).
+## Cases and agents
 
-The first portable agent runtime and its local worker setup are documented in
-[docs/agent-runtime.md](docs/agent-runtime.md).
+Keep email, contacts, and business records together in a case. Follow an agent's
+investigation, inspect its tool activity, and steer its work as it happens.
 
-## Workspace
+<p>
+  <img src="docs/images/case-sidebar-dark-clean.jpg" width="49%" alt="A case linked to contacts, a property, an owner, a supplier, and related cases">
+  <img src="docs/images/agent-workspace-dark-clean.jpg" width="49%" alt="An agent investigating a case using contacts, business records, and email">
+</p>
 
-The repository is a Bun workspace with one shared lockfile. Dependencies use
-Bun's default isolated workspace layout and are installed with `bun install`
-from the repository root:
+## Your business model
 
-- `packages/web` — the TanStack Start application
-- `packages/convex` — Convex functions and the generated client API
-- `packages/agent` — runtime-independent agent primitives
+Define entity types such as properties, contracts, or invoices with typed fields
+and required values. Reuse the same records across cases.
 
-Use `#/*` for imports within a package. Import across package boundaries by
-package name, for example `@merimoar/convex/api`.
+![Custom entity types with unique identifiers and typed, required fields](docs/images/data-model-dark-clean.jpg)
+
+## Run locally
+
+| Requirement | Version or purpose |
+| --- | --- |
+| Bun | 1.3.14 |
+| Node.js | 22.11 or newer |
+| Convex | Development deployment for the database and backend |
+| WorkOS | Development account for authentication and organizations |
+| OpenAI | API access for agent execution |
+| Gemini | API access for semantic email suggestions |
+| Resend | Email integration through WorkOS Pipes |
+
+```sh
+bun install
+cp .env.example .env.local
+```
+
+1. Run `bun run dev:convex` to select a development deployment. Set
+   `VITE_CONVEX_URL` in `.env.local` to its `.convex.cloud` URL. Configure the
+   deployment's server environment variables listed in
+   [convex.config.ts](packages/convex/convex.config.ts) through the Convex
+   dashboard or `bunx convex env set`.
+2. Configure WorkOS AuthKit with
+   `http://localhost:3000/api/auth/callback` as the redirect URI. Fill in the
+   WorkOS values in `.env.local`, including a random cookie password of at least
+   32 characters. Set the same WorkOS client ID and API key in Convex.
+3. Point a WorkOS webhook at
+   `https://<your-deployment>.convex.site/workos/webhook` and set its signing
+   secret in Convex. Subscribe to user, organization, and organization membership
+   created, updated, and deleted events. Create a development organization and
+   add your user as a member after configuring the webhook.
+4. Keep `bun run dev:convex` running and start `bun run dev` in another terminal.
+   Open [localhost:3000](http://localhost:3000).
+
+To run agents, follow the [worker setup](docs/agent-runtime.md#local-setup) and
+start `bun run dev:agent`. Convex Cloud needs a public HTTPS URL for the worker,
+so local development requires a tunnel to port 3001.
+
+See [email integration](docs/resend-pipes.md) and
+[semantic case suggestions](docs/semantic-case-suggestions.md) for the remaining
+integrations.
+
+## Under the hood
+
+- TypeScript and Bun for the workspace and tooling.
+- TanStack Start and React for the application.
+- Convex for the database and backend functions.
+- WorkOS for authentication and organizations.
+- Tailwind CSS and shadcn/ui for styling and UI components.
+
+### Packages
+
+- `packages/web`: the application.
+- `packages/convex`: database, functions, and generated client API.
+- `packages/agent` and `packages/agent-worker`: portable agent runtime and Node host.
+
+[Agent runtime](docs/agent-runtime.md)
+
+## License
+
+Copyright 2026 Adam Gustafsson. Licensed under [AGPL-3.0-only](LICENSE).
+Third-party materials retain their own licenses; see
+[third-party notices](THIRD_PARTY_NOTICES.md).

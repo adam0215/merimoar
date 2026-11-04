@@ -5,24 +5,24 @@ describe("parseEmailReply", () => {
 	it("separates a Swedish Gmail reply from its quoted history", () => {
 		const textBody = `Vad händer om jag svarar på detta mailet, kommer det att funka?
 
-Den sön 26 juli 2026 kl 02:27 skrev Adam G <alex@example.com>:
+Den sön 26 juli 2026 kl 02:27 skrev Alex Example <alex@example.com>:
 
 > Testar Merimoar.
 >
 > Labore ex nisi fugiat.
 >
-> // Adam`;
+> // Alex`;
 
 		expect(parseEmailReply(textBody)).toEqual({
 			authoredText:
 				"Vad händer om jag svarar på detta mailet, kommer det att funka?",
-			quotedText: `Den sön 26 juli 2026 kl 02:27 skrev Adam G <alex@example.com>:
+			quotedText: `Den sön 26 juli 2026 kl 02:27 skrev Alex Example <alex@example.com>:
 
 > Testar Merimoar.
 >
 > Labore ex nisi fugiat.
 >
-> // Adam`,
+> // Alex`,
 		});
 	});
 
@@ -30,11 +30,11 @@ Den sön 26 juli 2026 kl 02:27 skrev Adam G <alex@example.com>:
 		expect(
 			parseEmailReply(`Sounds good.
 
-On Sun, Jul 26, 2026 at 2:27 AM Adam G <adam@example.com> wrote:
+On Sun, Jul 26, 2026 at 2:27 AM Alex Example <alex@example.com> wrote:
 > Original message`),
 		).toEqual({
 			authoredText: "Sounds good.",
-			quotedText: `On Sun, Jul 26, 2026 at 2:27 AM Adam G <adam@example.com> wrote:
+			quotedText: `On Sun, Jul 26, 2026 at 2:27 AM Alex Example <alex@example.com> wrote:
 > Original message`,
 		});
 	});
@@ -50,7 +50,7 @@ On Sun, Jul 26, 2026 at 2:27 AM Adam G <adam@example.com> wrote:
 		expect(
 			parseEmailReply(`Approved.
 
-From: Adam G <adam@example.com>
+From: Alex Example <alex@example.com>
 Sent: Sunday, July 26, 2026 02:27
 To: Support <support@example.com>
 Subject: Policy review
@@ -58,7 +58,7 @@ Subject: Policy review
 Can you review this?`),
 		).toEqual({
 			authoredText: "Approved.",
-			quotedText: `From: Adam G <adam@example.com>
+			quotedText: `From: Alex Example <alex@example.com>
 Sent: Sunday, July 26, 2026 02:27
 To: Support <support@example.com>
 Subject: Policy review
